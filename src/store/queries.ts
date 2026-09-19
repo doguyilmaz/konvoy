@@ -19,8 +19,9 @@ export function createSession(
     updatedAt: now(),
   }
   db.query(
-    `INSERT INTO session (id, slug, goal, cwd, lead, status, created_at, updated_at)
-     VALUES ($id, $slug, $goal, $cwd, $lead, $status, $createdAt, $updatedAt)`,
+    `INSERT INTO session (id, slug, goal, cwd, lead, status, created_at, updated_at, updated_seq)
+     VALUES ($id, $slug, $goal, $cwd, $lead, $status, $createdAt, $updatedAt,
+             (SELECT COALESCE(MAX(updated_seq), 0) + 1 FROM session))`,
   ).run({
     id: row.id,
     slug: row.slug,
@@ -59,7 +60,7 @@ export function listSessions(db: Database): Session[] {
 
 export function currentSession(db: Database, cwd: string): Session | null {
   return toSession(
-    db.query('SELECT * FROM session WHERE cwd = $cwd AND status = $status ORDER BY updated_at DESC, rowid DESC LIMIT 1').get({
+    db.query('SELECT * FROM session WHERE cwd = $cwd AND status = $status ORDER BY updated_seq DESC LIMIT 1').get({
       cwd,
       status: 'active',
     }) as never,
@@ -67,7 +68,11 @@ export function currentSession(db: Database, cwd: string): Session | null {
 }
 
 export function touchSession(db: Database, id: string): void {
-  db.query('UPDATE session SET updated_at = $now WHERE id = $id').run({ id, now: now() })
+  db.query(
+    `UPDATE session SET updated_at = $now,
+       updated_seq = (SELECT COALESCE(MAX(updated_seq), 0) + 1 FROM session)
+     WHERE id = $id`,
+  ).run({ id, now: now() })
 }
 
 export function deleteSession(db: Database, id: string): void {

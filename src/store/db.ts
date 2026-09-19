@@ -5,7 +5,8 @@ const MIGRATIONS: string[] = [
   `CREATE TABLE session (
      id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, goal TEXT NOT NULL,
      cwd TEXT NOT NULL, lead TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
-     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+     updated_seq INTEGER NOT NULL DEFAULT 0);
    CREATE TABLE binding (
      session_id TEXT NOT NULL, agent TEXT NOT NULL, foreign_id TEXT,
      model TEXT, effort TEXT NOT NULL, permission TEXT NOT NULL,
