@@ -418,7 +418,114 @@ means a nested turn asking for a lock its own parent already holds.
 - `--parallel` (spec section 13) replaces the lock with one worktree per agent rather than
   removing the invariant.
 
-## 21. Roadmap
+## 21. Inter-agent message protocol
+
+Every delegation and handoff is a message from one agent into another's context window,
+paid for at that agent's per-turn floor (section 18 measured it at roughly 5,400 tokens
+minimal). A 2,000-token handoff is therefore not a rounding error — it is a third of the
+turn's budget before any work begins. The protocol below is shaped by that arithmetic and by
+one principle.
+
+### Pointers, not payloads
+
+The filesystem and git are already a shared channel between the four agents, with perfect
+fidelity and zero token cost until something is read. Anything the receiver can fetch itself
+travels as a reference; only what it cannot reconstruct travels as text.
+
+| the receiver needs | how it arrives |
+|---|---|
+| the goal and constraints | pushed once into the session brief, free on every later turn |
+| what changed on disk | commit shas and a `git diff --stat`, computed by konvoy — never pasted content |
+| where to look | `file:line` pointers |
+| **why it was done that way** | **text — this is the payload** |
+| **what the sender could not settle** | **text — the most valuable part of a handoff** |
+| the sender's full transcript | never; it is tens of thousands of tokens of tool calls the receiver does not need |
+
+### Who writes the summary
+
+konvoy has no model of its own, so it cannot summarise. It does not need to: the sending
+agent already holds the context and can produce a handoff for a hundred output tokens, where
+konvoy would pay an entire extra model call for a worse result. The sender writes intent;
+**konvoy supplies the machine facts itself** — changed files, commit range, turn cost — from
+git and its own store, so those can be neither forgotten nor misreported.
+
+### The envelope
+
+An agent ends a turn that hands work on by emitting one delimited block. Sentinels rather
+than raw JSON: models reliably wrap JSON in prose or fences, and a missing field should
+degrade to empty rather than fail a parse.
+
+```
+<<<konvoy
+to: reviewer
+task: check the refresh path for a race between expiry and retry
+open:
+- token storage on Android is unverified
+decisions:
+- refresh on 401 rather than on a timer, because the device clock drifts
+>>>
+```
+
+konvoy normalises that, plus its own git facts, into one record:
+
+```ts
+interface Handoff {
+  from: AgentId
+  to: AgentId | Role          // a role resolves through config.roles
+  task: string                // imperative, <= 1500 chars
+  pointers: string[]          // file:line, commit sha, or a note path
+  decisions: string[]         // why, not what
+  open: string[]              // what the sender could not settle
+  changed: string             // konvoy-computed git diff --stat, not agent-reported
+  commits: string[]           // konvoy-computed
+  schema?: unknown            // requested reply shape
+}
+```
+
+When the block is absent, konvoy falls back to the final message text plus its own git facts.
+The protocol never fails a turn for want of formatting.
+
+### Size discipline
+
+- `task` at most 1500 characters; a sender needing more writes
+  `.konvoy/<slug>/notes/<id>.md` and passes the path as a pointer.
+- Each list at most 5 items, each at most 200 characters.
+- A reply returned through `konvoy_delegate` is capped at 2000 characters, overflowing to a
+  file the caller can read.
+
+Worst case is roughly 600 tokens, about a tenth of the per-turn floor. Truncation is always
+visible: konvoy appends the note path, never silently drops text.
+
+### Push versus pull
+
+The brief is **pushed** — small, stable, injected once through each CLI's native config.
+The ledger is **pulled** — it grows without bound, so it is never injected; agents read it
+through `konvoy_ledger_read(since?)`, which defaults to entries since that agent's last turn
+rather than the whole file. Pushing the ledger would multiply its size by four agents and
+again by every turn.
+
+### Structured replies
+
+Codex can enforce a reply shape natively through `--output-schema`, so a delegation carrying
+a `schema` uses it there. The other three are asked for the same shape in the prompt and
+validated on arrival; a reply that fails validation is returned to the sender as a failed
+delegation with the validation error, not silently accepted.
+
+### Addressing
+
+An agent may address a **role** (`reviewer`) or an **agent** (`kiro`). Roles are preferred
+and resolve through `config.roles`, because the sender wants a reviewer, not a particular
+binary — and the roster can change between sessions.
+
+### Trust and idempotency
+
+Every inbound payload is wrapped in the two-line envelope from section 19 naming its author
+and stating that it is a proposal, not authority — fixed and short, because it is paid on
+every call. Each delegation carries a call id; a repeated id inside one turn returns the
+first result instead of running the target twice, so a sender's retry after a timeout cannot
+duplicate work.
+
+## 22. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
