@@ -598,34 +598,67 @@ a roster whose agents share one base model, a single agent is cheaper and no wor
 should say so — `doctor` warns about the model overlap, and `stats` will show a kind where no
 agent beats the lead — rather than pretending that more agents is always better.
 
-## 23. Agent discussions and work allocation
+## 23. Parley: opt-in deliberation between agents
 
-The four existing tools — `delegate`, `handoff`, `ask`, `broadcast` — are all single
-exchanges. A discussion is multi-round, and multi-round is expensive: one round costs two
-turn startups, so a three-round discussion costs six. That is more than letting the strongest
-agent decide alone. Discussions therefore have to be rare, bounded, and terminating.
+A **parley** is a bounded, rule-governed exchange between agents that disagree. It is the
+multi-model analogue of extended thinking: instead of buying more tokens inside one model,
+you buy more turns across several. The comparison is exact enough to be the mental model.
 
-### When a discussion is warranted
+| extended thinking | parley |
+|---|---|
+| more tokens, one model | more turns, several models |
+| budget in tokens | budget in rounds and share of session spend |
+| for hard problems | for contested decisions |
+| off unless asked for | off unless asked for |
 
-Only for a **conflict**: a reviewer's finding that the producer disputes, or two viable
-proposals for one decision. An information gap is not a conflict — that is `ask`, one
-read-only round. The fat-handoff discipline of section 21 already removes most information
-gaps before they become exchanges.
+**Parley is disabled by default.** One round costs one turn startup per participant, so a
+three-round parley between two agents costs six — more than letting the strongest agent
+decide alone. Worse, its failure mode is invisible: two agents that already agree will take
+turns confirming each other, producing a plausible transcript and no information. A failure
+mode that looks like success must be opt-in.
 
-The failure mode worth naming is not argument, it is **agreement**: two agents that already
-concur taking turns to confirm each other. It feels productive, costs a full turn each way,
-and adds nothing.
+Enabling costs nothing by itself. It makes a parley *available*; a parley still only opens
+when something triggers it.
 
-### Opening a discussion
+```
+konvoy new "<goal>" --parley        enable for a new session
+konvoy config set parley.enabled true
+konvoy parley status                whether it is on, and what it has cost so far
+konvoy parley log                   past parleys with their verdicts and price
+```
 
-`konvoy_debate(question, with, rule?, rounds?)` fixes three things at open time:
+### What konvoy says when you enable it
+
+The warnings are numeric, drawn from the user's own measured turn costs (section 18), not
+generic caution:
+
+1. **The price.** "Each round is one turn per participant. At this roster and effort that is
+   about $X and ~Y tokens per round, capped at 2 rounds and 15% of the remaining session
+   budget."
+2. **The precondition.** If two participants resolve to the same effective model — the
+   overlap `konvoy doctor` already detects — konvoy says so: a parley between one brain
+   wearing two harnesses is theatre. Error independence is the precondition for the whole
+   mechanism.
+3. **The cheaper answer first.** If the project has an objective gate, konvoy says so and
+   suggests `rule: gate`. Most disagreements about code are empirically decidable, and a test
+   settles them for a fraction of an argument.
+
+### When a parley opens
+
+Only on a **conflict**: a reviewer's finding the producer disputes, two conflicting verdicts
+from a `broadcast`, an objective gate that failed twice with different diagnoses, or an
+explicit `konvoy_parley` call. An information gap is not a conflict — that is `ask`, one
+read-only round. The fat-handoff discipline of section 21 removes most information gaps
+before they can become exchanges.
+
+`konvoy_parley(question, with, rule?, rounds?)` fixes three things before anyone speaks:
 
 - **one question**, which cannot change;
-- **a decision rule**, declared before anyone speaks;
+- **a decision rule**, declared up front;
 - **a round cap**, default 2, maximum 3.
 
-Declaring the tiebreak up front is what makes discussions short: participants who know how it
-ends stop performing. A debate without a pre-declared rule is an infinite-loop generator.
+Declaring the tiebreak in advance is what keeps parleys short: participants who know how it
+ends stop performing. A parley without a pre-declared rule is an infinite-loop generator.
 
 | rule | resolution |
 |---|---|
@@ -636,30 +669,28 @@ ends stop performing. A debate without a pre-declared rule is an infinite-loop g
 
 ### The governors
 
-konvoy has no model, so every control below is computable without one.
+konvoy has no model of its own, so every control below is computable without one.
 
 1. **Structural slot.** Every round must declare `agree | disagree | need-info` about the
    fixed question. A round that does not address it **does not count as a round**, and the
    agent is told so. Drift becomes structurally visible rather than a matter of judgement.
 2. **New-pointer rule.** A productive round cites something — a file, a line, a test result,
-   a command output. Zero new pointers and no new claim is noise, and the `pointers[]` field
-   from section 21 already carries the evidence.
+   a command output. Zero new pointers and no new claim is noise, and `pointers[]` from
+   section 21 already carries the evidence.
 3. **Novelty check.** High lexical overlap with the previous round ("agreed, that makes
-   sense") raises a warning and lowers the cap by one. It is deliberately **not** a hard stop:
-   the heuristic is crude, and a genuine objection phrased in similar words must not be
-   silently killed.
-4. **Budget share.** A discussion consuming more than 15% of the session's remaining budget
-   closes on its decision rule. This is the absolute backstop.
+   sense") raises a warning and lowers the cap by one. Deliberately **not** a hard stop: the
+   heuristic is crude, and a real objection phrased in similar words must not be silently
+   killed.
+4. **Budget share.** A parley consuming more than 15% of the session's remaining budget closes
+   on its decision rule. This is the absolute backstop.
 
-Depth is one: a discussion cannot open inside a discussion. One discussion per session at a
-time, which the session lock enforces anyway.
+Depth is one: a parley cannot open inside a parley. One at a time per session, which the
+session lock enforces anyway.
 
 ### The output is a record, not a transcript
 
-A discussion produces a single ledger entry:
-
 ```ts
-interface Resolution {
+interface Parley {
   question: string
   positions: { agent: AgentId; stance: string }[]
   verdict: string
@@ -670,10 +701,12 @@ interface Resolution {
 }
 ```
 
-The exchange itself stays in the database and never re-enters any agent's context. A
-transcript that leaks into later turns would make every subsequent turn pay for the argument.
+One ledger entry. The exchange itself stays in the database and never re-enters any agent's
+context — a transcript that leaked forward would make every later turn pay for the argument.
+`konvoy parley log` reads these back, so the feature can be judged the way everything else
+here is judged: by whether its recorded verdicts were worth what they cost.
 
-A discussion round is an ordinary turn with one extra structural slot — no new transport, no
+A parley round is an ordinary turn with one extra structural slot. No new transport, no
 per-CLI work, nothing that can behave differently across the four harnesses.
 
 ### Allocation without negotiation
