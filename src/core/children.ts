@@ -12,9 +12,25 @@ function install(): void {
         if (child.exitCode === null) child.kill()
       }
       live.clear()
+      for (const handler of exitHandlers) {
+        try {
+          handler()
+        } catch {
+          // a cleanup that fails must not stop the others from running
+        }
+      }
+      exitHandlers.clear()
       process.exit(signal === 'SIGINT' ? 130 : 143)
     })
   }
+}
+
+const exitHandlers = new Set<() => void>()
+
+export function onExit(fn: () => void): () => void {
+  install()
+  exitHandlers.add(fn)
+  return () => exitHandlers.delete(fn)
 }
 
 export function track(child: Child): void {

@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { KonvoyEvent, TurnContext } from '../types'
 import type { Adapter } from '../adapters/types'
 import { bumpBinding, recordEvent, recordTurn, upsertBinding } from '../store/queries'
-import { track, untrack } from './children'
+import { onExit, track, untrack } from './children'
 
 export interface TurnResult {
   final: string
@@ -24,6 +24,16 @@ export interface TurnDeps {
 export interface TurnOptions {
   timeoutSec?: number
   onEvent?: (event: KonvoyEvent) => void
+}
+
+async function drain(stream: ReadableStream<Uint8Array>, cap: number): Promise<string> {
+  const decoder = new TextDecoder()
+  let text = ''
+  for await (const chunk of stream) {
+    text += decoder.decode(chunk, { stream: true })
+    if (text.length > cap) text = text.slice(-cap)
+  }
+  return text
 }
 
 export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOptions = {}): Promise<TurnResult> {
@@ -69,7 +79,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   })
   track(proc)
 
-  const stderrText = new Response(proc.stderr).text()
+  const stderrText = drain(proc.stderr as ReadableStream<Uint8Array>, 64 * 1024)
 
   const turnId = recordTurn(db, {
     sessionId: ctx.sessionId,
@@ -108,64 +118,86 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     }
   }
 
+  let finished = false
+  const finish = (): void => {
+    if (finished) return
+    finished = true
+    db.query(
+      `UPDATE turn SET final = $final, cost_usd = $cost, credits = $credits, input_tokens = $inTok,
+         output_tokens = $outTok, exit_code = $exit, error = $error, ended_at = $ended WHERE id = $id`,
+    ).run({
+      id: turnId,
+      final: result.final,
+      cost: result.costUsd,
+      credits: result.credits,
+      inTok: result.inputTokens,
+      outTok: result.outputTokens,
+      exit: result.exitCode,
+      error: result.error?.message ?? null,
+      ended: Date.now(),
+    })
+    upsertBinding(db, {
+      sessionId: ctx.sessionId,
+      agent: adapter.id,
+      foreignId: result.foreignId,
+      effort: ctx.effort,
+      permission: ctx.permission,
+      model: ctx.model ?? null,
+    })
+    bumpBinding(db, ctx.sessionId, adapter.id, result.costUsd, result.credits)
+  }
+
+  // every path below must reach finish(): an onEvent callback that throws, a parser crash a
+  // wrapper missed, or a signal — otherwise the turn row stays at its INSERT placeholder and
+  // usage counts it as a free turn.
+  const releaseExitHandler = onExit(() => {
+    if (!result.error) result.error = { message: 'konvoy was interrupted', kind: 'crash' }
+    finish()
+  })
+
   const decoder = new TextDecoder()
   let buffer = ''
   try {
-    for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
-      buffer += decoder.decode(chunk, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) for (const event of parseLine(line)) emit(event)
+    try {
+      for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
+        buffer += decoder.decode(chunk, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) for (const event of parseLine(line)) emit(event)
+      }
+      if (buffer.trim()) for (const event of parseLine(buffer)) emit(event)
+    } finally {
+      if (proc.exitCode === null) proc.kill()
     }
-    if (buffer.trim()) for (const event of parseLine(buffer)) emit(event)
+
+    result.exitCode = await proc.exited
+
+    if (!sawDone) result.final = accumulated
+    if (!result.foreignId && adapter.resolveForeignId) {
+      result.foreignId = await adapter.resolveForeignId(ctx, startedAt)
+    }
+
+    if (result.exitCode !== 0 && !result.error) {
+      const stderr = await stderrText
+      const timedOut = Date.now() - startedAt >= timeoutMs
+      result.error = {
+        message: timedOut ? `turn timed out after ${opts.timeoutSec ?? 900}s` : stderr.trim() || `exit ${result.exitCode}`,
+        kind: 'crash',
+      }
+    }
+
+    const failed = result.exitCode !== 0 || (result.error !== null && result.final.trim() === '')
+    if (!failed) result.error = null
+  } catch (error) {
+    result.error = result.error ?? { message: String(error), kind: 'crash' }
+    if (result.exitCode === 0) {
+      result.exitCode = proc.exitCode ?? (await proc.exited.catch(() => -1))
+    }
   } finally {
-    if (proc.exitCode === null) proc.kill()
+    releaseExitHandler()
+    untrack(proc)
+    finish()
   }
-
-  result.exitCode = await proc.exited
-  untrack(proc)
-
-  if (!sawDone) result.final = accumulated
-  if (!result.foreignId && adapter.resolveForeignId) {
-    result.foreignId = await adapter.resolveForeignId(ctx, startedAt)
-  }
-
-  if (result.exitCode !== 0 && !result.error) {
-    const stderr = await stderrText
-    const timedOut = Date.now() - startedAt >= timeoutMs
-    result.error = {
-      message: timedOut ? `turn timed out after ${opts.timeoutSec ?? 900}s` : stderr.trim() || `exit ${result.exitCode}`,
-      kind: 'crash',
-    }
-  }
-
-  const failed = result.exitCode !== 0 || (result.error !== null && result.final.trim() === '')
-  if (!failed) result.error = null
-
-  db.query(
-    `UPDATE turn SET final = $final, cost_usd = $cost, credits = $credits, input_tokens = $inTok,
-       output_tokens = $outTok, exit_code = $exit, error = $error, ended_at = $ended WHERE id = $id`,
-  ).run({
-    id: turnId,
-    final: result.final,
-    cost: result.costUsd,
-    credits: result.credits,
-    inTok: result.inputTokens,
-    outTok: result.outputTokens,
-    exit: result.exitCode,
-    error: result.error?.message ?? null,
-    ended: Date.now(),
-  })
-
-  upsertBinding(db, {
-    sessionId: ctx.sessionId,
-    agent: adapter.id,
-    foreignId: result.foreignId,
-    effort: ctx.effort,
-    permission: ctx.permission,
-    model: ctx.model ?? null,
-  })
-  bumpBinding(db, ctx.sessionId, adapter.id, result.costUsd, result.credits)
 
   return result
 }

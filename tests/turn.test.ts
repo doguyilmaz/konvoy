@@ -108,6 +108,27 @@ test('no child process is left behind once a turn returns', async () => {
   expect(liveCount()).toBe(0)
 })
 
+test('a caller callback that throws still leaves a complete turn row', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([
+    { type: 'system', subtype: 'init', session_id: 'sess-1' },
+    { type: 'result', subtype: 'success', result: 'done' },
+  ])
+  const r = await runTurn({ db, adapter }, ctx(s.id), {
+    onEvent: () => {
+      throw new Error('boom')
+    },
+  })
+  expect(r.error?.kind).toBe('crash')
+  expect(liveCount()).toBe(0)
+  const row = db.query('SELECT exit_code, ended_at, started_at FROM turn WHERE session_id = $s').get({ s: s.id }) as
+    | Record<string, number>
+    | null
+  expect(row?.exit_code).not.toBe(-1)
+  expect(row?.ended_at).toBeGreaterThan(0)
+})
+
 test('a turn that exceeds its timeout is killed and reported', async () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
