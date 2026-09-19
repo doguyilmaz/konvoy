@@ -25,6 +25,32 @@ test('an installed binary reports its version', async () => {
   expect(d.version).toBe('2.22.1')
 })
 
+test('a configured binary path reaches the install check', async () => {
+  const calls: string[][] = []
+  const testDeps = deps({
+    run: async (argv: string[]) => {
+      calls.push(argv)
+      return { stdout: 'opencode 2.0.10', exitCode: 0 }
+    },
+  })
+  const d = await detectWith(testDeps, 'opencode', { bin: '/custom/path/opencode' })
+  expect(calls[0]?.[0]).toBe('/custom/path/opencode')
+  expect(d.installed).toBe(true)
+})
+
+test('a configured binary path reaches the auth check', async () => {
+  const calls: string[][] = []
+  const testDeps = deps({
+    run: async (argv: string[]) => {
+      calls.push(argv)
+      return { stdout: '{"loggedIn":true}', exitCode: 0 }
+    },
+  })
+  const a = await detectAuthWith(testDeps, 'claude', '/custom/path/claude')
+  expect(calls[0]?.[0]).toBe('/custom/path/claude')
+  expect(a.authed).toBe(true)
+})
+
 
 test('codex effort capabilities come from the model cache', async () => {
   const cache = JSON.stringify({

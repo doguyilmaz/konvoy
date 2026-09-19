@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from 'bun:test'
 import { configSchema, type Config } from '../src/config/schema'
 import { cmdDoctor } from '../src/commands/doctor'
-import { detect, detectAuth } from '../src/core/detect'
+import { clearDetectCache, detect, detectAuth } from '../src/core/detect'
 
 function cfg(over: Record<string, unknown>): Config {
   return configSchema.parse(over)
@@ -30,11 +30,15 @@ test('a role naming a disabled agent fails doctor', async () => {
 
   const log = spyOn(console, 'log').mockImplementation(() => {})
   let code: number
+  let lines: string[]
   try {
     code = await cmdDoctor(config)
   } finally {
+    lines = log.mock.calls.map((c) => String(c[0]))
     log.mockRestore()
+    clearDetectCache()
   }
+  expect(lines).toContain('x codex: disabled in config but named by a role')
   expect(code).toBe(1)
 })
 
@@ -65,6 +69,7 @@ test('an agent that fails auth is reported once, not also as ok', async () => {
   } finally {
     lines = log.mock.calls.map((c) => String(c[0]))
     log.mockRestore()
+    clearDetectCache()
   }
 
   expect(lines.some((l) => l.startsWith('x claude:'))).toBe(true)
