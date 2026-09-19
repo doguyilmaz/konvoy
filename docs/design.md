@@ -847,7 +847,72 @@ session runs its own skills exactly as it would alone, and konvoy governs only t
 between agents. konvoy does not reimplement, override, or interfere with what a CLI's own
 skills do.
 
-## 26. Roadmap
+## 26. Analytics
+
+Four agents make spend hard to feel. A `race` charges three agents for one answer and a
+delegation chain spends on agents the user never addressed, so the multiplication is
+invisible exactly where it is largest. konvoy therefore reports usage as a first-class
+feature rather than a debug aid.
+
+### Reported and estimated are different columns
+
+Measured on 2026-09-19: claude reports US dollars, kiro reports credits, codex reports tokens
+only, opencode v2 reported nothing. A single total would be a fabrication — but refusing to
+normalise is also wrong, because section 22's cost-per-success cannot rank agents without a
+common unit, and a Haiku token is not comparable to an Opus token. Both columns exist:
+
+- **Reported** is whatever the CLI said, untouched, in its own unit. Ground truth.
+- **Estimated** is konvoy's normalisation into US dollars, from a rate table in config, and is
+  always labelled with the date those rates were entered. A model with no rate estimates to
+  `-`, never to zero.
+
+```jsonc
+"pricing": {
+  "asOf": "2026-09-19",
+  "models": { "opus": { "inputPerMTok": 15, "outputPerMTok": 75 } },
+  "credits": { "kiro": { "usdPerCredit": 0.02 } }
+}
+```
+
+Rates are the user's numbers and the user's responsibility. konvoy ships none, because a
+built-in table would go stale silently — the failure this whole design keeps refusing. The
+estimate is computed at read time from the stored tokens and model, never frozen into a row,
+so correcting a rate corrects the history.
+
+`turn.model` is recorded per turn rather than read from the binding, because the model can
+change between turns and per-model analysis is the point.
+
+### In the terminal
+
+Three renderings, all pure functions over the store, all drawn with block characters and no
+dependency:
+
+- **An activity heatmap** — weeks across, days down, density by turns per day. The same shape
+  as a contribution graph, and it answers "when do I actually work, and with whom" at a
+  glance.
+- **A sparkline per agent** — spend or turns over the last N days, one line each, so a
+  change in habit is visible without reading numbers.
+- **Share bars** — proportion of turns, tokens or spend per agent, per model, or per kind.
+
+`konvoy usage` prints the table; `konvoy usage --chart` adds these. They are separated because
+the table is what you read in a script and the charts are what you read with your eyes.
+
+### In a browser
+
+`konvoy dashboard` starts `Bun.serve` on a local port and opens one self-contained page: no
+build step, no npm dependency, no chart library — inline SVG drawn from the same SQLite file,
+opened read-only. It is ephemeral by default and dies with the command.
+
+It earns its place only where a terminal cannot compete: the **delegation tree** for a
+session, showing which turn caused which and what each branch cost, and the **formation
+view**, showing that a race spent three agents for one accepted answer. Those are shapes, not
+numbers, and a table renders them badly.
+
+Scope is deliberately small — one page, one port, no authentication because it binds to
+localhost, no live socket, refresh to update. A dashboard that grows a build step becomes the
+thing being maintained instead of the orchestrator.
+
+## 27. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
