@@ -16,6 +16,34 @@ function stripJsonc(text: string): string {
   let inString = false
   let i = 0
 
+  function skipWhitespaceAndComments(start: number): number {
+    let j = start
+    while (j < text.length) {
+      if (/\s/.test(text[j]!)) {
+        j++
+        continue
+      }
+      if (text[j] === '/' && text[j + 1] === '/') {
+        while (j < text.length && text[j] !== '\n') j++
+        if (j < text.length) j++
+        continue
+      }
+      if (text[j] === '/' && text[j + 1] === '*') {
+        j += 2
+        while (j < text.length - 1) {
+          if (text[j] === '*' && text[j + 1] === '/') {
+            j += 2
+            break
+          }
+          j++
+        }
+        continue
+      }
+      break
+    }
+    return j
+  }
+
   while (i < text.length) {
     const char = text[i]
     const next = text[i + 1]
@@ -63,8 +91,7 @@ function stripJsonc(text: string): string {
     }
 
     if (char === ',' && !inString) {
-      let j = i + 1
-      while (j < text.length && /\s/.test(text[j]!)) j++
+      const j = skipWhitespaceAndComments(i + 1)
       if (j < text.length && (text[j] === '}' || text[j] === ']')) {
         i = j
         continue
@@ -123,13 +150,13 @@ export async function loadConfig(opts: { cwd: string; globalPath?: string }): Pr
 export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
   const a = cfg.agents[agent] ?? {}
   return {
-    enabled: a?.enabled ?? true,
-    model: a?.model,
-    effort: a?.effort ?? cfg.defaults.effort,
-    permission: a?.permission ?? cfg.defaults.permission,
-    harness: a?.harness ?? cfg.defaults.harness,
-    bin: a?.bin,
-    subagentEffort: a?.subagentEffort,
+    enabled: a.enabled ?? true,
+    model: a.model,
+    effort: a.effort ?? cfg.defaults.effort,
+    permission: a.permission ?? cfg.defaults.permission,
+    harness: a.harness ?? cfg.defaults.harness,
+    bin: a.bin,
+    subagentEffort: a.subagentEffort,
   }
 }
 

@@ -525,7 +525,80 @@ every call. Each delegation carries a call id; a repeated id inside one turn ret
 first result instead of running the target twice, so a sender's retry after a timeout cannot
 duplicate work.
 
-## 22. Roadmap
+## 22. Cumulative efficiency
+
+The convoy only justifies itself if it beats the best single agent on quality **and** costs
+less than the sum of its parts. That is not automatic. It holds under four conditions, and
+where they fail a convoy is simply N times the price:
+
+1. **Decomposability** — the task splits into parts where different agents have a
+   comparative advantage. A monolithic task gains nothing from being shared.
+2. **Verification asymmetry** — checking is cheaper than producing. Verification prompts are
+   short and their answers are short, so a verifying turn typically costs a fraction of a
+   producing one.
+3. **Error independence** — the agents must fail *differently*. Two agents on the same base
+   model go blind in the same places, so the second one adds cost and no information. This is
+   why `konvoy doctor` warns on duplicate effective models: model diversity is the
+   precondition for the whole thesis, not a nicety.
+4. **Cheap arbitration** — deciding who is right must cost less than doing the work twice.
+
+### The five mechanisms
+
+**Cheap-first escalation.** Send the work to the cheapest capable agent, run the objective
+gate, and escalate only on failure, carrying the failure with it. Expected cost is
+`c_cheap + p_fail × c_expensive`, which beats going straight to the expensive agent whenever
+`p_fail` is low. The failed cheap attempt is not waste — it is reconnaissance the expensive
+agent starts from.
+
+**Routing by measured comparative advantage, not by belief.** konvoy already records tokens,
+cost and exit code per turn. What turns that into routing is an **objective success signal**,
+and in a project with a test or typecheck gate that signal is free and beyond argument.
+`konvoy stats` reports `kind × agent → success rate, median cost` from the user's own
+history. Routing policy consumes that table, with a small exploration budget so early noise
+does not lock in a bad choice permanently.
+
+**Verification asymmetry, exploited explicitly.** The verifier is a *different model*, run at
+low effort under the read-only permission profile, asked a narrow question — "does this diff
+satisfy X, and if not, name a failing input". Narrow question, short answer, small cost.
+
+**Parallel attempts only where the gate is objective.** For a high-variance task with a real
+test, running two agents and keeping whichever passes costs `2c` for a success rate of
+`1 - (1-q)²`. Worth it when `q` is middling and `c` is small; never the default.
+
+**Never re-derive shared context.** Section 18 measured the per-turn floor; if agent B has to
+re-read the codebase because A did not say where to look, the convoy is strictly worse than
+one agent. The pointer discipline of section 21 is what makes the total sublinear rather than
+multiplicative.
+
+### Two hard rules
+
+**Vary the suffix, never the prefix.** Prompt caching charges 1.25× to write a prefix and
+0.1× to read it. A stable prefix — same system prompt, same tool list, same brief, for the
+whole session — is therefore roughly a tenfold discount on the largest part of every turn.
+Injecting anything that changes per turn (most temptingly, the ledger) into the prefix
+destroys that. This is the real reason the ledger is pull-only; tidiness is the lesser half
+of the argument.
+
+**Handoffs are expensive, so avoid chatter.** Every handoff costs a full turn's startup, so
+three clarifying round-trips cost three floors. One fat, complete delegation beats a
+conversation. The prelude says so explicitly: an agent does not hand off a second time
+without producing an artifact.
+
+### What is measured
+
+The `turn` table carries `kind`, `input_tokens`, `output_tokens`, `cost_usd`, `credits` and
+`gate_passed` — the last recorded separately from `exit_code`, because an agent can exit 0
+and still leave the tests red. Those columns exist from the first migration precisely so the
+routing table can be built from real history rather than retrofitted.
+
+### When the convoy loses
+
+For a vague design question with no objective gate, for a task too small to decompose, or for
+a roster whose agents share one base model, a single agent is cheaper and no worse. konvoy
+should say so — `doctor` warns about the model overlap, and `stats` will show a kind where no
+agent beats the lead — rather than pretending that more agents is always better.
+
+## 23. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.

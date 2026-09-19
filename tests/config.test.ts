@@ -89,3 +89,31 @@ test('__proto__ key is rejected as an unknown key', async () => {
   await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"__proto__": {"polluted": true}}')
   expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/__proto__/)
 })
+
+test('JSONC: trailing comma followed by line comment', async () => {
+  const dir = tmp('trailinglinecomment')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{\n  "a": 1, // trailing\n}')
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  expect((cfg as any).a).toBe(1)
+})
+
+test('JSONC: trailing comma followed by block comment', async () => {
+  const dir = tmp('trailingblockcomment')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"a": 1, /* trailing */ }')
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  expect((cfg as any).a).toBe(1)
+})
+
+test('JSONC: array with trailing comma and comment', async () => {
+  const dir = tmp('arraytrailingcomment')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"a": [1, 2, // trailing\n]}')
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  expect((cfg as any).a).toEqual([1, 2])
+})
+
+test('JSONC: escaped quote in string with double-slash after', async () => {
+  const dir = tmp('escapedquote')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"s": "a\\"b//c"}')
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  expect((cfg as any).s).toBe('a"b//c')
+})
