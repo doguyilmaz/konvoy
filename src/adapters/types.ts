@@ -23,7 +23,8 @@ export function safeJson(line: string): Record<string, unknown> | null {
 
 const AUTH =
   /invalid api key|authentication failed|not authenticated|not logged in|unauthorized|\b401\b|please run \/?login|credentials? (?:are )?(?:invalid|missing|expired)/
-const RATE = /rate limit|quota exceeded|too many requests|\b429\b/
+const RATE =
+  /rate limit|quota exceeded|too many requests|usage limit|weekly limit|\d+[- ]hour limit|\b429\b/
 
 export function classifyError(message: string): 'auth' | 'rate' | 'crash' | 'unknown' {
   const m = message.toLowerCase()

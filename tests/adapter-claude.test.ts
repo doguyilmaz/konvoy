@@ -144,4 +144,14 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   expect(classifyError('OPENAI_API_KEY environment variable is not set')).toBe('unknown')
   expect(classifyError('Invalid API key')).toBe('auth')
   expect(classifyError('rate limit exceeded')).toBe('rate')
+  // the limit users actually hit is worded as a usage or weekly window, not a "rate limit"
+  expect(classifyError('You have reached your usage limit. Your limit resets at 7pm.')).toBe('rate')
+  expect(classifyError('Weekly limit reached')).toBe('rate')
+  expect(classifyError('5-hour limit reached')).toBe('rate')
+  // a crash that merely contains the word "limit" must not read as a rate limit — these pin the
+  // regex's precision, not just its reach, and a bare /limit/ has to fail them
+  expect(classifyError('SyntaxError: near "LIMIT": syntax error')).toBe('unknown')
+  expect(classifyError('EMFILE: too many open files, watch')).toBe('unknown')
+  expect(classifyError('RangeError: Maximum call stack size exceeded')).toBe('unknown')
+  expect(classifyError('ENOSPC: no space left on device, write')).toBe('unknown')
 })
