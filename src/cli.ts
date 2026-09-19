@@ -1,5 +1,5 @@
 import { parseArgs } from './args'
-import { loadConfig } from './config/load'
+import { loadConfig, resolveAgent } from './config/load'
 import { openDb } from './store/db'
 import { dbPath } from './paths'
 import { cmdNew } from './commands/new'
@@ -7,6 +7,9 @@ import { cmdSend } from './commands/send'
 import { cmdLs } from './commands/ls'
 import { cmdRoster } from './commands/roster'
 import { cmdStatus } from './commands/status'
+import { cmdAttach } from './commands/attach'
+import { cmdDoctor } from './commands/doctor'
+import type { AgentId } from './types'
 
 const VERSION = '0.1.0'
 
@@ -17,6 +20,8 @@ const USAGE = `konvoy ${VERSION}
   konvoy ls                     list sessions
   konvoy roster                 who is in the convoy
   konvoy status                 versions, auth and roster
+  konvoy attach <agent>         open that agent's own interface, same session
+  konvoy doctor                 check installs, logins, effort and model overlap
   konvoy version                konvoy and agent versions
 
 agents: claude, codex, kiro, opencode
@@ -58,6 +63,16 @@ export async function main(argv: string[]): Promise<number> {
       return cmdRoster(db, cfg, cwd, slug)
     case 'status':
       return cmdStatus(db, cfg, cwd, slug)
+    case 'attach': {
+      const [agent] = rest
+      if (!agent) {
+        console.error('usage: konvoy attach <agent>')
+        return 2
+      }
+      return cmdAttach(db, cwd, agent, slug, resolveAgent(cfg, agent as AgentId).bin)
+    }
+    case 'doctor':
+      return cmdDoctor(cfg)
     case 'version':
       console.log(`konvoy ${VERSION}`)
       return cmdStatus(db, cfg, cwd, slug)
