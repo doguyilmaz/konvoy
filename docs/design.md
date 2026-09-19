@@ -315,6 +315,7 @@ The ledger stays a Markdown file, not a table: agents read it directly, and a hu
 | failure | behaviour |
 |---|---|
 | CLI not installed | marked unavailable in roster; delegation to it returns a clear error; doctor prints the install command |
+| an agent is absent, logged out or expired | the session continues with whoever is present — see "Availability is not a verdict" below |
 | CLI present but not on konvoy's PATH | a spawned process inherits konvoy's environment, not the user's interactive shell, so a CLI reachable in their terminal can be invisible to konvoy — observed on this machine, where `~/.opencode/bin` is added by `.zshrc` and was absent from a long-running process's PATH. `agents.<id>.bin` names the binary explicitly, and `doctor` prints the resolved path for each agent rather than assuming a lookup succeeded |
 | not authenticated | auth errors detected from the stream; binding marked `auth_required`; konvoy prints that CLI's own login command and continues with the rest |
 | version drift | capabilities are re-detected per version; a missing flag degrades that feature (e.g. no `--effort`) and is reported, never fatal |
@@ -619,6 +620,40 @@ Attribution matters most inside a formation, where the multiplication is invisib
 charged three agents for one answer, and a delegation chain spent on agents the user never
 addressed. `turn.parent_turn_id` records which turn caused which, so spend can be rolled up
 per parley, per delegation, and per formation rather than only per agent.
+
+### Availability is not a verdict
+
+An agent that is not available is not automatically a problem. konvoy distinguishes four
+states and reacts to each differently, because three of them may be exactly what the user
+wants:
+
+| state | meaning | how konvoy treats it |
+|---|---|---|
+| `ready` | installed, authenticated | usable |
+| `disabled` | turned off in config | a choice — listed in the roster, never warned about |
+| `missing` | the binary is not on konvoy's path | informational, unless a role depends on it |
+| `needs-login` | installed, but its own status command says otherwise | informational, and konvoy prints **the CLI's own sentence**, not a paraphrase |
+
+**Severity is relative to the session's roster, not to the set of four.** A user who works
+with two agents has not misconfigured anything. `konvoy doctor` therefore exits non-zero only
+when an agent the session actually depends on — the lead, or one named in `roles` — is not
+`ready`. Everything else is reported and the exit code stays zero.
+
+Three consequences:
+
+- **A session never fails because an agent is absent.** It runs with whoever is present and
+  says once, at the start, who is riding along. Only a directly addressed agent being
+  unavailable is an error — `konvoy send codex` with codex missing exits 2 and names the fix —
+  and only an empty roster stops the session.
+- **Expiry is reported in the CLI's own words.** Each status command explains itself better
+  than konvoy could, so `AuthState.detail` carries its first line and konvoy prints it
+  verbatim. A generic "authentication problem" would throw that information away.
+- **Degradation is stated once, not nagged.** A missing agent produces one line per command,
+  never one per turn.
+
+An auth failure discovered mid-turn behaves the same way: the binding is marked, the CLI's
+message is shown, the turn fails, and the session carries on. Delegation to that agent then
+returns a clear error to the calling agent instead of aborting the convoy.
 
 ### When the convoy loses
 
