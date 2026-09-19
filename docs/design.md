@@ -710,7 +710,7 @@ here is judged: by whether its recorded verdicts were worth what they cost.
 A parley round is an ordinary turn with one extra structural slot. No new transport, no
 per-CLI work, nothing that can behave differently across the four harnesses.
 
-## 24. Work allocation without negotiation
+## 24. Work allocation without negotiation (the `party` formation)
 
 Letting agents negotiate who does what costs turns and risks both duplication and gaps. konvoy
 combines three sources of knowledge instead, with zero negotiation rounds:
@@ -734,12 +734,36 @@ expensive.
 
 The missing layer is the **formation**: the shape a session travels in. A convoy has one.
 
-| formation | behaviour |
+Listing the topologies shows there are four distinct ones, not three:
+
+| formation | workers | working on | how it ends |
+|---|---|---|---|
+| `solo` | one | — | the turn ends |
+| `party` | parallel | **different** subtasks of one goal | konvoy merges the pieces |
+| `relay` | sequential | the **same** artifact, in different roles | the chain completes |
+| `race` | parallel | the **same** task | the objective gate picks a winner |
+| `parley` | parallel | the **same** question | the declared decision rule |
+
+`solo` and `party` are the natural pair — alone, or with the team. `party` is the division
+of labour, and it is the one most work actually wants: the lead decomposes once, each member
+owns a subtask suited to it, and konvoy merges. Its mechanism is section 24, which until now
+described an allocation with no formation to belong to.
+
+The name is not decoration. A party is a group whose members have **different** capabilities
+pursuing one objective, which is exactly the comparative-advantage routing of section 22 — a
+squad is people with the same role, and a group says nothing at all. The other three are
+specialisations for particular situations: staged work (`relay`), uncertain outcomes
+(`race`), contested decisions (`parley`).
+
+Choosing between them:
+
+| the situation | formation |
 |---|---|
-| `solo` | one lead agent, the others reachable by delegation — today's behaviour, and the default |
-| `parley` | every significant decision goes to several agents before it is acted on |
-| `relay` | a pipeline: plan, implement, review, fix — a fixed chain with no negotiation |
-| `race` | parallel attempts, with the objective gate picking the winner |
+| the task is small, or only one agent is fit for it | `solo` |
+| the task decomposes and the pieces are independent | `party` |
+| each stage needs a different strength, in order | `relay` |
+| the outcome is uncertain and a test can judge it | `race` |
+| two agents disagree and the disagreement is load-bearing | `parley` |
 
 **`loop` is not a fifth formation; it is a combinator over them.** `loop(relay)` means "plan,
 implement, review, fix, repeat until the gate is green or the budget is spent" — which is
