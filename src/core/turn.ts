@@ -26,12 +26,16 @@ export interface TurnOptions {
   onEvent?: (event: KonvoyEvent) => void
 }
 
-async function drain(stream: ReadableStream<Uint8Array>, cap: number): Promise<string> {
+export async function drain(stream: ReadableStream<Uint8Array>, cap: number): Promise<string> {
   const decoder = new TextDecoder()
   let text = ''
   for await (const chunk of stream) {
     text += decoder.decode(chunk, { stream: true })
-    if (text.length > cap) text = text.slice(-cap)
+    if (text.length > cap) {
+      text = text.slice(-cap)
+      const lead = text.charCodeAt(0)
+      if (lead >= 0xdc00 && lead <= 0xdfff) text = text.slice(1)
+    }
   }
   return text
 }
@@ -156,7 +160,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   // wrapper missed, or a signal — otherwise the turn row stays at its INSERT placeholder and
   // usage counts it as a free turn.
   const releaseExitHandler = onExit((signal) => {
-    if (!result.error) result.error = { message: `konvoy was interrupted by ${signal}`, kind: 'crash' }
+    if (!result.error) result.error = { message: `konvoy was interrupted by ${signal}`, kind: 'interrupted' }
     if (result.exitCode === 0) result.exitCode = signal === 'SIGINT' ? 130 : 143
     finish()
   })
@@ -188,7 +192,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
       const timedOut = Date.now() - startedAt >= timeoutMs
       result.error = {
         message: timedOut ? `turn timed out after ${opts.timeoutSec ?? 900}s` : stderr.trim() || `exit ${result.exitCode}`,
-        kind: 'crash',
+        kind: timedOut ? 'timeout' : 'crash',
       }
     }
 

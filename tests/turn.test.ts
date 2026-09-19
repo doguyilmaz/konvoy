@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { createSession, getBinding, upsertBinding } from '../src/store/queries'
-import { runTurn } from '../src/core/turn'
+import { runTurn, drain } from '../src/core/turn'
 import { liveCount } from '../src/core/children'
 import { claudeAdapter } from '../src/adapters/claude'
 import type { Adapter } from '../src/adapters/types'
@@ -25,6 +25,30 @@ const ctx = (sessionId: string, over: Partial<TurnContext> = {}): TurnContext =>
   effort: 'high',
   permission: 'edit',
   ...over,
+})
+
+test('draining stderr never leaves a lone surrogate at the cap boundary', async () => {
+  const cap = 64 * 1024
+  const highSurrogate = '\uD83D'
+  const lowSurrogate = '\uDE00'
+  // trailing length must be exactly cap - 1 so slice(-cap) cuts precisely between the
+  // two halves of the surrogate pair, regardless of how much precedes it
+  const trailing = 'yz' + 'z'.repeat(cap - 1 - 2)
+  const full = highSurrogate + lowSurrogate + trailing
+  expect(full.length).toBe(cap + 1)
+
+  const bytes = new TextEncoder().encode(full)
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes)
+      controller.close()
+    },
+  })
+
+  const drained = await drain(stream, cap)
+  const firstCode = drained.charCodeAt(0)
+  expect(firstCode >= 0xdc00 && firstCode <= 0xdfff).toBe(false)
+  expect(drained.startsWith('yz')).toBe(true)
 })
 
 test('a turn returns the final message and captures the foreign id', async () => {
@@ -100,11 +124,22 @@ test('a parser that throws is contained and the turn still completes', async () 
   expect(r.events.some((e) => e.t === 'error')).toBe(true)
 })
 
-test('no child process is left behind once a turn returns', async () => {
+test('a child is tracked while it runs and untracked once the turn returns', async () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
-  const adapter = fakeAdapter([{ type: 'result', subtype: 'success', result: 'ok' }])
-  await runTurn({ db, adapter }, ctx(s.id))
+  const adapter = fakeAdapter([
+    { type: 'system', subtype: 'init', session_id: 'sess-1' },
+    { type: 'result', subtype: 'success', result: 'ok' },
+  ])
+
+  let whileRunning = -1
+  await runTurn({ db, adapter }, ctx(s.id), {
+    onEvent: () => {
+      if (whileRunning < 0) whileRunning = liveCount()
+    },
+  })
+
+  expect(whileRunning).toBe(1)
   expect(liveCount()).toBe(0)
 })
 
@@ -140,8 +175,46 @@ test('a turn that exceeds its timeout is killed and reported', async () => {
     }),
   }
   const r = await runTurn({ db, adapter }, ctx(s.id), { timeoutSec: 1 })
-  expect(r.error?.kind).toBe('crash')
+  expect(r.error?.kind).toBe('timeout')
   expect(r.error?.message).toContain('timed out')
+})
+
+test('an interruption is classified as interrupted, not a generic crash', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: () => ({
+      cmd: [
+        'bun',
+        'tests/fixtures/fake-agent.ts',
+        JSON.stringify({ type: 'system', subtype: 'init', session_id: 'sess-1' }),
+        JSON.stringify({ type: 'result', subtype: 'success', result: 'done' }),
+      ],
+      env: { ...process.env, FAKE_AGENT_DELAY_MS: '300' } as Record<string, string>,
+    }),
+  }
+
+  // process.exit is stubbed so the real SIGINT listener installed by children.ts can run to
+  // completion (kill the child, run finish()) without ending the test process; process.emit
+  // drives that same real listener, not a reimplementation of it.
+  const originalExit = process.exit
+  process.exit = (() => undefined as never) as typeof process.exit
+  let fired = false
+  try {
+    const r = await runTurn({ db, adapter }, ctx(s.id), {
+      onEvent: () => {
+        if (!fired) {
+          fired = true
+          process.emit('SIGINT' as never)
+        }
+      },
+    })
+    expect(r.error?.kind).toBe('interrupted')
+    expect(r.error?.message).toContain('SIGINT')
+  } finally {
+    process.exit = originalExit
+  }
 })
 
 test('an informational error on a successful run does not fail the turn', async () => {

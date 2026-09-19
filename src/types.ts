@@ -8,7 +8,7 @@ export type KonvoyEvent =
   | { t: 'thinking'; text: string }
   | { t: 'tool'; name: string; status: 'start' | 'ok' | 'error' }
   | { t: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; credits?: number }
-  | { t: 'error'; message: string; kind: 'auth' | 'rate' | 'crash' | 'unknown' }
+  | { t: 'error'; message: string; kind: 'auth' | 'rate' | 'crash' | 'timeout' | 'interrupted' | 'unknown' }
   | { t: 'done'; final: string }
 
 export type BindingStatus = 'unbound' | 'bound' | 'auth_required' | 'unavailable'
