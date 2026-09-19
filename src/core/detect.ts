@@ -45,8 +45,8 @@ const AUTH_CHECK: Record<AgentId, (bin?: string) => AuthCheck> = {
       return null
     },
   }),
-  codex: () => ({
-    args: ['codex', 'login', 'status'],
+  codex: (bin = 'codex') => ({
+    args: [bin, 'login', 'status'],
     ok: (stdout, exitCode) => {
       if (!stdout || exitCode !== 0) return null
       return stdout.includes('Logged in')
@@ -59,8 +59,8 @@ const AUTH_CHECK: Record<AgentId, (bin?: string) => AuthCheck> = {
       return stdout.includes('Logged in')
     },
   }),
-  opencode: () => ({
-    args: ['opencode', 'auth', 'list'],
+  opencode: (bin = 'opencode') => ({
+    args: [bin, 'auth', 'list'],
     ok: (stdout, exitCode) => {
       if (exitCode !== 0) return null
       return stdout.trim().length > 0

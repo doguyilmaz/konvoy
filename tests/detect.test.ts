@@ -38,7 +38,7 @@ test('a configured binary path reaches the install check', async () => {
   expect(d.installed).toBe(true)
 })
 
-test('a configured binary path reaches the auth check', async () => {
+test('a configured binary path reaches the auth check for claude', async () => {
   const calls: string[][] = []
   const testDeps = deps({
     run: async (argv: string[]) => {
@@ -48,6 +48,32 @@ test('a configured binary path reaches the auth check', async () => {
   })
   const a = await detectAuthWith(testDeps, 'claude', '/custom/path/claude')
   expect(calls[0]?.[0]).toBe('/custom/path/claude')
+  expect(a.authed).toBe(true)
+})
+
+test('a configured binary path reaches the auth check for codex', async () => {
+  const calls: string[][] = []
+  const testDeps = deps({
+    run: async (argv: string[]) => {
+      calls.push(argv)
+      return { stdout: 'Logged in using ChatGPT', exitCode: 0 }
+    },
+  })
+  const a = await detectAuthWith(testDeps, 'codex', '/custom/path/codex')
+  expect(calls[0]?.[0]).toBe('/custom/path/codex')
+  expect(a.authed).toBe(true)
+})
+
+test('a configured binary path reaches the auth check for opencode', async () => {
+  const calls: string[][] = []
+  const testDeps = deps({
+    run: async (argv: string[]) => {
+      calls.push(argv)
+      return { stdout: 'anthropic\n', exitCode: 0 }
+    },
+  })
+  const a = await detectAuthWith(testDeps, 'opencode', '/custom/path/opencode')
+  expect(calls[0]?.[0]).toBe('/custom/path/opencode')
   expect(a.authed).toBe(true)
 })
 
