@@ -315,6 +315,7 @@ The ledger stays a Markdown file, not a table: agents read it directly, and a hu
 | failure | behaviour |
 |---|---|
 | CLI not installed | marked unavailable in roster; delegation to it returns a clear error; doctor prints the install command |
+| CLI present but not on konvoy's PATH | a spawned process inherits konvoy's environment, not the user's interactive shell, so a CLI reachable in their terminal can be invisible to konvoy — observed on this machine, where `~/.opencode/bin` is added by `.zshrc` and was absent from a long-running process's PATH. `agents.<id>.bin` names the binary explicitly, and `doctor` prints the resolved path for each agent rather than assuming a lookup succeeded |
 | not authenticated | auth errors detected from the stream; binding marked `auth_required`; konvoy prints that CLI's own login command and continues with the rest |
 | version drift | capabilities are re-detected per version; a missing flag degrades that feature (e.g. no `--effort`) and is reported, never fatal |
 | stale/invalid foreign session | rebind with a fresh session, note the break in the ledger, keep the old id in history |
