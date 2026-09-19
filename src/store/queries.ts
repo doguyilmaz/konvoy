@@ -182,9 +182,9 @@ export function recordTurn(
   const turnId = id()
   db.query(
     `INSERT INTO turn (id, session_id, agent, prompt, final, cost_usd, credits, input_tokens,
-       output_tokens, kind, gate_passed, exit_code, error, started_at, ended_at)
+       output_tokens, kind, gate_passed, exit_code, error, error_kind, started_at, ended_at)
      VALUES ($id, $sessionId, $agent, $prompt, $final, $costUsd, $credits, $inputTokens,
-       $outputTokens, $kind, NULL, $exitCode, $error, $startedAt, $endedAt)`,
+       $outputTokens, $kind, NULL, $exitCode, $error, NULL, $startedAt, $endedAt)`,
   ).run({
     id: turnId,
     sessionId: input.sessionId,

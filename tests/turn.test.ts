@@ -215,6 +215,10 @@ test('an interruption is classified as interrupted, not a generic crash', async 
   } finally {
     process.exit = originalExit
   }
+  const row = db.query('SELECT error_kind FROM turn WHERE session_id = $s').get({ s: s.id }) as
+    | Record<string, unknown>
+    | null
+  expect(row?.error_kind).toBe('interrupted')
 })
 
 test('an informational error on a successful run does not fail the turn', async () => {

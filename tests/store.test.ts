@@ -116,6 +116,19 @@ test('a turn records what it cost and how it was classified', () => {
   expect(row.gate_passed).toBe(null)
 })
 
+test('a turn records why it failed, not only that it did', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const turnId = recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: '', costUsd: 0, exitCode: 130 })
+  d.query('UPDATE turn SET error = $e, error_kind = $k WHERE id = $id').run({
+    id: turnId,
+    e: 'konvoy was interrupted by SIGINT',
+    k: 'interrupted',
+  })
+  const row = d.query('SELECT error_kind FROM turn WHERE id = $id').get({ id: turnId }) as Record<string, unknown>
+  expect(row.error_kind).toBe('interrupted')
+})
+
 test('the objective gate result is recorded separately from the exit code', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })

@@ -18,7 +18,7 @@ const MIGRATIONS: string[] = [
      prompt TEXT NOT NULL, final TEXT NOT NULL, cost_usd REAL NOT NULL DEFAULT 0,
      credits REAL NOT NULL DEFAULT 0, input_tokens INTEGER NOT NULL DEFAULT 0,
      output_tokens INTEGER NOT NULL DEFAULT 0, kind TEXT, gate_passed INTEGER,
-     exit_code INTEGER NOT NULL, error TEXT,
+     exit_code INTEGER NOT NULL, error TEXT, error_kind TEXT,
      started_at INTEGER NOT NULL, ended_at INTEGER NOT NULL);
    CREATE INDEX turn_kind_agent ON turn(kind, agent);
    CREATE TABLE lock (
