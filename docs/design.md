@@ -913,7 +913,92 @@ Scope is deliberately small — one page, one port, no authentication because it
 localhost, no live socket, refresh to update. A dashboard that grows a build step becomes the
 thing being maintained instead of the orchestrator.
 
-## 27. Roadmap
+## 27. Upstream failures and context pressure
+
+A single-agent tool must fail when its provider does. konvoy has four, so the correct response
+to "claude is rate-limited for three hours" is not to stop — it is to carry on with the others
+and say so. That is what the convoy is for, and it only works if failures are classified
+rather than lumped together.
+
+### The taxonomy decides the policy
+
+| what happened | how konvoy knows | what it does |
+|---|---|---|
+| network error, 5xx, provider outage | non-zero exit, no usage, transport wording | retry with backoff, bounded |
+| short rate limit | the CLI says so, often with a reset time | retry after the stated time if it fits the budget |
+| **quota window exhausted** (the five-hour or weekly cap) | a reset timestamp hours away | **bench the agent until then** and route around it |
+| auth expired mid-session | the CLI's own message | bench and print the exact login command |
+| model overloaded | capacity wording | retry, and suggest a different model if it repeats |
+| the agent itself failed | anything else | it is a turn outcome, not an outage — record and move on |
+
+**Retry only a turn that produced nothing.** The same predicate the rebind gate uses: no text
+and no tool event. A turn that edited files must never be silently repeated, whatever the
+error said. Every retry is announced, because a silent retry hides both cost and latency.
+
+### Benching
+
+`binding.benched_until` holds a timestamp and a reason. A benched agent is not an error state:
+
+- the roster shows it with its reason and when it returns;
+- routing skips it, and a formation with a benched member runs with the rest;
+- it un-benches itself when the time passes, with no user action;
+- its benched turns are excluded from success rates, exactly like an interruption — a quota
+  wall says nothing about how good an agent is at the work.
+
+If **every** agent is benched, konvoy stops and says when the first one returns. That is the
+only case where an outage ends a session.
+
+### The limits are visible before they bite
+
+Claude Code emits a `rate_limit_event` on every turn:
+
+```json
+{"status":"allowed_warning","rateLimitType":"seven_day","utilization":0.8,
+ "surpassedThreshold":0.75,"resetsAt":1789876800,
+ "unifiedWindows":{"five_hour":{"utilization":0.13,"resetsAt":1789836000},
+                   "seven_day":{"utilization":0.8,"resetsAt":1789876800}}}
+```
+
+So the five-hour and weekly windows are observable **before** anything fails, with utilisation
+and reset times. konvoy records them per agent and uses them the way a driver uses a fuel
+gauge rather than a warning light:
+
+- `konvoy roster` shows each agent's headroom and when its window resets;
+- routing prefers the agent with room when two are otherwise equal;
+- a long task warns up front if the lead cannot plausibly finish inside its remaining window.
+
+Reacting to a 429 is recovery. Reading the gauge is planning, and it costs nothing because the
+number arrives with every turn we already paid for.
+
+### Compaction
+
+Every one of the four compacts its own context when it fills, and the signals differ: codex
+writes a `compacted` record into its rollout, kiro reports `contextUsagePercentage` on its
+metadata events, opencode exposes a compaction config and a `time.compacting` field, and
+Claude Code has `--autocompact`.
+
+Compaction is two facts at once, and konvoy records both: it **costs** tokens to summarise, and
+it **loses detail**. The second is the one that matters between agents.
+
+- **konvoy does not wait for it.** Waiting restores nothing — the detail is already gone, and
+  the agent's next answer is simply drawn from a thinner memory.
+- **It is recorded on the turn** and shown in the roster, because an agent that just compacted
+  is a worse reviewer than it was an hour ago, and that should be visible rather than felt.
+- **The next brief to that agent carries more of the ledger.** konvoy already has the ledger
+  and already decides how much to include; a compacted agent is exactly when to include more.
+- **In a parley it ends the round.** A participant that compacted mid-debate may no longer hold
+  its own earlier position, and a debate where one side has forgotten its argument is not worth
+  paying for another round of. The parley closes on its declared decision rule and records that
+  it did so because of a compaction.
+- **In `relay`, `party` and `race` it changes nothing** — those agents work from the brief and
+  the repository, not from each other's memory, which is the reason the protocol was built that
+  way in section 21.
+
+Where a CLI reports context pressure before it compacts — kiro does — konvoy prefers to hand
+off *before* the compaction rather than after, which keeps the detail in the agent that earned
+it instead of in a summary.
+
+## 28. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
