@@ -62,6 +62,11 @@ test('a thought chunk is separated from message text', () => {
   ])
 })
 
+test('a metering field that is not an array is ignored rather than fatal', () => {
+  const line = JSON.stringify({ type: 'metadata', data: { sessionId: 's', meteringUsage: { value: 5, unit: 'credit' } } })
+  expect(kiroAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 's' }])
+})
+
 test('metering usage is reported in credits', () => {
   const line = JSON.stringify({
     type: 'metadata',

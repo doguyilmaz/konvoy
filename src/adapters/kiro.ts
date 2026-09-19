@@ -51,7 +51,9 @@ export const kiroAdapter: Adapter = {
     }
 
     if (o.type === 'metadata') {
-      const metering = data.meteringUsage as { value?: number; unit?: string }[] | undefined
+      const metering = Array.isArray(data.meteringUsage)
+        ? (data.meteringUsage as { value?: number; unit?: string }[])
+        : undefined
       const credits = metering?.find((m) => m.unit === 'credit')?.value
       if (typeof credits === 'number') events.push({ t: 'usage', credits })
     }
