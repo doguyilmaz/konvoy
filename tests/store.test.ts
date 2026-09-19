@@ -16,6 +16,7 @@ import {
   acquireLock,
   releaseLock,
   lockOwner,
+  reclaimStaleLock,
 } from '../src/store/queries'
 
 const db = () => openDb(':memory:')
@@ -136,14 +137,23 @@ test('turns accumulate onto the binding', () => {
   expect(b?.costUsd).toBeCloseTo(0.25)
 })
 
-test('reclaiming a stale lock cannot delete a lock another process already took', () => {
+test('the stale-lock reclaim deletes only the row it observed', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const DEAD = 2147483000
+
   d.query('INSERT INTO lock (session_id, owner, pid, acquired_at) VALUES ($s, $o, $p, $a)').run({
-    s: s.id, o: 'live-holder', p: process.pid, a: Date.now(),
+    s: s.id, o: 'ghost', p: DEAD, a: Date.now(),
   })
-  expect(acquireLock(d, s.id, 'latecomer')).toBe(false)
-  expect(lockOwner(d, s.id)).toBe('live-holder')
+  expect(acquireLock(d, s.id, 'live')).toBe(true)
+  expect(lockOwner(d, s.id)).toBe('live')
+
+  d.query('DELETE FROM lock WHERE session_id = $s').run({ s: s.id })
+  d.query('INSERT INTO lock (session_id, owner, pid, acquired_at) VALUES ($s, $o, $p, $a)').run({
+    s: s.id, o: 'other', p: process.pid, a: Date.now(),
+  })
+  expect(reclaimStaleLock(d, s.id, 'ghost', DEAD)).toBe(false)
+  expect(lockOwner(d, s.id)).toBe('other')
 })
 
 test('a binding keeps its bound status when a later turn fails to report an id', () => {

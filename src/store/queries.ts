@@ -1,16 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import type { AgentId, Binding, Effort, Permission, Session } from '../types'
 
-let lastTimestamp = 0
-const now = () => {
-  const t = Date.now()
-  if (t <= lastTimestamp) {
-    lastTimestamp++
-  } else {
-    lastTimestamp = t
-  }
-  return lastTimestamp
-}
+const now = () => Date.now()
 const id = () => crypto.randomUUID()
 
 export function createSession(
@@ -235,6 +226,13 @@ export function lockOwner(db: Database, sessionId: string): string | null {
   return isAlive(row.pid) ? row.owner : null
 }
 
+export function reclaimStaleLock(db: Database, sessionId: string, owner: string, pid: number): boolean {
+  const res = db
+    .query('DELETE FROM lock WHERE session_id = $sessionId AND owner = $owner AND pid = $pid')
+    .run({ sessionId, owner, pid })
+  return res.changes > 0
+}
+
 export function acquireLock(db: Database, sessionId: string, owner: string): boolean {
   const row = db.query('SELECT owner, pid FROM lock WHERE session_id = $sessionId').get({ sessionId }) as
     | { owner: string; pid: number }
@@ -242,11 +240,7 @@ export function acquireLock(db: Database, sessionId: string, owner: string): boo
   if (row) {
     if (row.owner === owner) return true
     if (isAlive(row.pid)) return false
-    db.query('DELETE FROM lock WHERE session_id = $sessionId AND owner = $owner AND pid = $pid').run({
-      sessionId,
-      owner: row.owner,
-      pid: row.pid,
-    })
+    reclaimStaleLock(db, sessionId, row.owner, row.pid)
   }
   const res = db
     .query(
