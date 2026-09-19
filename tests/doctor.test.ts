@@ -1,77 +1,121 @@
 import { expect, spyOn, test } from 'bun:test'
 import { configSchema, type Config } from '../src/config/schema'
-import { cmdDoctor } from '../src/commands/doctor'
-import { clearDetectCache, detect, detectAuth } from '../src/core/detect'
+import { cmdDoctor, distinctPaths } from '../src/commands/doctor'
+import { clearDetectCache, type DetectDeps } from '../src/core/detect'
 
 function cfg(over: Record<string, unknown>): Config {
   return configSchema.parse(over)
 }
 
-test('a role naming a disabled agent fails doctor', async () => {
-  const bin = 'doctor-test-lead-b'
-  await detect('claude', {
-    bin,
-    deps: { run: async () => ({ stdout: '2.1.278', exitCode: 0 }), readText: async () => null },
-  })
-  await detectAuth('claude', {
-    bin,
-    deps: { run: async () => ({ stdout: '{"loggedIn":true}', exitCode: 0 }), readText: async () => null },
-  })
-
-  const config = cfg({
-    agents: {
-      claude: { bin },
-      codex: { enabled: false },
-      kiro: { enabled: false },
-      opencode: { enabled: false },
+// Doctor is driven entirely through its deps seam, so a test can never prime a cache entry under
+// one key while doctor looks under another. The bins stay unique per test anyway: the memo key is
+// (agent, model, bin), and a shared bin would let another test file's real detection answer ours.
+function fakeDeps(byBin: Record<string, { version?: string; auth?: string; exitCode?: number }>): DetectDeps {
+  return {
+    run: async (cmd: string[]) => {
+      const entry = byBin[cmd[0] ?? '']
+      if (!entry) return { stdout: '', exitCode: 127 }
+      if (cmd[1] === '--version') {
+        return entry.version === undefined
+          ? { stdout: '', exitCode: 127 }
+          : { stdout: entry.version, exitCode: 0 }
+      }
+      return { stdout: entry.auth ?? '', exitCode: entry.exitCode ?? 0 }
     },
-    roles: { reviewer: 'codex' },
-  })
+    readText: async () => null,
+  }
+}
 
+async function runDoctor(config: Config, deps: DetectDeps): Promise<{ lines: string[]; code: number }> {
   const log = spyOn(console, 'log').mockImplementation(() => {})
-  let code: number
-  let lines: string[]
   try {
-    code = await cmdDoctor(config)
+    const code = await cmdDoctor(config, deps)
+    return { lines: log.mock.calls.map((c) => String(c[0])), code }
   } finally {
-    lines = log.mock.calls.map((c) => String(c[0]))
     log.mockRestore()
     clearDetectCache()
   }
+}
+
+test('a role naming a disabled agent fails doctor', async () => {
+  const bin = 'doctor-test-lead-b'
+  const { lines, code } = await runDoctor(
+    cfg({
+      agents: {
+        claude: { bin },
+        codex: { enabled: false },
+        kiro: { enabled: false },
+        opencode: { enabled: false },
+      },
+      roles: { reviewer: 'codex' },
+    }),
+    fakeDeps({ [bin]: { version: '2.1.278', auth: '{"loggedIn":true}' } }),
+  )
   expect(lines).toContain('x codex: disabled in config but named by a role')
   expect(code).toBe(1)
 })
 
 test('an agent that fails auth is reported once, not also as ok', async () => {
   const bin = 'doctor-test-lead-c'
-  await detect('claude', {
-    bin,
-    deps: { run: async () => ({ stdout: '2.1.278', exitCode: 0 }), readText: async () => null },
-  })
-  await detectAuth('claude', {
-    bin,
-    deps: { run: async () => ({ stdout: '{"loggedIn":false}', exitCode: 0 }), readText: async () => null },
-  })
-
-  const config = cfg({
-    agents: {
-      claude: { bin },
-      codex: { enabled: false },
-      kiro: { enabled: false },
-      opencode: { enabled: false },
-    },
-  })
-
-  const log = spyOn(console, 'log').mockImplementation(() => {})
-  let lines: string[]
-  try {
-    await cmdDoctor(config)
-  } finally {
-    lines = log.mock.calls.map((c) => String(c[0]))
-    log.mockRestore()
-    clearDetectCache()
-  }
-
+  const { lines } = await runDoctor(
+    cfg({
+      agents: {
+        claude: { bin },
+        codex: { enabled: false },
+        kiro: { enabled: false },
+        opencode: { enabled: false },
+      },
+    }),
+    fakeDeps({ [bin]: { version: '2.1.278', auth: '{"loggedIn":false}' } }),
+  )
   expect(lines.some((l) => l.startsWith('x claude:'))).toBe(true)
   expect(lines.some((l) => l.startsWith('ok claude:'))).toBe(false)
+})
+
+test('an uninstalled agent that no role names is reported, not failed', async () => {
+  const leadBin = 'doctor-test-lead-d'
+  const missingBin = 'doctor-test-missing-d'
+  const { lines, code } = await runDoctor(
+    cfg({
+      agents: {
+        claude: { bin: leadBin },
+        codex: { enabled: false },
+        kiro: { enabled: false },
+        opencode: { bin: missingBin, model: 'x' },
+      },
+    }),
+    fakeDeps({ [leadBin]: { version: '2.1.278', auth: '{"loggedIn":true}' } }),
+  )
+  expect(lines).toContain('- opencode: not installed')
+  expect(lines).not.toContain('x opencode: not installed')
+  expect(code).toBe(0)
+})
+
+test('a logged-out agent that no role names is reported, not failed', async () => {
+  const leadBin = 'doctor-test-lead-e'
+  const outBin = 'doctor-test-loggedout-e'
+  const { lines, code } = await runDoctor(
+    cfg({
+      agents: {
+        claude: { bin: leadBin },
+        codex: { enabled: false },
+        kiro: { enabled: false },
+        opencode: { bin: outBin, model: 'x' },
+      },
+    }),
+    fakeDeps({
+      [leadBin]: { version: '2.1.278', auth: '{"loggedIn":true}' },
+      [outBin]: { version: 'opencode 2.0.10', auth: '' },
+    }),
+  )
+  expect(lines.some((l) => l.startsWith('- opencode:'))).toBe(true)
+  expect(lines.some((l) => l.startsWith('x opencode:'))).toBe(false)
+  expect(code).toBe(0)
+})
+
+test('a PATH directory listed twice is not reported as a shadowing binary', () => {
+  // `which -a` prints one line per PATH entry, so a duplicated entry repeats the same path
+  expect(distinctPaths('/usr/local/bin/codex\n/usr/local/bin/codex\n')).toEqual(['/usr/local/bin/codex'])
+  expect(distinctPaths('/a/claude\n/a/claude\n/b/claude\n')).toEqual(['/a/claude', '/b/claude'])
+  expect(distinctPaths('  \n')).toEqual([])
 })

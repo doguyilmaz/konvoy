@@ -2,11 +2,16 @@ import type { Config } from '../config/schema'
 import { agentIds, getAdapter } from '../adapters'
 import type { AgentId } from '../types'
 import { resolveAgent } from '../config/load'
-import { detect, detectAuth } from '../core/detect'
+import { detect, detectAuth, type DetectDeps } from '../core/detect'
 import { clampEffort } from '../adapters/effort'
 import { loginHint } from './send'
 
-export async function cmdDoctor(cfg: Config): Promise<number> {
+// `which -a` prints one line per PATH entry, so a directory listed twice repeats the same path
+export function distinctPaths(stdout: string): string[] {
+  return [...new Set(stdout.trim().split('\n').filter(Boolean))]
+}
+
+export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number> {
   let problems = 0
   const models = new Map<string, string[]>()
   const required = new Set<AgentId>(
@@ -27,16 +32,24 @@ export async function cmdDoctor(cfg: Config): Promise<number> {
       continue
     }
 
-    const d = await detect(agent, { model: settings.model, bin: settings.bin })
+    const d = await detect(agent, { model: settings.model, bin: settings.bin, deps })
     if (!d.installed) {
-      console.log(`x ${agent}: not installed`)
-      if (required.has(agent)) problems++
+      if (required.has(agent)) {
+        console.log(`x ${agent}: not installed`)
+        problems++
+      } else {
+        console.log(`- ${agent}: not installed`)
+      }
       continue
     }
-    const auth = await detectAuth(agent, { bin: settings.bin })
+    const auth = await detectAuth(agent, { bin: settings.bin, deps })
     if (auth.authed === false) {
-      console.log(`x ${agent}: ${auth.detail} — ${loginHint(agent)}`)
-      if (required.has(agent)) problems++
+      if (required.has(agent)) {
+        console.log(`x ${agent}: ${auth.detail} — ${loginHint(agent)}`)
+        problems++
+      } else {
+        console.log(`- ${agent}: ${auth.detail} — ${loginHint(agent)}`)
+      }
       continue
     }
 
@@ -50,7 +63,7 @@ export async function cmdDoctor(cfg: Config): Promise<number> {
     }
 
     const shadow = Bun.spawnSync(['which', '-a', settings.bin ?? getAdapter(agent).bin])
-    const paths = new TextDecoder().decode(shadow.stdout).trim().split('\n').filter(Boolean)
+    const paths = distinctPaths(new TextDecoder().decode(shadow.stdout))
     if (paths.length > 1 && !settings.bin) {
       console.log(`! ${agent}: ${paths.length} binaries on PATH, "${paths[0]}" wins — set agents.${agent}.bin to be explicit`)
     }
