@@ -88,7 +88,7 @@ export function upsertBinding(
     sessionId: string
     agent: AgentId
     foreignId: string | null
-    effort: Effort
+    effort: string
     permission: Permission
     model?: string | null
   },
@@ -123,7 +123,7 @@ const toBinding = (r: Record<string, unknown> | null): Binding | null =>
         agent: r.agent as AgentId,
         foreignId: (r.foreign_id as string | null) ?? null,
         model: (r.model as string | null) ?? null,
-        effort: r.effort as Effort,
+        effort: r.effort as string,
         permission: r.permission as Permission,
         status: r.status as Binding['status'],
         turns: r.turns as number,

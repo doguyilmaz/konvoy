@@ -18,7 +18,7 @@ export interface Binding {
   agent: AgentId
   foreignId: string | null
   model: string | null
-  effort: Effort
+  effort: string
   permission: Permission
   status: BindingStatus
   turns: number
