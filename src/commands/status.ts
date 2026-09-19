@@ -10,9 +10,9 @@ export async function cmdStatus(db: Database, cfg: Config, cwd: string, slug?: s
   const rows: AgentStatusRow[] = await Promise.all(
     agentIds.map(async (agent) => {
       const settings = resolveAgent(cfg, agent)
-      const found = await detect(agent, settings.model)
+      const found = await detect(agent, { model: settings.model, bin: settings.bin })
       const auth = found.installed
-        ? await detectAuth(agent, settings.bin)
+        ? await detectAuth(agent, { bin: settings.bin })
         : { agent, authed: null, detail: 'not installed' }
       return { agent, installed: found.installed, version: found.version, authed: auth.authed, detail: auth.detail }
     }),

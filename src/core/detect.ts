@@ -102,12 +102,16 @@ function authDetail(stdout: string, exitCode: number): string {
   return trimmed.split('\n')[0] ?? ''
 }
 
-export async function detectWith(deps: DetectDeps, agent: AgentId, model?: string): Promise<Detection> {
+export async function detectWith(
+  deps: DetectDeps,
+  agent: AgentId,
+  opts: { model?: string; bin?: string } = {},
+): Promise<Detection> {
   const adapter = getAdapter(agent)
-  const result = await deps.run([adapter.bin, '--version'])
+  const result = await deps.run([opts.bin ?? adapter.bin, '--version'])
   const installed = result.exitCode === 0
   const version = installed ? parseVersion(result.stdout) : null
-  const efforts = installed && agent === 'codex' ? await codexEfforts(deps, model) : undefined
+  const efforts = installed && agent === 'codex' ? await codexEfforts(deps, opts.model) : undefined
   return { agent, installed, version, efforts }
 }
 
@@ -174,20 +178,18 @@ export function clearDetectCache(): void {
   detectAuthCacheMap.clear()
 }
 
-export async function detect(agent: AgentId, model?: string, deps?: DetectDeps): Promise<Detection> {
-  const key = `${agent}\u0000${model ?? ''}`
-  return memo(detectCacheMap, key, () => detectWith(deps ?? realDeps(), agent, model))
+export interface DetectOptions {
+  model?: string
+  bin?: string
+  deps?: DetectDeps
 }
 
-export async function detectAuth(agent: AgentId, bin?: string, deps?: DetectDeps): Promise<AuthState> {
-  const key = `${agent}\u0000${bin ?? ''}`
-  return memo(detectAuthCacheMap, key, () => detectAuthWith(deps ?? realDeps(), agent, bin))
+export async function detect(agent: AgentId, opts: DetectOptions = {}): Promise<Detection> {
+  const key = `${agent}\u0000${opts.model ?? ''}\u0000${opts.bin ?? ''}`
+  return memo(detectCacheMap, key, () => detectWith(opts.deps ?? realDeps(), agent, opts))
 }
 
-async function detectUncached(agent: AgentId, model?: string): Promise<Detection> {
-  return detectWith(realDeps(), agent, model)
-}
-
-async function detectAuthUncached(agent: AgentId, bin?: string): Promise<AuthState> {
-  return detectAuthWith(realDeps(), agent, bin)
+export async function detectAuth(agent: AgentId, opts: DetectOptions = {}): Promise<AuthState> {
+  const key = `${agent}\u0000${opts.bin ?? ''}`
+  return memo(detectAuthCacheMap, key, () => detectAuthWith(opts.deps ?? realDeps(), agent, opts.bin))
 }

@@ -36,7 +36,7 @@ test('codex effort capabilities come from the model cache', async () => {
       readText: async (p: string) => (p.endsWith('models_cache.json') ? cache : null),
     }),
     'codex',
-    'gpt-6-astra',
+    { model: 'gpt-6-astra' },
   )
   expect(d.efforts).toEqual(['low', 'medium', 'high', 'max'])
 })
@@ -48,7 +48,7 @@ test('a model cache whose shape is not what we captured yields no capabilities',
       readText: async () => JSON.stringify({ models: { id: 'gpt-6-astra' } }),
     }),
     'codex',
-    'gpt-6-astra',
+    { model: 'gpt-6-astra' },
   )
   expect(d.efforts).toBeUndefined()
 })
@@ -60,7 +60,7 @@ test('a supported-level field that is not a list is rejected', async () => {
       readText: async () => JSON.stringify({ models: [{ id: 'm', supported_reasoning_levels: 'low,high' }] }),
     }),
     'codex',
-    'm',
+    { model: 'm' },
   )
   expect(d.efforts).toBeUndefined()
 })
@@ -72,7 +72,7 @@ test('an unknown model leaves capabilities undefined', async () => {
       readText: async () => JSON.stringify({ models: [] }),
     }),
     'codex',
-    'nope',
+    { model: 'nope' },
   )
   expect(d.efforts).toBeUndefined()
 })
@@ -87,7 +87,7 @@ test('the right model is found among several in the cache', async () => {
   const d = await detectWith(
     deps({ run: async () => ({ stdout: 'codex-cli 0.155.1', exitCode: 0 }), readText: async () => cache }),
     'codex',
-    'gpt-6-astra',
+    { model: 'gpt-6-astra' },
   )
   expect(d.efforts).toEqual(['low', 'medium', 'high', 'max'])
 })
@@ -180,8 +180,8 @@ test('a memoized detect rejection does not stick', async () => {
     return { stdout: 'codex-cli 0.155.1', exitCode: 0 }
   }
   const testDeps = deps({ run: flaky })
-  await expect(detect('codex', undefined, testDeps)).rejects.toThrow()
-  const second = await detect('codex', undefined, testDeps)
+  await expect(detect('codex', { deps: testDeps })).rejects.toThrow()
+  const second = await detect('codex', { deps: testDeps })
   expect(second.installed).toBe(true)
 })
 
@@ -194,7 +194,7 @@ test('a memoized detectAuth rejection does not stick', async () => {
     return { stdout: '{"loggedIn":true}', exitCode: 0 }
   }
   const testDeps = deps({ run: flaky })
-  await expect(detectAuth('claude', undefined, testDeps)).rejects.toThrow()
-  const second = await detectAuth('claude', undefined, testDeps)
+  await expect(detectAuth('claude', { deps: testDeps })).rejects.toThrow()
+  const second = await detectAuth('claude', { deps: testDeps })
   expect(second.authed).toBe(true)
 })

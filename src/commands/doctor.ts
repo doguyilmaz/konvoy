@@ -18,20 +18,26 @@ export async function cmdDoctor(cfg: Config): Promise<number> {
   for (const agent of agentIds) {
     const settings = resolveAgent(cfg, agent)
     if (!settings.enabled) {
-      console.log(`- ${agent}: disabled in config`)
+      if (required.has(agent)) {
+        console.log(`x ${agent}: disabled in config but named by a role`)
+        problems++
+      } else {
+        console.log(`- ${agent}: disabled in config`)
+      }
       continue
     }
 
-    const d = await detect(agent, settings.model)
+    const d = await detect(agent, { model: settings.model, bin: settings.bin })
     if (!d.installed) {
       console.log(`x ${agent}: not installed`)
       if (required.has(agent)) problems++
       continue
     }
-    const auth = await detectAuth(agent, settings.bin)
+    const auth = await detectAuth(agent, { bin: settings.bin })
     if (auth.authed === false) {
       console.log(`x ${agent}: ${auth.detail} — ${loginHint(agent)}`)
       if (required.has(agent)) problems++
+      continue
     }
 
     const clamp = clampEffort(settings.effort, d.efforts)
@@ -59,12 +65,6 @@ export async function cmdDoctor(cfg: Config): Promise<number> {
     if (users.length > 1) {
       console.log(`! ${users.join(' and ')} both run ${model} — they will not disagree with each other`)
     }
-  }
-
-  const lead = cfg.roles.lead ?? 'claude'
-  if (!resolveAgent(cfg, lead).enabled) {
-    console.log(`x lead agent "${lead}" is disabled`)
-    problems++
   }
 
   console.log(problems === 0 ? '\nno problems found' : `\n${problems} problem(s) found`)

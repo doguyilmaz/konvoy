@@ -72,7 +72,7 @@ export async function send(
   if (!settings.enabled) throw new Error(`${agent} is disabled in this konvoy config`)
 
   const adapter = deps.adapterFor?.(agent) ?? getAdapter(agent)
-  const detection = await detect(agent, settings.model)
+  const detection = await detect(agent, { model: settings.model, bin: settings.bin })
   const effort = clampEffort(settings.effort, detection.efforts)
   const build = (): TurnContext => ({
     sessionId: session.id,
