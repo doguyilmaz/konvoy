@@ -22,6 +22,8 @@ export async function cmdStatus(db: Database, cfg: Config, cwd: string, slug?: s
     if (!r.installed) console.log(`warning: ${r.agent} is not installed — it will be skipped`)
     else if (r.authed === false) console.log(`warning: ${r.agent}: ${r.detail}`)
   }
-  const code = cmdRoster(db, cfg, cwd, slug)
-  return code === 2 ? 0 : code
+  // status reports; it does not judge. A directory with no session is not a failure of the
+  // command, and cmdRoster has already said so on stderr.
+  cmdRoster(db, cfg, cwd, slug)
+  return 0
 }

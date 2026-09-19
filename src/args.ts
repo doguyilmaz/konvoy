@@ -6,11 +6,17 @@ export interface Args {
 export function parseArgs(argv: string[]): Args {
   const positional: string[] = []
   const flags: Record<string, string | boolean> = {}
+  let flagsEnded = false
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i]!
-    if (!token.startsWith('-')) {
+    if (flagsEnded || !token.startsWith('-') || token === '-') {
       positional.push(token)
+      continue
+    }
+    // the POSIX convention, and the only way to send a message that starts with a dash
+    if (token === '--') {
+      flagsEnded = true
       continue
     }
     const name = token.replace(/^--?/, '')

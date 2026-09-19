@@ -31,7 +31,8 @@ export async function main(argv: string[]): Promise<number> {
 
   if (!command || command === 'help' || args.flags.help) {
     console.log(USAGE)
-    return command ? 0 : 1
+    // asking for help is not a usage error; running konvoy with nothing is
+    return command || args.flags.help ? 0 : 1
   }
 
   const cfg = await loadConfig({ cwd })
@@ -45,6 +46,7 @@ export async function main(argv: string[]): Promise<number> {
       const [agent, ...prompt] = rest
       if (!agent || prompt.length === 0) {
         console.error('usage: konvoy send <agent> "<message>"')
+        console.error('a message beginning with a dash goes after --, as in: konvoy send codex -- "-1 first"')
         return 2
       }
       return cmdSend(db, cfg, cwd, agent, prompt.join(' '), slug)
