@@ -10,7 +10,19 @@ export function coerce(raw: string): string | number | boolean {
   return raw
 }
 
+// `__proto__` resolves to Object.prototype through an ordinary property read, so a dotted path
+// containing it writes onto the shared prototype — poisoning every object in the process while
+// the config itself stays empty. `constructor` and `prototype` are blocked for the same reason.
+const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
+
+function assertSafe(dotted: string): void {
+  for (const key of dotted.split('.')) {
+    if (RESERVED.has(key)) throw new Error(`"${key}" is not a valid config key`)
+  }
+}
+
 export function getPath(obj: unknown, dotted: string): unknown {
+  assertSafe(dotted)
   let node: unknown = obj
   for (const key of dotted.split('.')) {
     if (typeof node !== 'object' || node === null) return undefined
@@ -24,6 +36,7 @@ export function setPath(
   dotted: string,
   raw: string,
 ): Record<string, unknown> {
+  assertSafe(dotted)
   const keys = dotted.split('.')
   const out = structuredClone(obj)
   let node: Record<string, unknown> = out
@@ -46,7 +59,13 @@ export async function cmdConfig(
 ): Promise<number> {
   if (action === 'get') {
     if (key) {
-      const found = getPath(cfg, key)
+      let found: unknown
+      try {
+        found = getPath(cfg, key)
+      } catch (e) {
+        console.error((e as Error).message)
+        return 2
+      }
       if (found === undefined) {
         console.error(`no such config key: ${key}`)
         return 2
@@ -71,7 +90,13 @@ export async function cmdConfig(
     }
     const path = opts.global ? globalConfigPath() : projectConfigPath(cwd)
     const raw = ((await readLayer(path)) ?? {}) as Record<string, unknown>
-    const next = setPath(raw, key, value)
+    let next: Record<string, unknown>
+    try {
+      next = setPath(raw, key, value)
+    } catch (e) {
+      console.error((e as Error).message)
+      return 2
+    }
     const parsed = configSchema.safeParse(next)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]

@@ -31,3 +31,18 @@ test('a set that would produce an invalid config is rejected before writing', ()
   const next = setPath({}, 'defaults.effort', 'turbo')
   expect(configSchema.safeParse(next).success).toBe(false)
 })
+
+test('a dotted path cannot reach Object.prototype', () => {
+  // `config set __proto__.x` would otherwise write onto the shared prototype while the config
+  // itself stayed empty — a silent no-op that poisons every object in the process
+  expect(() => setPath({}, '__proto__.polluted', 'true')).toThrow()
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+
+  expect(() => setPath({}, 'agents.constructor.prototype.x', 'true')).toThrow()
+  expect(() => getPath({}, '__proto__')).toThrow()
+})
+
+test('ordinary keys that merely contain a reserved word still work', () => {
+  expect(setPath({}, 'agents.claude.model', 'opus')).toEqual({ agents: { claude: { model: 'opus' } } })
+  expect(setPath({}, 'defaults.prototypeMode', 'true')).toEqual({ defaults: { prototypeMode: true } })
+})
