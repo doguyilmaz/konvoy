@@ -14,7 +14,7 @@ function install(): void {
       live.clear()
       for (const handler of exitHandlers) {
         try {
-          handler()
+          handler(signal)
         } catch {
           // a cleanup that fails must not stop the others from running
         }
@@ -25,9 +25,11 @@ function install(): void {
   }
 }
 
-const exitHandlers = new Set<() => void>()
+type ExitHandler = (signal: 'SIGINT' | 'SIGTERM') => void
 
-export function onExit(fn: () => void): () => void {
+const exitHandlers = new Set<ExitHandler>()
+
+export function onExit(fn: ExitHandler): () => void {
   install()
   exitHandlers.add(fn)
   return () => exitHandlers.delete(fn)

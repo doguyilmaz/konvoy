@@ -91,6 +91,11 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     kind: ctx.kind ?? null,
   })
 
+  // exit_code -1 means konvoy itself died before it could record the turn. Every ordinary
+  // ending, including an interruption, replaces it — so a surviving -1 is a real signal, not
+  // a default. Failure is decided by the error field, not by the exit code alone: an interrupted turn
+  // carries 130 or 143 and a message, and a codex turn can exit 0 with an informational error.
+
   const emit = (event: KonvoyEvent): void => {
     result.events.push(event)
     recordEvent(db, turnId, seq++, event.t, event)
@@ -150,8 +155,9 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   // every path below must reach finish(): an onEvent callback that throws, a parser crash a
   // wrapper missed, or a signal — otherwise the turn row stays at its INSERT placeholder and
   // usage counts it as a free turn.
-  const releaseExitHandler = onExit(() => {
-    if (!result.error) result.error = { message: 'konvoy was interrupted', kind: 'crash' }
+  const releaseExitHandler = onExit((signal) => {
+    if (!result.error) result.error = { message: `konvoy was interrupted by ${signal}`, kind: 'crash' }
+    if (result.exitCode === 0) result.exitCode = signal === 'SIGINT' ? 130 : 143
     finish()
   })
 
