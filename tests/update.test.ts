@@ -1,6 +1,7 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { cmdUpdate, updateCommand } from '../src/commands/update'
 import { configSchema } from '../src/config/schema'
+import type { AgentId } from '../src/types'
 
 test('each agent has its own update command', () => {
   // verified against the installed CLIs: claude/codex/kiro-cli take `update`, opencode takes `upgrade`
@@ -17,8 +18,9 @@ test('a configured binary replaces the name the update runs', () => {
   ])
 })
 
-test('update skips a disabled agent and runs a configured one', async () => {
+test('update skips a disabled agent, runs a configured one, and forwards the configured bin to detect', async () => {
   const ran: string[][] = []
+  const detectCalls: { agent: AgentId; opts: { bin?: string } }[] = []
   const code = await cmdUpdate(
     configSchema.parse({
       agents: {
@@ -30,7 +32,10 @@ test('update skips a disabled agent and runs a configured one', async () => {
     }),
     { all: true },
     {
-      detect: async () => ({ agent: 'opencode' as const, installed: true, version: '2.0.10' }),
+      detect: async (agent, opts) => {
+        detectCalls.push({ agent, opts })
+        return { agent: 'opencode' as const, installed: true, version: '2.0.10' }
+      },
       spawn: async (argv: string[]) => {
         ran.push(argv)
         return 0
@@ -39,4 +44,48 @@ test('update skips a disabled agent and runs a configured one', async () => {
   )
   expect(ran).toEqual([['/custom/opencode', 'upgrade']])
   expect(code).toBe(0)
+  // both the before- and after-spawn detect calls must carry the configured bin, not the bare name
+  expect(detectCalls).toEqual([
+    { agent: 'opencode', opts: { bin: '/custom/opencode' } },
+    { agent: 'opencode', opts: { bin: '/custom/opencode' } },
+  ])
+})
+
+test('a non-zero spawn exit is reported, counted as a failure, and does not stop the loop', async () => {
+  const ran: string[][] = []
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    const code = await cmdUpdate(
+      configSchema.parse({
+        agents: {
+          codex: { enabled: false },
+          kiro: { enabled: false },
+          opencode: { bin: '/custom/opencode' },
+        },
+      }),
+      { all: true },
+      {
+        detect: async (agent) => ({
+          agent,
+          installed: true,
+          version: agent === 'claude' ? '1.0.0' : '2.0.10',
+        }),
+        spawn: async (argv) => {
+          ran.push(argv)
+          return argv[0] === 'claude' ? 1 : 0
+        },
+      },
+    )
+    const lines = log.mock.calls.map((c) => String(c[0]))
+    expect(code).toBe(1)
+    // claude fails but the loop still reaches opencode, which comes after it in agentIds
+    expect(ran).toEqual([
+      ['claude', 'update'],
+      ['/custom/opencode', 'upgrade'],
+    ])
+    expect(lines).toContain('! claude: update exited with 1')
+    expect(lines).toContain('ok opencode: 2.0.10 -> 2.0.10')
+  } finally {
+    log.mockRestore()
+  }
 })
