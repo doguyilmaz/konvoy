@@ -17,3 +17,10 @@ test('an unsupported value falls to the closest lower rung', () => {
 test('a request below every supported rung takes the lowest', () => {
   expect(clampEffort('low', ['high', 'max'])).toEqual({ value: 'high', clamped: true })
 })
+
+test('a vocabulary the ladder does not know still yields one of its own values', () => {
+  expect(clampEffort('high', ['reasoning-low', 'reasoning-high'])).toEqual({
+    value: 'reasoning-low',
+    clamped: true,
+  })
+})

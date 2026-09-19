@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { claudeAdapter } from '../src/adapters/claude'
+import { classifyError } from '../src/adapters/types'
 import type { Binding, TurnContext } from '../src/types'
 
 const ctx = (over: Partial<TurnContext> = {}): TurnContext => ({
@@ -114,4 +115,33 @@ test('the captured fixture parses into session, text and completion', async () =
 test('attach resumes the bound session interactively', () => {
   const plan = claudeAdapter.attach(bound('abc-123'))
   expect(plan.cmd).toEqual(['claude', '--resume', 'abc-123'])
+})
+
+test('a prompt that begins with a dash survives argument parsing', () => {
+  const cmd = claudeAdapter.turn(ctx({ prompt: '--force the refactor' })).cmd
+  const sep = cmd.indexOf('--')
+  expect(sep).toBeGreaterThan(-1)
+  expect(cmd[sep + 1]).toBe('--force the refactor')
+  expect(cmd[cmd.length - 1]).toBe('--force the refactor')
+})
+
+test('a malformed content block does not take the whole line down', () => {
+  const line = JSON.stringify({ type: 'assistant', message: { content: [null, { type: 'text', text: 'hi' }] } })
+  expect(claudeAdapter.parse(line)).toEqual([{ t: 'text', text: 'hi' }])
+})
+
+test('thinking blocks are reported apart from message text', () => {
+  const line = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'hmm' }] } })
+  expect(claudeAdapter.parse(line)).toEqual([{ t: 'thinking', text: 'hmm' }])
+})
+
+test('attaching an unbound agent starts it fresh', () => {
+  expect(claudeAdapter.attach({ ...bound('x'), foreignId: null }).cmd).toEqual(['claude'])
+})
+
+test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
+  expect(classifyError("cannot resolve module '../pages/login'")).toBe('unknown')
+  expect(classifyError('OPENAI_API_KEY environment variable is not set')).toBe('unknown')
+  expect(classifyError('Invalid API key')).toBe('auth')
+  expect(classifyError('rate limit exceeded')).toBe('rate')
 })

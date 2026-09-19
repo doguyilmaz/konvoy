@@ -21,10 +21,13 @@ export function safeJson(line: string): Record<string, unknown> | null {
   }
 }
 
+const AUTH =
+  /invalid api key|authentication failed|not authenticated|not logged in|unauthorized|\b401\b|please run \/?login|credentials? (?:are )?(?:invalid|missing|expired)/
+const RATE = /rate limit|quota exceeded|too many requests|\b429\b/
+
 export function classifyError(message: string): 'auth' | 'rate' | 'crash' | 'unknown' {
   const m = message.toLowerCase()
-  if (m.includes('api key') || m.includes('unauthor') || m.includes('not logged in') || m.includes('login'))
-    return 'auth'
-  if (m.includes('rate limit') || m.includes('quota') || m.includes('429')) return 'rate'
+  if (AUTH.test(m)) return 'auth'
+  if (RATE.test(m)) return 'rate'
   return 'unknown'
 }

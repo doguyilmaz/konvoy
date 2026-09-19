@@ -13,7 +13,7 @@ export const claudeAdapter: Adapter = {
   supportsPresetSessionId: true,
 
   turn(ctx: TurnContext): SpawnPlan {
-    const cmd = [ctx.bin ?? 'claude', '-p', ctx.prompt, '--output-format', 'stream-json', '--verbose']
+    const cmd = [ctx.bin ?? 'claude', '-p', '--output-format', 'stream-json', '--verbose']
     if (ctx.binding?.foreignId) cmd.push('--resume', ctx.binding.foreignId)
     else cmd.push('--session-id', ctx.sessionId)
     if (ctx.model) cmd.push('--model', ctx.model)
@@ -22,6 +22,7 @@ export const claudeAdapter: Adapter = {
     if ((ctx.harness ?? 'minimal') === 'minimal') {
       cmd.push('--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--disable-slash-commands', '--setting-sources', '')
     }
+    cmd.push('--', ctx.prompt)
     return { cmd, cwd: ctx.cwd }
   },
 
@@ -38,6 +39,7 @@ export const claudeAdapter: Adapter = {
       const blocks = Array.isArray(message?.content) ? message.content : []
       const events: KonvoyEvent[] = []
       for (const raw of blocks) {
+        if (typeof raw !== 'object' || raw === null) continue
         const block = raw as { type?: string; text?: string; thinking?: string; name?: string }
         if (block.type === 'text' && block.text) events.push({ t: 'text', text: block.text })
         if (block.type === 'thinking' && block.thinking) events.push({ t: 'thinking', text: block.thinking })
