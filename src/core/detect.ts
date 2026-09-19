@@ -26,11 +26,46 @@ export function parseVersion(text: string): string | null {
   return /(\d+\.\d+\.\d+)/.exec(text)?.[1] ?? null
 }
 
-const AUTH_CHECK: Record<AgentId, (bin?: string) => string[]> = {
-  claude: (bin = 'claude') => [bin, 'auth', 'status'],
-  codex: () => ['codex', 'login', 'status'],
-  kiro: (bin = 'kiro-cli') => [bin, 'whoami'],
-  opencode: () => ['opencode', 'auth', 'list'],
+interface AuthCheck {
+  args: string[]
+  ok: (stdout: string, exitCode: number) => boolean | null
+}
+
+const AUTH_CHECK: Record<AgentId, (bin?: string) => AuthCheck> = {
+  claude: (bin = 'claude') => ({
+    args: [bin, 'auth', 'status'],
+    ok: (stdout, exitCode) => {
+      if (!stdout) return null
+      try {
+        const json = JSON.parse(stdout) as { loggedIn?: unknown }
+        if (typeof json.loggedIn === 'boolean') return json.loggedIn
+      } catch {
+        // not JSON, fall through
+      }
+      return null
+    },
+  }),
+  codex: () => ({
+    args: ['codex', 'login', 'status'],
+    ok: (stdout, exitCode) => {
+      if (!stdout || exitCode !== 0) return null
+      return stdout.includes('Logged in')
+    },
+  }),
+  kiro: (bin = 'kiro-cli') => ({
+    args: [bin, 'whoami'],
+    ok: (stdout, exitCode) => {
+      if (!stdout || exitCode !== 0) return null
+      return stdout.includes('Logged in')
+    },
+  }),
+  opencode: () => ({
+    args: ['opencode', 'auth', 'list'],
+    ok: (stdout, exitCode) => {
+      if (exitCode !== 0) return null
+      return stdout.trim().length > 0
+    },
+  }),
 }
 
 async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly string[] | undefined> {
@@ -51,19 +86,20 @@ async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly 
   }
 }
 
-function parseAuthStatus(agent: AgentId, stdout: string, exitCode: number): boolean | null {
-  if (!stdout) return null
-  try {
-    const json = JSON.parse(stdout) as { loggedIn?: unknown }
-    if (typeof json.loggedIn === 'boolean') return json.loggedIn
-  } catch {
-    if (exitCode === 0) {
-      if (agent === 'kiro' && stdout.includes('Logged in')) return true
-      if (agent === 'codex' && stdout.includes('Logged in')) return true
-      if (agent === 'opencode' && stdout.trim().length > 0) return true
+function authDetail(stdout: string, exitCode: number): string {
+  if (exitCode === 127) return 'not installed'
+  const trimmed = stdout.trim()
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as { loggedIn?: unknown; authMethod?: unknown }
+      const via = typeof parsed.authMethod === 'string' ? ` via ${parsed.authMethod}` : ''
+      if (parsed.loggedIn === true) return `logged in${via}`
+      if (parsed.loggedIn === false) return 'not logged in'
+    } catch {
+      // not the shape we expected; the first line is still better than nothing
     }
   }
-  return null
+  return trimmed.split('\n')[0] ?? ''
 }
 
 export async function detectWith(deps: DetectDeps, agent: AgentId, model?: string): Promise<Detection> {
@@ -80,13 +116,13 @@ export async function detectAuthWith(
   agent: AgentId,
   bin?: string,
 ): Promise<AuthState> {
-  const cmd = AUTH_CHECK[agent](bin)
-  const result = await deps.run(cmd)
+  const check = AUTH_CHECK[agent](bin)
+  const result = await deps.run(check.args)
+  const detail = authDetail(result.stdout, result.exitCode)
   if (result.exitCode === 127) {
-    return { agent, authed: null, detail: 'not installed' }
+    return { agent, authed: null, detail }
   }
-  const authed = parseAuthStatus(agent, result.stdout, result.exitCode)
-  const detail = (result.stdout || '').trim().split('\n')[0] ?? ''
+  const authed = check.ok(result.stdout, result.exitCode)
   return { agent, authed, detail }
 }
 

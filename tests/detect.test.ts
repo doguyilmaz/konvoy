@@ -138,6 +138,30 @@ test('the cli own words are carried through for the user to read', async () => {
   expect(a.detail).toBe('Logged in with IAM Identity Center')
 })
 
+test('a json status becomes a sentence, not a brace', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{\n  "loggedIn": true,\n  "authMethod": "claude.ai"\n}', exitCode: 0 }) }),
+    'claude',
+  )
+  expect(a.detail).toBe('logged in via claude.ai')
+})
+
+test('a json status without a method still reads as a sentence', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{"loggedIn":false}', exitCode: 0 }) }),
+    'claude',
+  )
+  expect(a.detail).toBe('not logged in')
+})
+
+test('json we cannot parse falls back to the first line', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{ this is not json\nsecond line', exitCode: 0 }) }),
+    'claude',
+  )
+  expect(a.detail).toBe('{ this is not json')
+})
+
 test('a memoized detect rejection does not stick', async () => {
   clearDetectCache()
   let calls = 0
