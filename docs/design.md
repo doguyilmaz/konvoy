@@ -724,7 +724,54 @@ combines three sources of knowledge instead, with zero negotiation rounds:
 
 One planning turn, no bargaining, and the lead's guesses corrected by the user's own data.
 
-## 25. Roadmap
+## 25. Formations
+
+`parley` (section 23) is a tool an agent calls mid-turn: reactive, triggered by a conflict.
+That is the right shape for "the reviewer disputes my finding". It is the wrong shape for
+"design this refactor together", where deliberation is the point of the whole session rather
+than an interruption to it — expressing that with repeated tool calls would be chatty and
+expensive.
+
+The missing layer is the **formation**: the shape a session travels in. A convoy has one.
+
+| formation | behaviour |
+|---|---|
+| `solo` | one lead agent, the others reachable by delegation — today's behaviour, and the default |
+| `parley` | every significant decision goes to several agents before it is acted on |
+| `relay` | a pipeline: plan, implement, review, fix — a fixed chain with no negotiation |
+| `race` | parallel attempts, with the objective gate picking the winner |
+
+**`loop` is not a fifth formation; it is a combinator over them.** `loop(relay)` means "plan,
+implement, review, fix, repeat until the gate is green or the budget is spent" — which is
+exactly the process this project itself was built with.
+
+A formation is a small state machine over primitives that already exist: the turn runner, the
+delegation tools, the objective gate. It introduces no new transport and requires no adapter
+changes. It sits above the session layer and consumes the same turns.
+
+### The constraint this places on Plan B
+
+Formations are deliberately **not** built in Plan A or Plan B — they rest on the gate and on
+delegation, and building them before those exist would be building on air. But they impose one
+requirement on Plan B, which is the reason this section is written now rather than later:
+
+> The decision of *what happens next* must be a function on konvoy's side, not an instruction
+> baked into the lead agent's prompt.
+
+Telling the lead to "plan, then implement, then ask the reviewer" is the shortest path to
+working software and it forecloses formations entirely: the flow then lives inside a model's
+context, where konvoy cannot inspect it, vary it, or swap it. Keeping the next-step decision
+in konvoy costs little now and is expensive to retrofit.
+
+### Where skills fit
+
+A skill like brainstorming shapes the work *inside* one agent's harness. A formation shapes
+the work *between* agents. They are different axes and do not compete: an agent in a konvoy
+session runs its own skills exactly as it would alone, and konvoy governs only the traffic
+between agents. konvoy does not reimplement, override, or interfere with what a CLI's own
+skills do.
+
+## 26. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
