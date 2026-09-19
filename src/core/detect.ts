@@ -126,24 +126,20 @@ export async function detectAuthWith(
   return { agent, authed, detail }
 }
 
-function memo<K, V>(cacheMap: Map<K, Promise<V>>) {
-  return (f: (k: K) => Promise<V>): ((k: K) => Promise<V>) => {
-    return (k: K) => {
-      const hit = cacheMap.get(k)
-      if (hit) return hit
-      const pending = f(k)
-        .then((v) => {
-          cacheMap.set(k, Promise.resolve(v))
-          return v
-        })
-        .catch((e) => {
-          cacheMap.delete(k)
-          throw e
-        })
-      cacheMap.set(k, pending)
-      return pending
-    }
-  }
+function memo<K, V>(cacheMap: Map<K, Promise<V>>, key: K, f: () => Promise<V>): Promise<V> {
+  const hit = cacheMap.get(key)
+  if (hit) return hit
+  const pending = f()
+    .then((v) => {
+      cacheMap.set(key, Promise.resolve(v))
+      return v
+    })
+    .catch((e) => {
+      cacheMap.delete(key)
+      throw e
+    })
+  cacheMap.set(key, pending)
+  return pending
 }
 
 function realDeps(): DetectDeps {
@@ -173,35 +169,19 @@ function realDeps(): DetectDeps {
 const detectCacheMap = new Map<string, Promise<Detection>>()
 const detectAuthCacheMap = new Map<string, Promise<AuthState>>()
 
-const memoDetect = memo(detectCacheMap)(async (key: string) => {
-  const [agent, model] = key.split('\u0000') as [AgentId, string | undefined]
-  return detectUncached(agent, model || undefined)
-})
-
-const memoDetectAuth = memo(detectAuthCacheMap)(async (key: string) => {
-  const [agent, bin] = key.split('\u0000') as [AgentId, string | undefined]
-  return detectAuthUncached(agent, bin || undefined)
-})
-
 export function clearDetectCache(): void {
   detectCacheMap.clear()
   detectAuthCacheMap.clear()
 }
 
 export async function detect(agent: AgentId, model?: string, deps?: DetectDeps): Promise<Detection> {
-  if (deps) {
-    return detectWith(deps, agent, model)
-  }
   const key = `${agent}\u0000${model ?? ''}`
-  return memoDetect(key)
+  return memo(detectCacheMap, key, () => detectWith(deps ?? realDeps(), agent, model))
 }
 
 export async function detectAuth(agent: AgentId, bin?: string, deps?: DetectDeps): Promise<AuthState> {
-  if (deps) {
-    return detectAuthWith(deps, agent, bin)
-  }
   const key = `${agent}\u0000${bin ?? ''}`
-  return memoDetectAuth(key)
+  return memo(detectAuthCacheMap, key, () => detectAuthWith(deps ?? realDeps(), agent, bin))
 }
 
 async function detectUncached(agent: AgentId, model?: string): Promise<Detection> {

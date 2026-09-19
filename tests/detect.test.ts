@@ -162,6 +162,15 @@ test('json we cannot parse falls back to the first line', async () => {
   expect(a.detail).toBe('{ this is not json')
 })
 
+test('a missing binary is unknown even if it somehow printed a verdict', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{"loggedIn":true}', exitCode: 127 }) }),
+    'claude',
+  )
+  expect(a.authed).toBe(null)
+  expect(a.detail).toBe('not installed')
+})
+
 test('a memoized detect rejection does not stick', async () => {
   clearDetectCache()
   let calls = 0
