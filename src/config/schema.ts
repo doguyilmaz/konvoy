@@ -27,29 +27,29 @@ const defaultsObjectSchema = z
   })
   .strict()
 
+const rolesObjectSchema = z
+  .object({
+    lead: agentIdSchema.optional(),
+    implementer: agentIdSchema.optional(),
+    reviewer: agentIdSchema.optional(),
+    researcher: agentIdSchema.optional(),
+  })
+  .strict()
+
+const policyObjectSchema = z
+  .object({
+    maxDelegationDepth: z.number().int().positive().default(3),
+    turnTimeoutSec: z.number().int().positive().default(900),
+    isolation: z.enum(['serial', 'parallel']).default('serial'),
+  })
+  .strict()
+
 export const configSchema = z
   .object({
-    defaults: defaultsObjectSchema
-      .catch({ effort: 'high', permission: 'edit', harness: 'minimal' })
-      .pipe(defaultsObjectSchema),
+    defaults: defaultsObjectSchema.prefault({}),
     agents: z.partialRecord(agentIdSchema, agentConfigSchema).default({}),
-    roles: z
-      .object({
-        lead: agentIdSchema.optional(),
-        implementer: agentIdSchema.optional(),
-        reviewer: agentIdSchema.optional(),
-        researcher: agentIdSchema.optional(),
-      })
-      .strict()
-      .default({}),
-    policy: z
-      .object({
-        maxDelegationDepth: z.number().int().positive().default(3),
-        turnTimeoutSec: z.number().int().positive().default(900),
-        isolation: z.enum(['serial', 'parallel']).default('serial'),
-      })
-      .strict()
-      .default({}),
+    roles: rolesObjectSchema.prefault({}),
+    policy: policyObjectSchema.prefault({}),
   })
   .strict()
 

@@ -54,3 +54,38 @@ test('comments and trailing commas are tolerated', async () => {
   const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
   expect(cfg.roles.lead).toBe('claude')
 })
+
+test('an invalid enum value in defaults is rejected', async () => {
+  const dir = tmp('badenum')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, JSON.stringify({ defaults: { effort: 'turbo' } }))
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/defaults\.effort/)
+})
+
+test('an invalid key inside defaults is rejected with its path', async () => {
+  const dir = tmp('baddefault')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, JSON.stringify({ defaults: { efrot: 'high' } }))
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/defaults\.efrot/)
+})
+
+test('JSONC with double-slash inside a string is preserved', async () => {
+  const dir = tmp('urlstring')
+  await Bun.write(
+    `${dir}/.konvoy/config.jsonc`,
+    JSON.stringify({ agents: { codex: { bin: '/usr/local/bin//codex' } } }),
+  )
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  expect(cfg.agents.codex?.bin).toBe('/usr/local/bin//codex')
+})
+
+test('JSONC with trailing comma inside a string is preserved', async () => {
+  const dir = tmp('commastring')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"agents":{"codex":{"model":"value,}"}}}')
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  expect(cfg.agents.codex?.model).toBe('value,}')
+})
+
+test('__proto__ key is rejected as an unknown key', async () => {
+  const dir = tmp('proto')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"__proto__": {"polluted": true}}')
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/__proto__/)
+})

@@ -12,8 +12,73 @@ export interface AgentSettings {
 }
 
 function stripJsonc(text: string): string {
-  const out = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
-  return out.replace(/,(\s*[}\]])/g, '$1')
+  let result = ''
+  let inString = false
+  let i = 0
+
+  while (i < text.length) {
+    const char = text[i]
+    const next = text[i + 1]
+
+    if (inString) {
+      result += char
+      if (char === '\\' && next) {
+        result += next
+        i += 2
+        continue
+      }
+      if (char === '"') {
+        inString = false
+      }
+      i++
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      result += char
+      i++
+      continue
+    }
+
+    if (char === '/' && next === '/') {
+      let j = i
+      while (j < text.length && text[j] !== '\n') j++
+      if (j < text.length) result += '\n'
+      i = j + 1
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      let j = i + 2
+      while (j < text.length - 1) {
+        if (text[j] === '*' && text[j + 1] === '/') {
+          j += 2
+          break
+        }
+        j++
+      }
+      i = j
+      continue
+    }
+
+    if (char === ',' && !inString) {
+      let j = i + 1
+      while (j < text.length && /\s/.test(text[j]!)) j++
+      if (j < text.length && (text[j] === '}' || text[j] === ']')) {
+        i = j
+        continue
+      }
+      result += char
+      i++
+      continue
+    }
+
+    result += char
+    i++
+  }
+
+  return result
 }
 
 async function readLayer(path: string): Promise<unknown> {
@@ -26,11 +91,11 @@ function merge(base: Record<string, unknown>, top: Record<string, unknown>): Rec
   const out: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(top)) {
     const existing = out[key]
-    if (value && typeof value === 'object' && !Array.isArray(value) && existing && typeof existing === 'object') {
-      out[key] = merge(existing as Record<string, unknown>, value as Record<string, unknown>)
-    } else {
-      out[key] = value
-    }
+    const mergedValue =
+      value && typeof value === 'object' && !Array.isArray(value) && existing && typeof existing === 'object'
+        ? merge(existing as Record<string, unknown>, value as Record<string, unknown>)
+        : value
+    Object.defineProperty(out, key, { value: mergedValue, enumerable: true, configurable: true, writable: true })
   }
   return out
 }
@@ -58,13 +123,13 @@ export async function loadConfig(opts: { cwd: string; globalPath?: string }): Pr
 export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
   const a = cfg.agents[agent] ?? {}
   return {
-    enabled: a.enabled ?? true,
-    model: a.model,
-    effort: a.effort ?? cfg.defaults.effort,
-    permission: a.permission ?? cfg.defaults.permission,
-    harness: a.harness ?? cfg.defaults.harness,
-    bin: a.bin,
-    subagentEffort: a.subagentEffort,
+    enabled: a?.enabled ?? true,
+    model: a?.model,
+    effort: a?.effort ?? cfg.defaults.effort,
+    permission: a?.permission ?? cfg.defaults.permission,
+    harness: a?.harness ?? cfg.defaults.harness,
+    bin: a?.bin,
+    subagentEffort: a?.subagentEffort,
   }
 }
 
