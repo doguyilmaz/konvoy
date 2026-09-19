@@ -598,7 +598,99 @@ a roster whose agents share one base model, a single agent is cheaper and no wor
 should say so — `doctor` warns about the model overlap, and `stats` will show a kind where no
 agent beats the lead — rather than pretending that more agents is always better.
 
-## 23. Roadmap
+## 23. Agent discussions and work allocation
+
+The four existing tools — `delegate`, `handoff`, `ask`, `broadcast` — are all single
+exchanges. A discussion is multi-round, and multi-round is expensive: one round costs two
+turn startups, so a three-round discussion costs six. That is more than letting the strongest
+agent decide alone. Discussions therefore have to be rare, bounded, and terminating.
+
+### When a discussion is warranted
+
+Only for a **conflict**: a reviewer's finding that the producer disputes, or two viable
+proposals for one decision. An information gap is not a conflict — that is `ask`, one
+read-only round. The fat-handoff discipline of section 21 already removes most information
+gaps before they become exchanges.
+
+The failure mode worth naming is not argument, it is **agreement**: two agents that already
+concur taking turns to confirm each other. It feels productive, costs a full turn each way,
+and adds nothing.
+
+### Opening a discussion
+
+`konvoy_debate(question, with, rule?, rounds?)` fixes three things at open time:
+
+- **one question**, which cannot change;
+- **a decision rule**, declared before anyone speaks;
+- **a round cap**, default 2, maximum 3.
+
+Declaring the tiebreak up front is what makes discussions short: participants who know how it
+ends stop performing. A debate without a pre-declared rule is an infinite-loop generator.
+
+| rule | resolution |
+|---|---|
+| `gate` | run the objective gate on both proposals; the one that passes wins — preferred wherever a gate exists, because it is cheap and not a matter of opinion |
+| `lead` | the session lead decides (default) |
+| `cost` | the cheaper proposal wins |
+| `human` | parked for the user |
+
+### The governors
+
+konvoy has no model, so every control below is computable without one.
+
+1. **Structural slot.** Every round must declare `agree | disagree | need-info` about the
+   fixed question. A round that does not address it **does not count as a round**, and the
+   agent is told so. Drift becomes structurally visible rather than a matter of judgement.
+2. **New-pointer rule.** A productive round cites something — a file, a line, a test result,
+   a command output. Zero new pointers and no new claim is noise, and the `pointers[]` field
+   from section 21 already carries the evidence.
+3. **Novelty check.** High lexical overlap with the previous round ("agreed, that makes
+   sense") raises a warning and lowers the cap by one. It is deliberately **not** a hard stop:
+   the heuristic is crude, and a genuine objection phrased in similar words must not be
+   silently killed.
+4. **Budget share.** A discussion consuming more than 15% of the session's remaining budget
+   closes on its decision rule. This is the absolute backstop.
+
+Depth is one: a discussion cannot open inside a discussion. One discussion per session at a
+time, which the session lock enforces anyway.
+
+### The output is a record, not a transcript
+
+A discussion produces a single ledger entry:
+
+```ts
+interface Resolution {
+  question: string
+  positions: { agent: AgentId; stance: string }[]
+  verdict: string
+  rationale: string
+  decidedBy: 'agreement' | 'gate' | 'lead' | 'cost' | 'human'
+  rounds: number
+  costUsd: number
+}
+```
+
+The exchange itself stays in the database and never re-enters any agent's context. A
+transcript that leaks into later turns would make every subsequent turn pay for the argument.
+
+A discussion round is an ordinary turn with one extra structural slot — no new transport, no
+per-CLI work, nothing that can behave differently across the four harnesses.
+
+### Allocation without negotiation
+
+Letting agents negotiate who does what costs turns and risks both duplication and gaps. konvoy
+combines three sources of knowledge instead, with zero negotiation rounds:
+
+1. **The lead decomposes once.** It already holds the context, so one turn produces the
+   subtask list with a suggested owner for each.
+2. **The routing table corrects the owners.** The lead is guessing; `konvoy stats` is
+   measuring. Where the two disagree, measured history wins, with the override recorded.
+3. **A claim table gives each subtask exactly one owner**, and overlapping edits are
+   prevented by the session lock — or, under `--parallel`, by per-agent worktrees.
+
+One planning turn, no bargaining, and the lead's guesses corrected by the user's own data.
+
+## 24. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
