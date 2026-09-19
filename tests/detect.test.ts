@@ -1,9 +1,8 @@
 import { expect, test } from 'bun:test'
-import { detectWith, parseVersion } from '../src/core/detect'
+import { detectWith, parseVersion, detectAuthWith, clearDetectCache, detect, detectAuth, createDetectWithMemo, createDetectAuthWithMemo } from '../src/core/detect'
 
 const deps = (over: Partial<Parameters<typeof detectWith>[0]> = {}) => ({
   run: async () => ({ stdout: '', exitCode: 127 }),
-  exists: async () => false,
   readText: async () => null,
   ...over,
 })
@@ -26,16 +25,6 @@ test('an installed binary reports its version', async () => {
   expect(d.version).toBe('2.22.1')
 })
 
-test('codex auth is inferred from its credentials file', async () => {
-  const d = await detectWith(
-    deps({
-      run: async () => ({ stdout: 'codex-cli 0.155.1', exitCode: 0 }),
-      exists: async (p: string) => p.endsWith('.codex/auth.json'),
-    }),
-    'codex',
-  )
-  expect(d.authed).toBe(true)
-})
 
 test('codex effort capabilities come from the model cache', async () => {
   const cache = JSON.stringify({
@@ -86,4 +75,79 @@ test('an unknown model leaves capabilities undefined', async () => {
     'nope',
   )
   expect(d.efforts).toBeUndefined()
+})
+
+test('the right model is found among several in the cache', async () => {
+  const cache = JSON.stringify({
+    models: [
+      { id: 'other', supported_reasoning_levels: ['low'] },
+      { id: 'gpt-6-astra', supported_reasoning_levels: ['low', 'medium', 'high', 'max'] },
+    ],
+  })
+  const d = await detectWith(
+    deps({ run: async () => ({ stdout: 'codex-cli 0.155.1', exitCode: 0 }), readText: async () => cache }),
+    'codex',
+    'gpt-6-astra',
+  )
+  expect(d.efforts).toEqual(['low', 'medium', 'high', 'max'])
+})
+
+test('a logged-in status is read from json when the cli emits it', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{"loggedIn":true,"authMethod":"claude.ai"}', exitCode: 0 }) }),
+    'claude',
+  )
+  expect(a.authed).toBe(true)
+})
+
+test('a logged-out status is believed even at exit zero', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{"loggedIn":false}', exitCode: 0 }) }),
+    'claude',
+  )
+  expect(a.authed).toBe(false)
+})
+
+test('a missing binary makes auth unknown rather than false', async () => {
+  const a = await detectAuthWith(deps({ run: async () => ({ stdout: '', exitCode: 127 }) }), 'kiro')
+  expect(a.authed).toBe(null)
+})
+
+test('a rejected detection is not cached', async () => {
+  clearDetectCache()
+  let calls = 0
+  const flaky = async () => {
+    calls++
+    if (calls === 1) throw new Error('transient')
+    return { stdout: 'codex-cli 0.155.1', exitCode: 0 }
+  }
+  await expect(detectWith(deps({ run: flaky }), 'codex')).rejects.toThrow()
+  const second = await detectWith(deps({ run: flaky }), 'codex')
+  expect(second.installed).toBe(true)
+})
+
+test('a memoized detect rejection does not stick', async () => {
+  let calls = 0
+  const flaky = async () => {
+    calls++
+    if (calls === 1) throw new Error('transient')
+    return { stdout: 'codex-cli 0.155.1', exitCode: 0 }
+  }
+  const detectMemo = createDetectWithMemo(deps({ run: flaky }))
+  await expect(detectMemo('codex')).rejects.toThrow()
+  const second = await detectMemo('codex')
+  expect(second.installed).toBe(true)
+})
+
+test('a memoized detectAuth rejection does not stick', async () => {
+  let calls = 0
+  const flaky = async () => {
+    calls++
+    if (calls === 1) throw new Error('transient')
+    return { stdout: '{"loggedIn":true}', exitCode: 0 }
+  }
+  const detectAuthMemo = createDetectAuthWithMemo(deps({ run: flaky }))
+  await expect(detectAuthMemo('claude')).rejects.toThrow()
+  const second = await detectAuthMemo('claude')
+  expect(second.authed).toBe(true)
 })
