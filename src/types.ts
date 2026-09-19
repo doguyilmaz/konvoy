@@ -66,7 +66,7 @@ export interface TurnContext {
   prompt: string
   binding: Binding | null
   model?: string
-  effort: Effort
+  effort: string
   permission: Permission
   harness?: 'minimal' | 'inherit'
   bin?: string
