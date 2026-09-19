@@ -323,6 +323,7 @@ The ledger stays a Markdown file, not a table: agents read it directly, and a hu
 | unsupported effort on a model | clamp down, report in status |
 | MCP server fails to start | that agent runs without konvoy tools; delegation from it is disabled and the degradation is stated |
 | agent hangs | per-turn timeout, kill, persist the partial transcript |
+| a child floods stderr | stderr is drained concurrently with stdout; not reproducible on Bun 1.4.2, which buffers subprocess pipes generously, but the drain costs one line and the guarantee should not rest on that |
 | informational error on a successful run | codex emits `item.completed` errors (e.g. a skills-budget notice) on turns that exit 0, so the exit code decides failure, not the presence of an error event |
 | delegation loop | depth and cycle guards stop it and record why |
 | concurrent writes | serialized by default; `--parallel` isolates via worktrees |
