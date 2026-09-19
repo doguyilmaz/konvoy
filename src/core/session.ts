@@ -18,7 +18,15 @@ import {
 import { runTurn, type TurnOptions, type TurnResult } from './turn'
 import { sessionDir } from '../paths'
 
-const STALE = /no conversation found|session not found|no such session|unknown session|not found with session/i
+// Captured from the real CLIs on 2026-09-19 by resuming an id that does not exist:
+//   claude   "No conversation found with session ID <uuid>"
+//   codex    "no rollout found for thread id <uuid>"
+//   opencode {"type":"error","error":{"message":"Session not found"}}
+//   kiro     no error at all — it starts a session under the id it was given, so a konvoy
+//            binding pointing at a deleted kiro session silently continues with an empty
+//            context. Nothing konvoy can detect; recorded as a limit rather than handled.
+const STALE =
+  /no conversation found|no rollout found|session not found|no such session|unknown session|not found with session/i
 
 export function slugify(goal: string): string {
   const base = goal
@@ -98,8 +106,10 @@ export async function send(
     const wasResuming = getBinding(deps.db, session.id, agent)?.foreignId != null
     const first = await runTurn({ db: deps.db, adapter }, { ...build(), lease }, { ...opts, timeoutSec })
 
-    const stale =
-      first.error != null && STALE.test(first.error.message) && first.final.trim() === ''
+    // "produced nothing" has to mean nothing at all, not merely no text: a turn that ran tool
+    // calls edited files and plainly reached a live session, even if it never spoke.
+    const producedNothing = first.final.trim() === '' && !first.events.some((e) => e.t === 'tool')
+    const stale = first.error != null && STALE.test(first.error.message) && producedNothing
     if (!stale || !wasResuming) return first
 
     clearForeignId(deps.db, session.id, agent)
