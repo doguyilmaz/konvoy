@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { detectWith, parseVersion, detectAuthWith, clearDetectCache, detect, detectAuth, createDetectWithMemo, createDetectAuthWithMemo } from '../src/core/detect'
+import { detectWith, parseVersion, detectAuthWith, clearDetectCache, detect, detectAuth } from '../src/core/detect'
 
 const deps = (over: Partial<Parameters<typeof detectWith>[0]> = {}) => ({
   run: async () => ({ stdout: '', exitCode: 127 }),
@@ -113,7 +113,32 @@ test('a missing binary makes auth unknown rather than false', async () => {
   expect(a.authed).toBe(null)
 })
 
-test('a rejected detection is not cached', async () => {
+test('a failing status command is not believed, whatever it printed', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: 'stale: Logged in using ChatGPT, but refresh failed', exitCode: 1 }) }),
+    'codex',
+  )
+  expect(a.authed).toBe(null)
+})
+
+test('an explicit json verdict is trusted even when the exit code is not zero', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '{"loggedIn":false}', exitCode: 1 }) }),
+    'claude',
+  )
+  expect(a.authed).toBe(false)
+})
+
+test('the cli own words are carried through for the user to read', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: 'Logged in with IAM Identity Center\nEmail: x@y.z', exitCode: 0 }) }),
+    'kiro',
+  )
+  expect(a.authed).toBe(true)
+  expect(a.detail).toBe('Logged in with IAM Identity Center')
+})
+
+test('a memoized detect rejection does not stick', async () => {
   clearDetectCache()
   let calls = 0
   const flaky = async () => {
@@ -121,33 +146,22 @@ test('a rejected detection is not cached', async () => {
     if (calls === 1) throw new Error('transient')
     return { stdout: 'codex-cli 0.155.1', exitCode: 0 }
   }
-  await expect(detectWith(deps({ run: flaky }), 'codex')).rejects.toThrow()
-  const second = await detectWith(deps({ run: flaky }), 'codex')
-  expect(second.installed).toBe(true)
-})
-
-test('a memoized detect rejection does not stick', async () => {
-  let calls = 0
-  const flaky = async () => {
-    calls++
-    if (calls === 1) throw new Error('transient')
-    return { stdout: 'codex-cli 0.155.1', exitCode: 0 }
-  }
-  const detectMemo = createDetectWithMemo(deps({ run: flaky }))
-  await expect(detectMemo('codex')).rejects.toThrow()
-  const second = await detectMemo('codex')
+  const testDeps = deps({ run: flaky })
+  await expect(detect('codex', undefined, testDeps)).rejects.toThrow()
+  const second = await detect('codex', undefined, testDeps)
   expect(second.installed).toBe(true)
 })
 
 test('a memoized detectAuth rejection does not stick', async () => {
+  clearDetectCache()
   let calls = 0
   const flaky = async () => {
     calls++
     if (calls === 1) throw new Error('transient')
     return { stdout: '{"loggedIn":true}', exitCode: 0 }
   }
-  const detectAuthMemo = createDetectAuthWithMemo(deps({ run: flaky }))
-  await expect(detectAuthMemo('claude')).rejects.toThrow()
-  const second = await detectAuthMemo('claude')
+  const testDeps = deps({ run: flaky })
+  await expect(detectAuth('claude', undefined, testDeps)).rejects.toThrow()
+  const second = await detectAuth('claude', undefined, testDeps)
   expect(second.authed).toBe(true)
 })

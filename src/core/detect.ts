@@ -12,7 +12,7 @@ export interface Detection {
 export interface AuthState {
   agent: AgentId
   authed: boolean | null
-  detail?: string
+  detail: string
 }
 
 export type Runner = (cmd: string[]) => Promise<{ stdout: string; exitCode: number }>
@@ -51,15 +51,17 @@ async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly 
   }
 }
 
-function parseAuthStatus(agent: AgentId, stdout: string): boolean | null {
+function parseAuthStatus(agent: AgentId, stdout: string, exitCode: number): boolean | null {
   if (!stdout) return null
   try {
     const json = JSON.parse(stdout) as { loggedIn?: unknown }
     if (typeof json.loggedIn === 'boolean') return json.loggedIn
   } catch {
-    if (agent === 'kiro' && stdout.includes('Logged in')) return true
-    if (agent === 'codex' && stdout.includes('Logged in')) return true
-    if (agent === 'opencode' && stdout.trim().length > 0) return true
+    if (exitCode === 0) {
+      if (agent === 'kiro' && stdout.includes('Logged in')) return true
+      if (agent === 'codex' && stdout.includes('Logged in')) return true
+      if (agent === 'opencode' && stdout.trim().length > 0) return true
+    }
   }
   return null
 }
@@ -80,8 +82,12 @@ export async function detectAuthWith(
 ): Promise<AuthState> {
   const cmd = AUTH_CHECK[agent](bin)
   const result = await deps.run(cmd)
-  const authed = result.exitCode === 127 ? null : parseAuthStatus(agent, result.stdout)
-  return { agent, authed }
+  if (result.exitCode === 127) {
+    return { agent, authed: null, detail: 'not installed' }
+  }
+  const authed = parseAuthStatus(agent, result.stdout, result.exitCode)
+  const detail = (result.stdout || '').trim().split('\n')[0] ?? ''
+  return { agent, authed, detail }
 }
 
 function memo<K, V>(cacheMap: Map<K, Promise<V>>) {
@@ -146,38 +152,20 @@ export function clearDetectCache(): void {
   detectAuthCacheMap.clear()
 }
 
-export async function detect(agent: AgentId, model?: string): Promise<Detection> {
+export async function detect(agent: AgentId, model?: string, deps?: DetectDeps): Promise<Detection> {
+  if (deps) {
+    return detectWith(deps, agent, model)
+  }
   const key = `${agent}\u0000${model ?? ''}`
   return memoDetect(key)
 }
 
-export async function detectAuth(agent: AgentId, bin?: string): Promise<AuthState> {
+export async function detectAuth(agent: AgentId, bin?: string, deps?: DetectDeps): Promise<AuthState> {
+  if (deps) {
+    return detectAuthWith(deps, agent, bin)
+  }
   const key = `${agent}\u0000${bin ?? ''}`
   return memoDetectAuth(key)
-}
-
-export function createDetectWithMemo(deps: DetectDeps) {
-  const cacheMap = new Map<string, Promise<Detection>>()
-  const memoized = memo(cacheMap)(async (key: string) => {
-    const [agent, model] = key.split('\u0000') as [AgentId, string | undefined]
-    return detectWith(deps, agent, model || undefined)
-  })
-  return async (agent: AgentId, model?: string): Promise<Detection> => {
-    const key = `${agent}\u0000${model ?? ''}`
-    return memoized(key)
-  }
-}
-
-export function createDetectAuthWithMemo(deps: DetectDeps) {
-  const cacheMap = new Map<string, Promise<AuthState>>()
-  const memoized = memo(cacheMap)(async (key: string) => {
-    const [agent, bin] = key.split('\u0000') as [AgentId, string | undefined]
-    return detectAuthWith(deps, agent, bin)
-  })
-  return async (agent: AgentId, bin?: string): Promise<AuthState> => {
-    const key = `${agent}\u0000${bin ?? ''}`
-    return memoized(key)
-  }
 }
 
 async function detectUncached(agent: AgentId, model?: string): Promise<Detection> {
