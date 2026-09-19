@@ -25,7 +25,8 @@ konvoy doctor
 ## Configure
 
 Global `~/.config/konvoy/config.jsonc`, per project `.konvoy/config.jsonc`. The project
-file wins. `konvoy doctor` reports which layer a value came from.
+file wins. `konvoy config get` shows each agent's resolved settings and whether a value came
+from that agent, from `defaults`, or from konvoy's own built-in.
 
 ```jsonc
 {
