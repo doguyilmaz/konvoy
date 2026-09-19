@@ -1,7 +1,16 @@
 import type { Database } from 'bun:sqlite'
 import type { AgentId, Binding, Effort, Permission, Session } from '../types'
 
-const now = () => Number(process.hrtime.bigint() / 1000n)
+let lastTimestamp = 0
+const now = () => {
+  const t = Date.now()
+  if (t <= lastTimestamp) {
+    lastTimestamp++
+  } else {
+    lastTimestamp = t
+  }
+  return lastTimestamp
+}
 const id = () => crypto.randomUUID()
 
 export function createSession(
@@ -59,7 +68,7 @@ export function listSessions(db: Database): Session[] {
 
 export function currentSession(db: Database, cwd: string): Session | null {
   return toSession(
-    db.query('SELECT * FROM session WHERE cwd = $cwd AND status = $status ORDER BY updated_at DESC LIMIT 1').get({
+    db.query('SELECT * FROM session WHERE cwd = $cwd AND status = $status ORDER BY updated_at DESC, rowid DESC LIMIT 1').get({
       cwd,
       status: 'active',
     }) as never,
@@ -96,7 +105,8 @@ export function upsertBinding(
        model = COALESCE(excluded.model, binding.model),
        effort = excluded.effort,
        permission = excluded.permission,
-       status = excluded.status,
+       status = CASE WHEN COALESCE(excluded.foreign_id, binding.foreign_id) IS NOT NULL
+                     THEN 'bound' ELSE 'unbound' END,
        last_seen = excluded.last_seen`,
   ).run({
     sessionId: input.sessionId,
@@ -222,16 +232,22 @@ export function lockOwner(db: Database, sessionId: string): string | null {
     | { owner: string; pid: number }
     | null
   if (!row) return null
-  if (!isAlive(row.pid)) {
-    db.query('DELETE FROM lock WHERE session_id = $sessionId').run({ sessionId })
-    return null
-  }
-  return row.owner
+  return isAlive(row.pid) ? row.owner : null
 }
 
 export function acquireLock(db: Database, sessionId: string, owner: string): boolean {
-  const held = lockOwner(db, sessionId)
-  if (held === owner) return true
+  const row = db.query('SELECT owner, pid FROM lock WHERE session_id = $sessionId').get({ sessionId }) as
+    | { owner: string; pid: number }
+    | null
+  if (row) {
+    if (row.owner === owner) return true
+    if (isAlive(row.pid)) return false
+    db.query('DELETE FROM lock WHERE session_id = $sessionId AND owner = $owner AND pid = $pid').run({
+      sessionId,
+      owner: row.owner,
+      pid: row.pid,
+    })
+  }
   const res = db
     .query(
       `INSERT INTO lock (session_id, owner, pid, acquired_at) VALUES ($sessionId, $owner, $pid, $at)

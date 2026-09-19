@@ -135,3 +135,23 @@ test('turns accumulate onto the binding', () => {
   expect(b?.turns).toBe(1)
   expect(b?.costUsd).toBeCloseTo(0.25)
 })
+
+test('reclaiming a stale lock cannot delete a lock another process already took', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  d.query('INSERT INTO lock (session_id, owner, pid, acquired_at) VALUES ($s, $o, $p, $a)').run({
+    s: s.id, o: 'live-holder', p: process.pid, a: Date.now(),
+  })
+  expect(acquireLock(d, s.id, 'latecomer')).toBe(false)
+  expect(lockOwner(d, s.id)).toBe('live-holder')
+})
+
+test('a binding keeps its bound status when a later turn fails to report an id', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  upsertBinding(d, { sessionId: s.id, agent: 'codex', foreignId: 'thread-1', effort: 'high', permission: 'edit' })
+  upsertBinding(d, { sessionId: s.id, agent: 'codex', foreignId: null, effort: 'high', permission: 'edit' })
+  const b = getBinding(d, s.id, 'codex')
+  expect(b?.foreignId).toBe('thread-1')
+  expect(b?.status).toBe('bound')
+})

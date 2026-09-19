@@ -35,7 +35,6 @@ export function openDb(path: string): Database {
   }
   const db = new Database(path, { create: true, strict: true })
   if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA foreign_keys = ON')
   const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
   for (let v = current; v < MIGRATIONS.length; v++) {
     db.exec(MIGRATIONS[v]!)
