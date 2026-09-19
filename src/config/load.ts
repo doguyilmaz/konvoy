@@ -1,6 +1,9 @@
 import { configSchema, type AgentId, type Config, type Effort, type Harness, type Permission } from './schema'
 import { configDir, join } from '../paths'
 
+export const globalConfigPath = (): string => join(configDir(), 'config.jsonc')
+export const projectConfigPath = (cwd: string): string => join(cwd, '.konvoy', 'config.jsonc')
+
 export interface AgentSettings {
   enabled: boolean
   model?: string
@@ -108,7 +111,7 @@ function stripJsonc(text: string): string {
   return result
 }
 
-async function readLayer(path: string): Promise<unknown> {
+export async function readLayer(path: string): Promise<unknown> {
   const file = Bun.file(path)
   if (!(await file.exists())) return {}
   return JSON.parse(stripJsonc(await file.text()))
@@ -128,8 +131,8 @@ function merge(base: Record<string, unknown>, top: Record<string, unknown>): Rec
 }
 
 export async function loadConfig(opts: { cwd: string; globalPath?: string }): Promise<Config> {
-  const globalPath = opts.globalPath ?? join(configDir(), 'config.jsonc')
-  const layers = [await readLayer(globalPath), await readLayer(join(opts.cwd, '.konvoy', 'config.jsonc'))]
+  const globalPath = opts.globalPath ?? globalConfigPath()
+  const layers = [await readLayer(globalPath), await readLayer(projectConfigPath(opts.cwd))]
   const merged = layers.reduce<Record<string, unknown>>(
     (acc, layer) => merge(acc, layer as Record<string, unknown>),
     {},

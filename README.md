@@ -48,6 +48,9 @@ If a CLI is not on your `PATH`, point konvoy at it directly and every command â€
 { "agents": { "opencode": { "bin": "~/.opencode/bin/opencode" } } }
 ```
 
+`konvoy config set` rewrites the layer it touches as plain JSON, so any comments in that file
+are lost. Hand-edit the file instead when you want to keep them.
+
 ## Requirements
 
 Bun 1.4+, and whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy.

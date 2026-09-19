@@ -11,6 +11,7 @@ import {
   getBinding,
   listBindings,
   recordTurn,
+  recordEvent,
   setGateResult,
   bumpBinding,
   acquireLock,
@@ -56,6 +57,35 @@ test('deleting a session removes its bindings and turns', () => {
   deleteSession(d, s.id)
   expect(getSessionBySlug(d, 's')).toBe(null)
   expect(listBindings(d, s.id)).toHaveLength(0)
+})
+
+test('deleting a session cascades through every table that references it, including its lock', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  upsertBinding(d, { sessionId: s.id, agent: 'claude', foreignId: 'x', effort: 'high', permission: 'edit' })
+  const turnId = recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
+  recordEvent(d, turnId, 0, 'text', { hello: 'world' })
+  acquireLock(d, s.id, 'owner-a')
+
+  deleteSession(d, s.id)
+
+  expect(d.query('SELECT * FROM session WHERE id = $id').get({ id: s.id })).toBe(null)
+  expect(d.query('SELECT * FROM turn WHERE session_id = $id').get({ id: s.id })).toBe(null)
+  expect(d.query('SELECT * FROM binding WHERE session_id = $id').get({ id: s.id })).toBe(null)
+  expect(d.query('SELECT * FROM lock WHERE session_id = $id').get({ id: s.id })).toBe(null)
+  expect(d.query('SELECT * FROM event WHERE turn_id = $id').get({ id: turnId })).toBe(null)
+})
+
+test('deleting a session rolls back the whole cascade if one of its statements fails', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  upsertBinding(d, { sessionId: s.id, agent: 'claude', foreignId: 'x', effort: 'high', permission: 'edit' })
+  recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
+  // dropping `lock` makes the cascade's later DELETE FROM lock fail, after binding was already deleted
+  d.exec('DROP TABLE lock')
+
+  expect(() => deleteSession(d, s.id)).toThrow()
+  expect(listBindings(d, s.id)).toHaveLength(1)
 })
 
 test('a session lock is exclusive, re-entrant for its owner, and released', () => {

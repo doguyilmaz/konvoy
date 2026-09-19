@@ -76,10 +76,13 @@ export function touchSession(db: Database, id: string): void {
 }
 
 export function deleteSession(db: Database, id: string): void {
-  db.query('DELETE FROM event WHERE turn_id IN (SELECT id FROM turn WHERE session_id = $id)').run({ id })
-  db.query('DELETE FROM turn WHERE session_id = $id').run({ id })
-  db.query('DELETE FROM binding WHERE session_id = $id').run({ id })
-  db.query('DELETE FROM session WHERE id = $id').run({ id })
+  db.transaction(() => {
+    db.query('DELETE FROM event WHERE turn_id IN (SELECT id FROM turn WHERE session_id = $id)').run({ id })
+    db.query('DELETE FROM turn WHERE session_id = $id').run({ id })
+    db.query('DELETE FROM binding WHERE session_id = $id').run({ id })
+    db.query('DELETE FROM lock WHERE session_id = $id').run({ id })
+    db.query('DELETE FROM session WHERE id = $id').run({ id })
+  })()
 }
 
 export function upsertBinding(

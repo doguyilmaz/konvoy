@@ -10,6 +10,9 @@ import { cmdStatus } from './commands/status'
 import { cmdAttach } from './commands/attach'
 import { cmdDoctor } from './commands/doctor'
 import { cmdUpdate } from './commands/update'
+import { cmdConfig } from './commands/config'
+import { cmdResume } from './commands/resume'
+import { cmdRm } from './commands/rm'
 import type { AgentId } from './types'
 import pkg from '../package.json'
 
@@ -20,6 +23,9 @@ const USAGE = `konvoy ${VERSION}
   konvoy new "<goal>"           create a session in this directory
   konvoy send <agent> "<msg>"   run one turn against one agent
   konvoy ls                     list sessions
+  konvoy resume [session]       make a session current and show its roster
+  konvoy config get|set         read or write layered configuration
+  konvoy rm <session> --yes     delete a konvoy session (foreign sessions survive)
   konvoy roster                 who is in the convoy
   konvoy status                 versions, auth and roster
   konvoy attach <agent>         open that agent's own interface, same session
@@ -78,6 +84,20 @@ export async function main(argv: string[]): Promise<number> {
       return cmdDoctor(cfg)
     case 'update':
       return cmdUpdate(cfg, { all: args.flags.all === true })
+    case 'resume':
+      return cmdResume(db, cfg, cwd, rest[0] ?? slug)
+    case 'config': {
+      const [action, key, value] = rest
+      return cmdConfig(cfg, cwd, action ?? 'get', key, value, { global: args.flags.global === true })
+    }
+    case 'rm': {
+      const [target] = rest
+      if (!target) {
+        console.error('usage: konvoy rm <session> --yes')
+        return 2
+      }
+      return cmdRm(db, cwd, target, { yes: args.flags.yes === true })
+    }
     case 'version':
       console.log(`konvoy ${VERSION}`)
       return cmdStatus(db, cfg, cwd, slug)
