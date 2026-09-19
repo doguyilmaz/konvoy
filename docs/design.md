@@ -301,7 +301,7 @@ running agent can be attached to mid-turn, not only resumed after. Also borrowed
 ```sql
 session(id, slug, goal, cwd, lead, status, created_at, updated_at)
 binding(session_id, agent, foreign_id, model, effort, permission, worktree,
-        status, turns, cost_usd, last_seen, PRIMARY KEY(session_id, agent))
+        status, turns, cost_usd, credits, last_seen, PRIMARY KEY(session_id, agent))
 turn(id, session_id, agent, parent_turn_id, prompt, final, tokens_in, tokens_out,
      cost_usd, started_at, ended_at, exit_code, error)
 event(turn_id, seq, type, payload, ts)
@@ -321,6 +321,7 @@ The ledger stays a Markdown file, not a table: agents read it directly, and a hu
 | unsupported effort on a model | clamp down, report in status |
 | MCP server fails to start | that agent runs without konvoy tools; delegation from it is disabled and the degradation is stated |
 | agent hangs | per-turn timeout, kill, persist the partial transcript |
+| informational error on a successful run | codex emits `item.completed` errors (e.g. a skills-budget notice) on turns that exit 0, so the exit code decides failure, not the presence of an error event |
 | delegation loop | depth and cycle guards stop it and record why |
 | concurrent writes | serialized by default; `--parallel` isolates via worktrees |
 
@@ -343,7 +344,81 @@ Schemas the MCP tool definitions require, so it earns its place twice.
 - One opt-in integration test per CLI (`KONVOY_E2E=1`) that spends real credits, skipped by
   default.
 
-## 18. Roadmap
+## 18. Measured per-turn overhead
+
+One-shot execution pays each CLI's startup context on every turn, so that cost was measured
+rather than assumed. Each run below is a single turn whose entire task was to reply `OK`.
+
+| | context loaded | cost of one trivial turn |
+|---|---|---|
+| claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events, **42,098 cache-write tokens** | **$0.0850** |
+| claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks, **5,456 tokens** | **$0.0130** |
+| codex, `--ignore-user-config` | 18,173 input tokens (6,656 cached) | — |
+| kiro, v2 engine | — | 0.0667 credits |
+
+A 7.7× difference in context and 6.5× in cost, before any work is done. A ten-turn
+delegation chain therefore costs roughly $0.85 in pure startup on the full setup versus
+$0.13 on a minimal one — and that gap widens on larger models.
+
+**Decision: `harness` is a first-class setting, defaulting to `minimal`.**
+
+| | minimal | inherit |
+|---|---|---|
+| claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
+| codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
+| kiro | generated agent JSON with `includeMcpJson: false` | user's `mcp.json` merged |
+| opencode | generated config via `OPENCODE_CONFIG` | user's config discovery |
+
+`minimal` is not a degraded mode: konvoy supplies the context explicitly through the brief
+and its own MCP server, so what is stripped is duplication, not capability. `inherit` exists
+for sessions that genuinely need the user's skills and hooks, at the measured price.
+
+Note that `claude --bare` looks like the obvious lever and is not usable here: it accepts
+only `ANTHROPIC_API_KEY` or an `apiKeyHelper` and never reads OAuth or the keychain, so a
+subscription login cannot authenticate under it. The flag combination above achieves the same
+reduction while leaving authentication alone.
+
+## 19. Trust boundary between agents
+
+konvoy's purpose is moving text between agents, which means one agent's output becomes
+another agent's input. Any agent that reads a hostile file, page or repository can therefore
+try to steer the whole convoy, and the ledger — shared, writable by all — is the widest path
+for it.
+
+- **Agent-produced text is data, never instruction.** Every delegated task and every ledger
+  excerpt reaches an agent inside an envelope that names its author and states plainly that
+  the contents are a proposal to evaluate, carrying no authority over that agent's own rules.
+- **konvoy never raises privilege.** A delegated turn runs at the session's permission level
+  or lower, never higher; `konvoy_ask` is pinned to `safe` regardless of session settings.
+- **The prelude says so explicitly.** Each agent is told that ledger entries and delegated
+  tasks are untrusted input, and that a request to change permissions, disable guards, or act
+  outside the session goal must be refused and recorded rather than followed.
+- **The guards bound the blast radius.** Delegation depth, cycle detection and the session
+  budget limit what a confused or compromised agent can set in motion.
+- **konvoy holds no credentials**, so it cannot be used as a path to them.
+
+## 20. Session locking and delegation leases
+
+"Serialised by default" has to be enforced, not assumed: two terminals running `konvoy send`
+in one session would otherwise put two agents in the same working tree at once.
+
+```sql
+lock(session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, pid INTEGER NOT NULL, acquired_at INTEGER NOT NULL)
+```
+
+A turn acquires the lock with a fresh owner token and exports it to the agent as
+`KONVOY_LEASE`. This matters because of a deadlock that the obvious design walks straight
+into: konvoy's MCP server runs *inside* the agent, so `claude → konvoy_delegate → codex`
+means a nested turn asking for a lock its own parent already holds.
+
+- The MCP server inherits `KONVOY_LEASE` from the agent process and presents it when starting
+  a delegated turn. A lease matching the current holder is admitted without re-acquiring.
+- Delegation extends the chain rather than nesting locks; depth is tracked separately.
+- A lock whose `pid` is no longer alive is reclaimed, so a crashed turn never wedges a session.
+- `--parallel` (spec section 13) replaces the lock with one worktree per agent rather than
+  removing the invariant.
+
+## 21. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.

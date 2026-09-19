@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"9c9db8d8-b5b4-4688-824a-6227129a1514","model":"claude-haiku-4-5-20251001","tools":29}
+{"type":"assistant","session_id":"9c9db8d8-b5b4-4688-824a-6227129a1514","message":{"content":[{"type":"thinking","thinking":"..."}]}}
+{"type":"assistant","session_id":"9c9db8d8-b5b4-4688-824a-6227129a1514","message":{"content":[{"type":"text","text":"OK"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"OK","total_cost_usd":0.0129515,"usage":{"input_tokens":10,"output_tokens":38,"cache_creation_input_tokens":5456,"cache_read_input_tokens":18395},"session_id":"9c9db8d8-b5b4-4688-824a-6227129a1514"}
