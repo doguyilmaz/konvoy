@@ -592,6 +592,34 @@ The `turn` table carries `kind`, `input_tokens`, `output_tokens`, `cost_usd`, `c
 and still leave the tests red. Those columns exist from the first migration precisely so the
 routing table can be built from real history rather than retrofitted.
 
+### What konvoy reports
+
+The units do not match, and pretending otherwise would be the same fabrication as printing
+`$0.00` for an agent that reported nothing. Measured on 2026-09-19: claude reports US dollars,
+kiro reports **credits**, codex reports tokens only, and opencode v2 reported no usage event at
+all. So:
+
+- **Tokens are the primary axis.** Three of four report them, and volume is the honest answer
+  to "who did how much work".
+- **Money is shown per agent, in that agent's own unit**, and an agent that reported nothing
+  shows `-`, never a zero.
+- **No synthetic normalisation by default.** A built-in price table per model would go stale
+  and misreport silently. A user who wants one number supplies their own `pricing` block in
+  config — their numbers, their responsibility.
+- **Totals are bookkeeping; cost per success is the decision.** Spend divided by gate-passed
+  turns is what distinguishes "expensive and usually right" from "cheap and usually wrong",
+  and it is the only form in which these numbers change what you do next.
+
+`konvoy usage` reports the session: per agent, its turns, tokens, its own-unit cost, and its
+gate-pass rate. `konvoy stats` reports the routing table across sessions — `kind × agent →
+success rate, median cost` — and belongs with the gate in Plan B, since without it every
+`gate_passed` is null.
+
+Attribution matters most inside a formation, where the multiplication is invisible: a `race`
+charged three agents for one answer, and a delegation chain spent on agents the user never
+addressed. `turn.parent_turn_id` records which turn caused which, so spend can be rolled up
+per parley, per delegation, and per formation rather than only per agent.
+
 ### When the convoy loses
 
 For a vague design question with no objective gate, for a task too small to decompose, or for
@@ -734,44 +762,33 @@ expensive.
 
 The missing layer is the **formation**: the shape a session travels in. A convoy has one.
 
-Listing the topologies shows there are four distinct ones, not three:
+| formation | agents | each works on | resolved by | reach for it when |
+|---|---|---|---|---|
+| `solo` | one | — | the turn ending | the task is small, or one agent is plainly best for it |
+| `party` | parallel | a **different** subtask | konvoy merging the pieces | the work splits into pieces that do not need each other |
+| `relay` | sequential | the **same** artifact, in a different role | the chain reaching its end | each stage wants a different strength, in a fixed order |
+| `race` | parallel | the **same** task | the objective gate | the outcome is uncertain and a test can settle it |
+| `parley` | parallel | the **same** question | the declared decision rule | two agents disagree and the disagreement is load-bearing |
 
-| formation | workers | working on | how it ends |
-|---|---|---|---|
-| `solo` | one | — | the turn ends |
-| `party` | parallel | **different** subtasks of one goal | konvoy merges the pieces |
-| `relay` | sequential | the **same** artifact, in different roles | the chain completes |
-| `race` | parallel | the **same** task | the objective gate picks a winner |
-| `parley` | parallel | the **same** question | the declared decision rule |
+The "each works on" column is what makes this a taxonomy rather than a list: the four ways to
+work together are to split the work, to stage it, to duplicate it, or to argue about it.
 
-`solo` and `party` are the natural pair — alone, or with the team. `party` is the division
-of labour, and it is the one most work actually wants: the lead decomposes once, each member
-owns a subtask suited to it, and konvoy merges. Its mechanism is section 24, which until now
-described an allocation with no formation to belong to.
+`solo` and `party` are the natural pair — alone, or with the team — and `party` is the one
+most work actually wants. Its mechanism is section 24. The name matters: a party is a group
+whose members have **different** capabilities pursuing one objective, which is exactly the
+comparative-advantage routing of section 22, where a squad is people with the same role and a
+group says nothing at all.
 
-The name is not decoration. A party is a group whose members have **different** capabilities
-pursuing one objective, which is exactly the comparative-advantage routing of section 22 — a
-squad is people with the same role, and a group says nothing at all. The other three are
-specialisations for particular situations: staged work (`relay`), uncertain outcomes
-(`race`), contested decisions (`parley`).
+**What they cost.** A formation's price is the number of turn startups it spends per unit of
+work, and section 18 measured a startup at roughly 5,400 tokens even on a minimal harness.
+`solo` and `relay` pay one startup per step of real work. `party` also pays one per piece,
+but the pieces are independent, so wall-clock drops while spend stays flat. `race` pays N
+startups for one result and buys a success rate of `1-(1-q)^N`. `parley` pays two startups
+per round and buys a decision, which is why it is off by default.
 
-Choosing between them:
-
-| the situation | formation |
-|---|---|
-| the task is small, or only one agent is fit for it | `solo` |
-| the task decomposes and the pieces are independent | `party` |
-| each stage needs a different strength, in order | `relay` |
-| the outcome is uncertain and a test can judge it | `race` |
-| two agents disagree and the disagreement is load-bearing | `parley` |
-
-**`loop` is not a fifth formation; it is a combinator over them.** `loop(relay)` means "plan,
-implement, review, fix, repeat until the gate is green or the budget is spent" — which is
-exactly the process this project itself was built with.
-
-A formation is a small state machine over primitives that already exist: the turn runner, the
-delegation tools, the objective gate. It introduces no new transport and requires no adapter
-changes. It sits above the session layer and consumes the same turns.
+**`loop` is not a fifth formation; it is a combinator over them.** `loop(relay)` means plan,
+implement, review, fix, repeat until the gate is green or the budget is spent — which is
+exactly how this project itself was built.
 
 ### The constraint this places on Plan B
 
