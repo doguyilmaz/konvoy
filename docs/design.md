@@ -709,7 +709,7 @@ here is judged: by whether its recorded verdicts were worth what they cost.
 A parley round is an ordinary turn with one extra structural slot. No new transport, no
 per-CLI work, nothing that can behave differently across the four harnesses.
 
-### Allocation without negotiation
+## 24. Work allocation without negotiation
 
 Letting agents negotiate who does what costs turns and risks both duplication and gaps. konvoy
 combines three sources of knowledge instead, with zero negotiation rounds:
@@ -723,7 +723,7 @@ combines three sources of knowledge instead, with zero negotiation rounds:
 
 One planning turn, no bargaining, and the lead's guesses corrected by the user's own data.
 
-## 24. Roadmap
+## 25. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
