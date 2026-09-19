@@ -109,7 +109,12 @@ export async function send(
     // "produced nothing" has to mean nothing at all, not merely no text: a turn that ran tool
     // calls edited files and plainly reached a live session, even if it never spoke.
     const producedNothing = first.final.trim() === '' && !first.events.some((e) => e.t === 'tool')
-    const stale = first.error != null && STALE.test(first.error.message) && producedNothing
+    // Only a crash can be a dead session. An auth failure phrased as "session not found" would
+    // otherwise be rebound instead of surfaced, discarding a live session and then failing again
+    // identically; a rate limit, a timeout and an interruption say nothing about the session at
+    // all. The kinds exist so that failures can be told apart — this is where it matters.
+    const recoverable = first.error?.kind === 'crash' || first.error?.kind === 'unknown'
+    const stale = first.error != null && recoverable && STALE.test(first.error.message) && producedNothing
     if (!stale || !wasResuming) return first
 
     clearForeignId(deps.db, session.id, agent)
