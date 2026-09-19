@@ -13,7 +13,7 @@ const COMMANDS: Record<AgentId, string[]> = {
 
 export function updateCommand(agent: AgentId, bin?: string): string[] {
   const [name, ...rest] = COMMANDS[agent]
-  return [bin ?? name!, ...rest]
+  return [name!, ...rest]
 }
 
 export interface UpdateDeps {
