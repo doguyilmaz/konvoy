@@ -89,6 +89,88 @@ test('a session already locked by a live process refuses a second turn', async (
   expect(send({ db, cfg, adapterFor: () => scripted([]) }, s, 'claude', 'hi')).rejects.toThrow(/is busy/)
 })
 
+test("a rejected turn leaves the existing holder's lock alone", async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  acquireLock(db, s.id, 'someone-else')
+  expect(send({ db, cfg, adapterFor: () => scripted([]) }, s, 'claude', 'hi')).rejects.toThrow(/is busy/)
+  expect(lockOwner(db, s.id)).toBe('someone-else')
+})
+
+test('a first turn that fails is not retried', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  let call = 0
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: () => {
+      call++
+      return {
+        cmd: [
+          'bun',
+          'tests/fixtures/fake-agent.ts',
+          JSON.stringify({ type: 'result', is_error: true, result: 'No conversation found with session ID' }),
+        ],
+        cwd: process.cwd(),
+      }
+    },
+  }
+  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  expect(call).toBe(1)
+  expect(r.error).not.toBe(null)
+})
+
+test('a turn that answered before failing is not treated as a dead session', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  upsertBinding(db, { sessionId: s.id, agent: 'claude', foreignId: 'alive', effort: 'high', permission: 'edit' })
+  let call = 0
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: () => {
+      call++
+      return {
+        cmd: [
+          'bun',
+          'tests/fixtures/fake-agent.ts',
+          JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'partial work' }] } }),
+          JSON.stringify({ type: 'result', is_error: true, result: 'unknown session state after edit' }),
+        ],
+        cwd: process.cwd(),
+      }
+    },
+  }
+  await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  expect(call).toBe(1)
+  expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('alive')
+})
+
+test('a crash with a stale-looking message but real output is not treated as a dead session', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  upsertBinding(db, { sessionId: s.id, agent: 'claude', foreignId: 'alive', effort: 'high', permission: 'edit' })
+  let call = 0
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: () => {
+      call++
+      return {
+        cmd: [
+          'bun',
+          'tests/fixtures/fake-agent.ts',
+          JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'partial work' }] } }),
+          JSON.stringify({ type: 'result', is_error: true, result: 'No conversation found with session ID' }),
+        ],
+        env: { ...process.env, FAKE_AGENT_EXIT: '1' } as Record<string, string>,
+        cwd: process.cwd(),
+      }
+    },
+  }
+  await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  expect(call).toBe(1)
+  expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('alive')
+})
+
 test('an inherited lease does not deadlock against the process that already holds it', async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })

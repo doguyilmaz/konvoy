@@ -95,10 +95,11 @@ export async function send(
   }
 
   async function withLock(): Promise<TurnResult> {
+    const wasResuming = getBinding(deps.db, session.id, agent)?.foreignId != null
     const first = await runTurn({ db: deps.db, adapter }, { ...build(), lease }, { ...opts, timeoutSec })
 
-    const wasResuming = getBinding(deps.db, session.id, agent)?.foreignId != null
-    const stale = first.error != null && STALE.test(first.error.message)
+    const stale =
+      first.error != null && STALE.test(first.error.message) && first.final.trim() === ''
     if (!stale || !wasResuming) return first
 
     clearForeignId(deps.db, session.id, agent)

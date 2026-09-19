@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import type { AgentId, Binding, Effort, Permission, Session } from '../types'
+import type { AgentId, Binding, Permission, Session } from '../types'
 
 const now = () => Date.now()
 const id = () => crypto.randomUUID()
