@@ -41,11 +41,34 @@ export function openDb(path: string): Database {
   let db: Database
   try {
     db = new Database(path, { create: true, strict: true })
-    if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL')
-    const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
-    for (let v = current; v < MIGRATIONS.length; v++) {
-      db.exec(MIGRATIONS[v]!)
-      db.exec(`PRAGMA user_version = ${v + 1}`)
+    if (path !== ':memory:') {
+      // konvoy runs concurrently by design — a nested konvoy inside an agent, a dashboard beside
+      // a send. Set before anything that takes a lock: switching a fresh file to WAL needs an
+      // exclusive one, and without the timeout the losers of that first statement throw
+      db.exec('PRAGMA busy_timeout = 5000')
+      // the journal-mode switch needs an exclusive lock and SQLite does not run the busy handler
+      // for it, so with several openers racing the losers get SQLITE_BUSY on this one statement.
+      // The mode is persistent in the file: the winner's switch holds for everyone, a loser moves on.
+      try {
+        db.exec('PRAGMA journal_mode = WAL')
+      } catch {
+        // another opener is switching it right now
+      }
+    }
+    // one transaction for every pending migration: a loser of the open race re-reads
+    // user_version under the write lock and finds nothing left to do, and a process that dies
+    // mid-migration leaves no half-applied schema behind
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
+      for (let v = current; v < MIGRATIONS.length; v++) {
+        db.exec(MIGRATIONS[v]!)
+        db.exec(`PRAGMA user_version = ${v + 1}`)
+      }
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
