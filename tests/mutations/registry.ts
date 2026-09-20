@@ -29,8 +29,8 @@ export const mutations: Mutation[] = [
   {
     name: 'a leading-dash model string is accepted and reaches argv as a flag injection',
     file: 'src/config/load.ts',
-    from: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/',
-    to: 'const MODEL_PATTERN = /^[A-Za-z0-9._:-]*$/',
+    from: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:\\/-]*$/',
+    to: 'const MODEL_PATTERN = /^[A-Za-z0-9._:\\/-]*$/',
     tests: ['tests/config-security.test.ts'],
   },
   {
@@ -153,7 +153,7 @@ export const mutations: Mutation[] = [
     from: [
       '  if (row.credits > 0) {',
       '    const rate = pricing.credits[row.agent]',
-      '    if (rate) return row.credits * rate.usdPerCredit',
+      '    return rate ? row.credits * rate.usdPerCredit : null',
       '  }',
       '',
       '  if (row.model) {',
@@ -812,5 +812,12 @@ export const mutations: Mutation[] = [
     from: "  const shown = rows.slice(0, FACTS_ROW_CAP)",
     to: "  const shown = rows.slice(0)",
     tests: ["tests/facts.test.ts"],
+  },
+  {
+    name: "the project config follows the shell's cwd, not the session's, when a session is named",
+    file: 'src/cli.ts',
+    from: "  const projectCwd = (slug ? getSessionBySlug(db, slug)?.cwd : undefined) ?? cwd",
+    to: "  const projectCwd = cwd",
+    tests: ["tests/cli.test.ts"],
   },
 ]

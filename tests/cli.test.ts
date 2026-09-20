@@ -96,3 +96,37 @@ test('there is one agent roster, not two that happen to agree', async () => {
   // and the order is user-visible in doctor, config and update
   expect(fromAdapters as readonly string[]).toBe(fromSchema as readonly string[])
 })
+
+// loadConfig ran before any session was resolved, reading <shell cwd>/.konvoy/config.jsonc,
+// while the turn runs in the session's directory. `konvoy send --session <slug>` from another
+// repository spawned the agent in the session's repo with that other repository's model,
+// effort, roles and failover chain. Privileged keys were already pinned globally; the rest
+// followed the shell.
+test('a session named from another directory carries its own project config, not the shell one', async () => {
+  const a = (await Bun.$`mktemp -d`.text()).trim()
+  const b = (await Bun.$`mktemp -d`.text()).trim()
+  const home = (await Bun.$`mktemp -d`.text()).trim()
+  await Bun.write(`${a}/.konvoy/config.jsonc`, '{ "agents": { "claude": { "model": "model-from-a" } } }')
+  await Bun.write(`${b}/.konvoy/config.jsonc`, '{ "agents": { "claude": { "model": "model-from-b" } } }')
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    let slug = ''
+    await withEnv(a, home, async () => {
+      await main(['new', 'audit the config cwd'])
+      slug = /created session (\S+)/.exec(log.mock.calls.map((c) => String(c[0])).join('\n'))?.[1] ?? ''
+    })
+    expect(slug).not.toBe('')
+    log.mockClear()
+    await withEnv(b, home, async () => {
+      expect(await main(['roster', '--session', slug])).toBe(0)
+    })
+    const out = log.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(out).toContain('model-from-a')
+    expect(out).not.toContain('model-from-b')
+  } finally {
+    log.mockRestore()
+    err.mockRestore()
+    await Bun.$`rm -rf ${a} ${b} ${home}`.quiet()
+  }
+})

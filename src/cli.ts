@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import { parseArgs, type Args } from './args'
 import { loadConfig, resolveAgent } from './config/load'
+import { getSessionBySlug } from './store/queries'
 import { agentIds } from './config/schema'
 import type { Config } from './config/schema'
 import { openDb } from './store/db'
@@ -121,8 +122,11 @@ export async function main(argv: string[]): Promise<number> {
 }
 
 async function dispatch(command: string, rest: string[], cwd: string, slug: string | undefined, args: Args): Promise<number> {
-  const cfg = await loadConfig({ cwd })
   const db = openDb(dbPath())
+  // a session named from another directory carries its own project config, not the shell's:
+  // model, effort, roles and the failover chain follow the repository the turn runs in
+  const projectCwd = (slug ? getSessionBySlug(db, slug)?.cwd : undefined) ?? cwd
+  const cfg = await loadConfig({ cwd: projectCwd })
 
   const name = resolveCommandName(command)
   if (!name) {
