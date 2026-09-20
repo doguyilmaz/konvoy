@@ -26,6 +26,7 @@ konvoy doctor
 konvoy update --all    # konvoy itself, plus every agent CLI
 konvoy rm stale-slug --yes
 konvoy version
+konvoy dashboard --port 4000  # local page with the same numbers as `usage --chart`
 ```
 
 ## Configure

@@ -43,6 +43,7 @@ export const commandTable = [
     summary: 'update konvoy, and with --all the agent CLIs',
   },
   { name: 'version', aliases: [], usage: 'version', summary: 'konvoy and agent versions' },
+  { name: 'dashboard', aliases: [], usage: 'dashboard [--port N]', summary: 'open a local page with the same numbers' },
 ] as const satisfies readonly CommandSpec[]
 
 export type CommandName = (typeof commandTable)[number]['name']

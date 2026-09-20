@@ -32,7 +32,9 @@ function cost(r: RosterRow): string {
   return '-'
 }
 
-function spend(row: UsageRow): string {
+// exported so the dashboard renders the same string the terminal does, rather than
+// reimplementing the credits-before-dollars rule and risking the two drifting apart
+export function spend(row: UsageRow): string {
   // credits win when both are non-zero: they're what the agent actually charged, and the
   // cost estimator derives its dollar figure from credits the same way — the two must
   // never disagree about which number is the real one for a given row.

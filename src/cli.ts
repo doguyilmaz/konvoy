@@ -17,6 +17,7 @@ import { cmdConfig } from './commands/config'
 import { cmdResume } from './commands/resume'
 import { cmdRm } from './commands/rm'
 import { cmdUsage } from './commands/usage'
+import { cmdDashboard } from './commands/dashboard'
 import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
 import type { AgentId } from './types'
 import pkg from '../package.json'
@@ -91,6 +92,11 @@ const handlers: Record<CommandName, Handler> = {
     console.log(`konvoy ${VERSION}`)
     return cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug)
   },
+  dashboard: ({ db, cfg, cwd, args, slug }) =>
+    cmdDashboard(db, cfg, cwd, {
+      port: typeof args.flags.port === 'string' ? Number(args.flags.port) : undefined,
+      slug,
+    }),
 }
 
 export async function main(argv: string[]): Promise<number> {
