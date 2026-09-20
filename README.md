@@ -89,10 +89,10 @@ flowchart LR
   session --> bKiro["binding: kiro"]
   session --> bOpencode["binding: opencode"]
 
-  bClaude -->|"resume via session-id/resume flag<br/>← session_id"| claudeCli(["claude session"])
+  bClaude -->|"via --session-id or --resume<br/>← session_id"| claudeCli(["claude session"])
   bCodex -->|"resume &lt;id&gt; subcommand<br/>← thread_id"| codexCli(["codex thread"])
-  bKiro -->|"resume-id flag<br/>← sessionId"| kiroCli(["kiro-cli session"])
-  bOpencode -->|"session flag (-s)<br/>← sessionID"| opencodeCli(["opencode session"])
+  bKiro -->|"via --resume-id<br/>← sessionId"| kiroCli(["kiro-cli session"])
+  bOpencode -->|"via --session<br/>← sessionID"| opencodeCli(["opencode session"])
 ```
 
 ## Configure
@@ -187,5 +187,5 @@ bun run verify:claims  # checks konvoy's own claims about the four CLIs against 
 `verify:claims` is the standing form of a manual check: it re-reads each CLI's own `--help`
 and confirms things this README and the adapters assume — that each agent's update
 subcommand exists, that only claude accepts a caller-chosen session id, and that opencode's
-session flag continues a session rather than creating one. It never sends a prompt or spends
+`--session` continues a session rather than creating one. It never sends a prompt or spends
 quota, and it isn't part of `bun test` since it needs the CLIs installed to mean anything.

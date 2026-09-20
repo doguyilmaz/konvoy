@@ -46,8 +46,14 @@ test('every "konvoy <word>" shown in README.md is a real command or alias', () =
   }
 })
 
-test('every --flag README.md mentions is read somewhere in the source', async () => {
-  const flags = [...new Set([...readme.matchAll(/--[a-zA-Z][a-zA-Z0-9-]*/g)].map((m) => m[0]!))]
+test("every --flag README.md gives konvoy is one konvoy reads", async () => {
+  // Only konvoy's own flags. The README also documents facts about the four CLIs it drives —
+  // that claude takes --session-id, that opencode's --session continues rather than creates —
+  // and konvoy's source has no reason to read those. Scanning the whole file made the test
+  // shape the prose instead of checking it: the flags got written as "session-id flag" to keep
+  // it quiet, which is worse documentation than the thing the test was protecting.
+  const konvoyLines = readme.split('\n').filter((l) => l.includes('konvoy '))
+  const flags = [...new Set([...konvoyLines.join('\n').matchAll(/--[a-zA-Z][a-zA-Z0-9-]*/g)].map((m) => m[0]!))]
   expect(flags.length).toBeGreaterThan(0)
 
   const glob = new Bun.Glob('**/*.ts')
