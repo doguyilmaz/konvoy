@@ -585,7 +585,7 @@ export const mutations: Mutation[] = [
   {
     name: 'an envelope naming no real agent or role is silently dropped instead of reported, leaving nobody told the turn stood',
     file: 'src/core/session.ts',
-    from: "    if (!recipient) {\n      console.error(\n        `konvoy: ${ranAsAgent} handed off to \"${envelope.to}\" — no such agent or role, ${ranAsAgent}'s turn stands`,\n      )\n      return null\n    }",
+    from: "    if (!recipient) {\n      console.error(\n        `konvoy: ${ranAsAgent} handed off to \"${oneLine(envelope.to, 80)}\" — no such agent or role, ${ranAsAgent}'s turn stands`,\n      )\n      return null\n    }",
     to: '    if (!recipient) return null',
     tests: ['tests/delegation.test.ts'],
   },
@@ -749,5 +749,26 @@ export const mutations: Mutation[] = [
     from: "env: { ...(process.env as Record<string, string>), ...(plan.env ?? {}),",
     to: "env: { ...(plan.env ?? (process.env as Record<string, string>)),",
     tests: ["tests/turn.test.ts"],
+  },
+  {
+    name: "re-acquiring a lock as its owner keeps the dead parent pid, so the lock reads as stale and is reclaimable",
+    file: 'src/store/queries.ts',
+    from: "db.query('UPDATE lock SET pid = $pid WHERE session_id = $sessionId').run({ pid: process.pid, sessionId })",
+    to: "",
+    tests: ["tests/store.test.ts"],
+  },
+  {
+    name: "a truncated kiro finalText overrides the full streamed answer",
+    file: 'src/adapters/kiro.ts',
+    from: "if (typeof data.finalText === 'string' && data.finalTextTruncated !== true) events.push",
+    to: "if (typeof data.finalText === 'string') events.push",
+    tests: ["tests/adapter-kiro.test.ts","tests/turn.test.ts"],
+  },
+  {
+    name: "a full disk classifies as an upstream outage and triggers retries and a failover hop",
+    file: 'src/adapters/types.ts',
+    from: "service is at capacity|overloaded?",
+    to: "at capacity|overloaded?",
+    tests: ["tests/adapter-claude.test.ts"],
   },
 ]

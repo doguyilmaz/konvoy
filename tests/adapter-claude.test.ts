@@ -251,3 +251,9 @@ test('an error result with no text reports an empty message rather than inventin
   const line = JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 'gone', total_cost_usd: 0 })
   expect(claudeAdapter.parse(line)).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
 })
+
+test('a local resource at capacity is not an upstream outage', () => {
+  // captured wording is "the service is at capacity"; a disk or a queue can be at capacity too
+  expect(classifyError('the service is at capacity')).toBe('upstream')
+  expect(classifyError('ENOSPC: the disk is at capacity')).toBe('unknown')
+})

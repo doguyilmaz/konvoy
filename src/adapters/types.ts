@@ -97,7 +97,7 @@ const RATE =
 // retrying before giving up on an agent, unlike a rate limit (checked first: a message that is
 // both rate-limited and mentions 503 is a rate limit, since that window is hours, not seconds).
 const UPSTREAM =
-  /at capacity|overloaded?|temporarily unavailable|\b503\b|server is busy|internal server error|upstream connect error/
+  /service is at capacity|overloaded?|temporarily unavailable|\b503\b|server is busy|internal server error|upstream connect error/
 
 export function classifyError(message: string): 'auth' | 'rate' | 'upstream' | 'crash' | 'unknown' {
   const m = message.toLowerCase()
