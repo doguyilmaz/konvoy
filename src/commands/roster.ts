@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import { agentIds } from '../adapters'
 import { resolveAgent } from '../config/load'
-import { currentSession, getBinding, getSessionBySlug } from '../store/queries'
+import { currentSession, getSessionBySlug, listBindings } from '../store/queries'
 import { duplicateModels, formatRoster, type RosterRow } from '../format'
 
 export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string): number {
@@ -12,9 +12,10 @@ export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string)
     return 2
   }
 
+  const bindings = new Map(listBindings(db, session.id).map((b) => [b.agent, b]))
   const rows: RosterRow[] = agentIds.map((agent) => {
     const settings = resolveAgent(cfg, agent)
-    const binding = getBinding(db, session.id, agent)
+    const binding = bindings.get(agent) ?? null
     return {
       agent,
       status: !settings.enabled ? 'disabled' : (binding?.status ?? 'unbound'),

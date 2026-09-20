@@ -115,6 +115,52 @@ test('JSONC: escaped quote in string with double-slash after', async () => {
   expect(cfg.agents.codex?.bin).toBe('a"b//c')
 })
 
+// bin is privileged (config/load.ts strips it from the project layer), so these set it
+// on the global layer the same way tests/config-security.test.ts does
+test('a leading ~/ in a configured bin resolves to the home directory', async () => {
+  const dir = tmp('tilde')
+  const home = tmp('tilde-home')
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { opencode: { bin: '~/.opencode/bin/opencode' } } }))
+  const prevHome = Bun.env.HOME
+  Bun.env.HOME = home
+  try {
+    const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
+    expect(resolveAgent(cfg, 'opencode').bin).toBe(`${home}/.opencode/bin/opencode`)
+  } finally {
+    if (prevHome === undefined) delete Bun.env.HOME
+    else Bun.env.HOME = prevHome
+  }
+})
+
+test('a bare ~ resolves to the home directory itself', async () => {
+  const dir = tmp('bareTilde')
+  const home = tmp('bareTilde-home')
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { opencode: { bin: '~' } } }))
+  const prevHome = Bun.env.HOME
+  Bun.env.HOME = home
+  try {
+    const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
+    expect(resolveAgent(cfg, 'opencode').bin).toBe(home)
+  } finally {
+    if (prevHome === undefined) delete Bun.env.HOME
+    else Bun.env.HOME = prevHome
+  }
+})
+
+test('an absolute bin path is left untouched', async () => {
+  const dir = tmp('absBin')
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { opencode: { bin: '/abs/x' } } }))
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
+  expect(resolveAgent(cfg, 'opencode').bin).toBe('/abs/x')
+})
+
+test('a non-leading tilde in a bin path is left untouched', async () => {
+  const dir = tmp('relTilde')
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { opencode: { bin: 'rel/~/x' } } }))
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
+  expect(resolveAgent(cfg, 'opencode').bin).toBe('rel/~/x')
+})
+
 test('a malformed project config names the file, not a raw SyntaxError', async () => {
   const dir = tmp('malformed')
   await Bun.write(`${dir}/.konvoy/config.jsonc`, '{ "defaults": { "effort": }')

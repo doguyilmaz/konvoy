@@ -11,7 +11,7 @@ export type KonvoyEvent =
   | { t: 'error'; message: string; kind: 'auth' | 'rate' | 'crash' | 'timeout' | 'interrupted' | 'unknown' }
   | { t: 'done'; final: string }
 
-export type BindingStatus = 'unbound' | 'bound' | 'auth_required' | 'unavailable'
+export type BindingStatus = 'unbound' | 'bound'
 
 export interface Binding {
   sessionId: string
@@ -33,22 +33,9 @@ export interface Session {
   goal: string
   cwd: string
   lead: AgentId
-  status: 'active' | 'closed'
+  status: 'active'
   createdAt: number
   updatedAt: number
-}
-
-export interface TurnRecord {
-  id: string
-  sessionId: string
-  agent: AgentId
-  prompt: string
-  final: string
-  costUsd: number
-  exitCode: number
-  error: string | null
-  startedAt: number
-  endedAt: number
 }
 
 export interface SpawnPlan {

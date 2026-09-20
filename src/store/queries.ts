@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import type { AgentId, Binding, Permission, Session } from '../types'
+import type { ModelUsage } from '../pricing'
 
 const now = () => Date.now()
 const id = () => crypto.randomUUID()
@@ -152,12 +153,12 @@ export function listBindings(db: Database, sessionId: string): Binding[] {
   return rows.map((r) => toBinding(r)!).filter(Boolean)
 }
 
-export function setBindingStatus(db: Database, sessionId: string, agent: AgentId, status: Binding['status']): void {
-  db.query('UPDATE binding SET status = $status WHERE session_id = $sessionId AND agent = $agent').run({
-    sessionId,
-    agent,
-    status,
-  })
+// one query for every session's bound-agent count, instead of one `listBindings` per session
+export function boundBindingCounts(db: Database): Map<string, number> {
+  const rows = db
+    .query('SELECT session_id, COUNT(*) AS bound FROM binding WHERE foreign_id IS NOT NULL GROUP BY session_id')
+    .all() as { session_id: string; bound: number }[]
+  return new Map(rows.map((r) => [r.session_id, r.bound]))
 }
 
 export function clearForeignId(db: Database, sessionId: string, agent: AgentId): void {
@@ -327,15 +328,6 @@ export function usageAcrossSessions(db: Database): UsageRow[] {
   return rows.map(toUsage)
 }
 
-export interface AgentModelUsage {
-  agent: AgentId
-  model: string | null
-  inputTokens: number
-  outputTokens: number
-  costUsd: number
-  credits: number
-}
-
 // same COALESCE/SUM style as USAGE_COLUMNS, on purpose: this and the per-agent totals above
 // must never treat a null differently, or the two views of the same turns would disagree
 const USAGE_BY_MODEL_COLUMNS = `agent,
@@ -345,7 +337,7 @@ const USAGE_BY_MODEL_COLUMNS = `agent,
   COALESCE(SUM(cost_usd), 0) AS cost_usd,
   COALESCE(SUM(credits), 0) AS credits`
 
-export function usageByAgentModel(db: Database, sessionId?: string): AgentModelUsage[] {
+export function usageByAgentModel(db: Database, sessionId?: string): ModelUsage[] {
   const sql = sessionId
     ? `SELECT ${USAGE_BY_MODEL_COLUMNS} FROM turn
        WHERE session_id = $sessionId GROUP BY agent, model ORDER BY agent, model`

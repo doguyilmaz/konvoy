@@ -1,5 +1,5 @@
 import { configSchema, type AgentId, type Config, type Effort, type Harness, type Permission } from './schema'
-import { configDir, join } from '../paths'
+import { configDir, home, join } from '../paths'
 
 export const globalConfigPath = (): string => join(configDir(), 'config.jsonc')
 export const projectConfigPath = (cwd: string): string => join(cwd, '.konvoy', 'config.jsonc')
@@ -111,28 +111,9 @@ function stripJsonc(text: string): string {
   return result
 }
 
-// V8 reports a JSON.parse failure as "... in JSON at position N"; Bun's JSC does not. When a
-// position is knowable it is translated to a line/column so the message points somewhere in the
-// file; when it isn't, the file path plus the engine's own wording is still better than a raw
-// SyntaxError with no file attached at all.
-function describeJsonError(path: string, text: string, error: unknown): Error {
+function describeJsonError(path: string, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
-  const offset = /position (\d+)/.exec(message)?.[1]
-  let where = ''
-  if (offset !== undefined) {
-    let line = 1
-    let column = 1
-    for (let i = 0; i < Number(offset) && i < text.length; i++) {
-      if (text[i] === '\n') {
-        line++
-        column = 1
-      } else {
-        column++
-      }
-    }
-    where = ` (line ${line}, column ${column})`
-  }
-  return new Error(`malformed config at ${path}${where}: ${message}`)
+  return new Error(`malformed config at ${path}: ${message}`)
 }
 
 export async function readLayer(path: string): Promise<unknown> {
@@ -142,7 +123,7 @@ export async function readLayer(path: string): Promise<unknown> {
   try {
     return JSON.parse(stripJsonc(text))
   } catch (error) {
-    throw describeJsonError(path, text, error)
+    throw describeJsonError(path, error)
   }
 }
 
@@ -243,6 +224,14 @@ function stripInvalidModels(layer: Record<string, unknown>): Record<string, unkn
   return out
 }
 
+// only a leading `~/`, or a bare `~`, is a home-directory reference — a tilde anywhere else
+// in the path (e.g. `rel/~/x`) is left alone
+function expandHome(p: string): string {
+  if (p === '~') return home()
+  if (p.startsWith('~/')) return join(home(), p.slice(2))
+  return p
+}
+
 export async function loadConfig(opts: { cwd: string; globalPath?: string }): Promise<Config> {
   const globalPath = opts.globalPath ?? globalConfigPath()
   const globalLayer = (await readLayer(globalPath)) as Record<string, unknown>
@@ -257,6 +246,9 @@ export async function loadConfig(opts: { cwd: string; globalPath?: string }): Pr
       pathStr = keyPath
     }
     throw new Error(`invalid konvoy config at ${pathStr}: ${issue?.message}`)
+  }
+  for (const agentCfg of Object.values(parsed.data.agents)) {
+    if (agentCfg?.bin) agentCfg.bin = expandHome(agentCfg.bin)
   }
   return parsed.data
 }

@@ -29,6 +29,8 @@ const MIGRATIONS: string[] = [
      payload TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (turn_id, seq));`,
   `ALTER TABLE turn ADD COLUMN parent_turn_id TEXT;
    ALTER TABLE turn ADD COLUMN model TEXT;`,
+  `CREATE INDEX turn_session_id ON turn(session_id);
+   CREATE INDEX session_cwd_status ON session(cwd, status);`,
 ]
 
 export function openDb(path: string): Database {

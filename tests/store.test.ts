@@ -200,23 +200,70 @@ test('the stale-lock reclaim deletes only the row it observed', () => {
   expect(lockOwner(d, s.id)).toBe('other')
 })
 
-test('a database created before migration 1 gains the new turn columns', () => {
-  const path = `/tmp/konvoy-test-migrate-${Bun.nanoseconds()}.db`
-  const old = new Database(path)
-  old.exec(`CREATE TABLE turn (
+// mirrors migration 0 verbatim: any real database that ever reached user_version 1 ran this
+// first, so a fixture missing `session`/`binding`/etc. would not be a v1 database at all
+const MIGRATION_0 = `CREATE TABLE session (
+     id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, goal TEXT NOT NULL,
+     cwd TEXT NOT NULL, lead TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+     updated_seq INTEGER NOT NULL DEFAULT 0);
+   CREATE TABLE binding (
+     session_id TEXT NOT NULL, agent TEXT NOT NULL, foreign_id TEXT,
+     model TEXT, effort TEXT NOT NULL, permission TEXT NOT NULL,
+     status TEXT NOT NULL, turns INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0, credits REAL NOT NULL DEFAULT 0, last_seen INTEGER,
+     PRIMARY KEY (session_id, agent));
+   CREATE TABLE turn (
      id TEXT PRIMARY KEY, session_id TEXT NOT NULL, agent TEXT NOT NULL,
      prompt TEXT NOT NULL, final TEXT NOT NULL, cost_usd REAL NOT NULL DEFAULT 0,
      credits REAL NOT NULL DEFAULT 0, input_tokens INTEGER NOT NULL DEFAULT 0,
      output_tokens INTEGER NOT NULL DEFAULT 0, kind TEXT, gate_passed INTEGER,
      exit_code INTEGER NOT NULL, error TEXT, error_kind TEXT,
      started_at INTEGER NOT NULL, ended_at INTEGER NOT NULL);
-   PRAGMA user_version = 1;`)
+   CREATE INDEX turn_kind_agent ON turn(kind, agent);
+   CREATE TABLE lock (
+     session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, pid INTEGER NOT NULL,
+     acquired_at INTEGER NOT NULL);
+   CREATE TABLE event (
+     turn_id TEXT NOT NULL, seq INTEGER NOT NULL, type TEXT NOT NULL,
+     payload TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (turn_id, seq));`
+
+test('a database created before migration 1 gains the new turn columns', () => {
+  const path = `/tmp/konvoy-test-migrate-${Bun.nanoseconds()}.db`
+  const old = new Database(path)
+  old.exec(`${MIGRATION_0}\n   PRAGMA user_version = 1;`)
   old.close()
 
   const d = openDb(path)
   const cols = (d.query('PRAGMA table_info(turn)').all() as { name: string }[]).map((c) => c.name)
   expect(cols).toContain('model')
   expect(cols).toContain('parent_turn_id')
+  d.close()
+})
+
+test('a database created at user_version 2 gains the turn and session indexes when opened', () => {
+  const path = `/tmp/konvoy-test-migrate-idx-${Bun.nanoseconds()}.db`
+  const old = new Database(path)
+  old.exec(`${MIGRATION_0}
+   ALTER TABLE turn ADD COLUMN parent_turn_id TEXT;
+   ALTER TABLE turn ADD COLUMN model TEXT;
+   PRAGMA user_version = 2;`)
+  old.close()
+
+  const before = new Database(path)
+  const beforeTurnIdx = (before.query("PRAGMA index_list('turn')").all() as { name: string }[]).map((r) => r.name)
+  const beforeSessionIdx = (before.query("PRAGMA index_list('session')").all() as { name: string }[]).map(
+    (r) => r.name,
+  )
+  expect(beforeTurnIdx).not.toContain('turn_session_id')
+  expect(beforeSessionIdx).not.toContain('session_cwd_status')
+  before.close()
+
+  const d = openDb(path)
+  const turnIdx = (d.query("PRAGMA index_list('turn')").all() as { name: string }[]).map((r) => r.name)
+  const sessionIdx = (d.query("PRAGMA index_list('session')").all() as { name: string }[]).map((r) => r.name)
+  expect(turnIdx).toContain('turn_session_id')
+  expect(sessionIdx).toContain('session_cwd_status')
   d.close()
 })
 
