@@ -362,6 +362,7 @@ see the correction at the end of this section.
 | claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events — **53,336 tokens** | $0.5335 (cold cache) |
 | claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks — **20,800 tokens** | $0.0528 (warm cache) |
 | codex, `--ignore-user-config` | **18,173 tokens** (6,656 of them cached) | — |
+| opencode, `run --format json` | **16,682 tokens** (270 of them cached) | $0.0051 |
 | kiro, v2 engine | no token counts; reports **4.83% of its context window** | 0.0667 credits |
 
 A **2.6× difference in context** before any work is done: the minimal harness saves about
@@ -383,6 +384,20 @@ remainder* and reads as 2 on a cached turn, while `src/adapters/codex.ts` record
 `input_tokens`, which already contains its cached count. One normalized column held two
 units, and `src/pricing.ts` priced it while `src/dashboard/page.ts` summed it across
 agents. Fixed, with the invariant pinned in `tests/provider-contract.test.ts`.
+
+opencode turned out to share claude's convention and to have the same defect, plus one more:
+it reports the turn's `cost` on the same part and konvoy read neither, so every opencode turn
+recorded zero tokens and zero dollars. That branch had a unit test and a captured fixture and
+was still never reached — the fixture came from a turn that called no tools, and opencode only
+emits `step_finish` once a step does tool work. Its test therefore asserted that no usage
+event appeared, which was true of that capture and wrong about the CLI.
+
+**Still true after the fix:** an opencode turn that calls no tools emits no `step_finish` at
+all, so konvoy records nothing for it. Its own `opencode.db` holds the tokens and cost
+regardless; reading them would couple konvoy to opencode's internal schema, which is not worth
+it today. Four agents' minimal floors now measure 20,800 (claude), 18,173 (codex) and 16,682
+(opencode) tokens, with kiro reporting only a percentage — the agreement across three
+independent CLIs is the check that the unit is defined right.
 
 **Decision: `harness` is a first-class setting, defaulting to `minimal`.**
 
