@@ -18,7 +18,13 @@ import {
 } from '../store/queries'
 import { runTurn, type TurnOptions, type TurnResult } from './turn'
 import { runGate } from './gate'
+import { collectFacts, formatFacts, realFactsDeps } from './facts'
+import { buildPrelude } from './prelude'
 import { sessionDir } from '../paths'
+
+// The prelude carries at most this many recent turns; section 28 caps it so a long session
+// cannot let the handover grow until it dominates every turn.
+const RECENT_TURNS = 3
 
 // Captured from the real CLIs on 2026-09-19 by resuming an id that does not exist:
 //   claude   "No conversation found with session ID <uuid>"
@@ -148,6 +154,11 @@ export async function send(
     let firstTurnId: string | null = null
     let result: TurnResult | undefined
 
+    // Built once for the whole send, not per chain member: recomputing would spend git calls
+    // and, worse, let the handover shift between attempts at the same question.
+    const facts = formatFacts(await collectFacts(realFactsDeps(), deps.db, session))
+    const prelude = buildPrelude(deps.db, session, facts, { recent: RECENT_TURNS })
+
     let blocked: { agent: AgentId; kind: string; message: string } | null = null
     for (let i = 0; i < chain.length; i++) {
       const current = chain[i]!
@@ -196,6 +207,7 @@ export async function send(
         cwd: session.cwd,
         sessionDir: sessionDir(session.cwd, session.slug),
         prompt,
+        prelude: prelude === '' ? undefined : prelude,
         binding: getBinding(deps.db, session.id, current),
         model: currentSettings.model,
         effort: currentEffort.value,

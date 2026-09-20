@@ -1,10 +1,11 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { acquireLock, getBinding, lockOwner, upsertBinding, usageForSession } from '../src/store/queries'
 import { newSession, send, slugify, uniqueSlug } from '../src/core/session'
 import { configSchema } from '../src/config/schema'
 import { claudeAdapter } from '../src/adapters/claude'
-import type { Adapter } from '../src/adapters/types'
+import { withPrelude, type Adapter } from '../src/adapters/types'
+import type { AgentId } from '../src/types'
 
 const cfg = configSchema.parse({})
 
@@ -259,4 +260,47 @@ test('a disabled agent is refused with a clear message', async () => {
   expect(
     send({ db, cfg: disabled, adapterFor: () => scripted([]) }, s, 'kiro', 'hi'),
   ).rejects.toThrow(/kiro is disabled/)
+})
+
+test('the agent taking over receives what the previous one did, not a bare question', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'refactor the auth layer', lead: 'codex' })
+
+  const seen: Record<string, string> = {}
+  let codexCalls = 0
+  const answer = (text: string) => [
+    JSON.stringify({ type: 'system', subtype: 'init', session_id: `sess-${text}` }),
+    JSON.stringify({ type: 'result', subtype: 'success', result: text }),
+  ]
+  const adapterFor = (agent: AgentId): Adapter => ({
+    ...claudeAdapter,
+    id: agent,
+    turn: (ctx) => {
+      seen[agent] = withPrelude(ctx)
+      if (agent === 'codex') codexCalls++
+      const lines =
+        agent !== 'codex'
+          ? answer('reviewed it')
+          : codexCalls === 1
+            ? answer('moved refresh into AuthClient')
+            : [JSON.stringify({ type: 'result', is_error: true, result: "You've hit your weekly limit" })]
+      return { cmd: ['bun', 'tests/fixtures/fake-agent.ts', ...lines], cwd: process.cwd() }
+    },
+  })
+
+  const cfg = configSchema.parse({ failover: { chain: ['codex', 'claude'] } })
+  await send({ db, cfg, adapterFor }, s, 'codex', 'start with token refresh')
+
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await send({ db, cfg, adapterFor }, s, 'codex', 'now review it')
+  } finally {
+    err.mockRestore()
+  }
+
+  // every piece of this was unit-tested and none of it was reachable: buildPrelude worked,
+  // withPrelude worked, and nothing populated ctx.prelude, so a successor agent arrived blind
+  expect(seen.claude).toContain('refactor the auth layer')
+  expect(seen.claude).toContain('moved refresh into AuthClient')
+  expect(seen.claude).toContain('now review it')
 })
