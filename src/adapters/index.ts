@@ -16,5 +16,5 @@ export function getAdapter(id: AgentId): Adapter {
   return adapters[id]
 }
 
-export const agentIds = Object.keys(adapters) as AgentId[]
+export { agentIds } from '../config/schema'
 export type { Adapter }

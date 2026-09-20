@@ -88,3 +88,11 @@ test('the usage text names every agent, so a new one cannot be left out of it', 
   const { agentIds } = await import('../src/config/schema')
   for (const id of agentIds) expect(USAGE).toContain(id)
 })
+
+test('there is one agent roster, not two that happen to agree', async () => {
+  const fromAdapters = (await import('../src/adapters')).agentIds
+  const fromSchema = (await import('../src/config/schema')).agentIds
+  // identity, not deep equality: two arrays that match today can be reordered apart tomorrow,
+  // and the order is user-visible in doctor, config and update
+  expect(fromAdapters as readonly string[]).toBe(fromSchema as readonly string[])
+})
