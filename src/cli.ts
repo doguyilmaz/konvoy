@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import { parseArgs, type Args } from './args'
 import { loadConfig, resolveAgent } from './config/load'
+import { agentIds } from './config/schema'
 import type { Config } from './config/schema'
 import { openDb } from './store/db'
 import { dbPath } from './paths'
@@ -26,7 +27,7 @@ export const USAGE = `konvoy ${VERSION}
 
 ${formatCommandList()}
 
-agents: claude, codex, kiro, opencode
+agents: ${agentIds.join(', ')}
 flags:  --session <slug>
 `
 

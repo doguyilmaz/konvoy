@@ -83,3 +83,8 @@ test('KONVOY_DEBUG=1 lets the raw error escape instead of being summarised', asy
   }
 })
 
+
+test('the usage text names every agent, so a new one cannot be left out of it', async () => {
+  const { agentIds } = await import('../src/config/schema')
+  for (const id of agentIds) expect(USAGE).toContain(id)
+})
