@@ -799,4 +799,11 @@ export const mutations: Mutation[] = [
     to: "    if (next !== undefined && !next.startsWith('-')) {",
     tests: ["tests/args.test.ts"],
   },
+  {
+    name: "konvoy new truncates an existing LEDGER.md when a slug is reused",
+    file: 'src/commands/new.ts',
+    from: "  if (!(await ledger.exists())) await Bun.write(ledger, `# Ledger — ${session.slug}\\n`)",
+    to: "  await Bun.write(ledger, `# Ledger — ${session.slug}\\n`)",
+    tests: ["tests/new.test.ts"],
+  },
 ]
