@@ -11,8 +11,17 @@ import {
   usageAcrossSessions,
 } from '../src/store/queries'
 import { formatUsage } from '../src/format'
+import { configSchema } from '../src/config/schema'
 
 const db = () => openDb(':memory:')
+const cfg = configSchema.parse({})
+const pricedCfg = configSchema.parse({
+  pricing: {
+    asOf: '2026-09-19',
+    models: {},
+    credits: { kiro: { usdPerCredit: 0.02 } },
+  },
+})
 
 test('usage is grouped per agent with tokens summed', () => {
   const d = db()
@@ -124,6 +133,75 @@ test('a gate rate is shown only where a verdict exists', () => {
   expect(without).not.toContain('0/0')
 })
 
+test('an agent billed in credits and one billed in dollars appear in the same ~USD column with comparable figures', () => {
+  const pricing = { asOf: '2026-09-19', models: {}, credits: { kiro: { usdPerCredit: 0.02 } } }
+  const out = formatUsage(
+    [
+      { agent: 'claude', turns: 18, inputTokens: 0, outputTokens: 0, costUsd: 1.8, credits: 0, gatePassed: 0, gateKnown: 0 },
+      { agent: 'kiro', turns: 9, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4, gatePassed: 0, gateKnown: 0 },
+    ],
+    pricing,
+  )
+  expect(out).toContain('~USD')
+  const claudeLine = out.split('\n').find((l) => l.startsWith('claude'))!
+  const kiroLine = out.split('\n').find((l) => l.startsWith('kiro'))!
+  expect(claudeLine).toContain('$1.80')
+  expect(kiroLine).toContain('$0.008')
+})
+
+test('the ~USD column is absent entirely when no pricing is configured', () => {
+  const rows: Parameters<typeof formatUsage>[0] = [
+    { agent: 'claude', turns: 1, inputTokens: 0, outputTokens: 0, costUsd: 1.8, credits: 0, gatePassed: 0, gateKnown: 0 },
+  ]
+  expect(formatUsage(rows)).not.toContain('~USD')
+  expect(formatUsage(rows, { asOf: '', models: {}, credits: {} })).not.toContain('~USD')
+})
+
+test('a row whose rate is not configured shows - in ~USD while still showing its native SPEND', () => {
+  const pricing = { asOf: '2026-09-19', models: {}, credits: { kiro: { usdPerCredit: 0.02 } } }
+  const out = formatUsage(
+    [
+      { agent: 'kiro', turns: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4, gatePassed: 0, gateKnown: 0 },
+      { agent: 'opencode', turns: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.07, gatePassed: 0, gateKnown: 0 },
+    ],
+    pricing,
+  )
+  const opencodeLine = out.split('\n').find((l) => l.startsWith('opencode'))!
+  expect(opencodeLine).toContain('0.070 cr')
+  const cells = opencodeLine.trim().split(/\s{2,}/)
+  expect(cells[5]).toBe('-')
+})
+
+test('the units note names the asOf date when the ~USD column is present', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  recordTurn(d, { sessionId: s.id, agent: 'kiro', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, credits: 0.4 })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    cmdUsage(d, pricedCfg, '/x', { all: false })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(lines.some((l) => l.includes('2026-09-19'))).toBe(true)
+})
+
+test('the units note stays plain when pricing is not configured', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 1, exitCode: 0 })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    cmdUsage(d, cfg, '/x', { all: false })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(lines.some((l) => /\d{4}-\d{2}-\d{2}/.test(l))).toBe(false)
+})
+
 test('both usage tables explain the mixed SPEND unit, not only the per-session one', () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'units', goal: 'g', cwd: '/repo', lead: 'claude' })
@@ -133,10 +211,10 @@ test('both usage tables explain the mixed SPEND unit, not only the per-session o
   let all: string[]
   let one: string[]
   try {
-    cmdUsage(db, '/repo', { all: true })
+    cmdUsage(db, cfg, '/repo', { all: true })
     all = log.mock.calls.map((c) => String(c[0]))
     log.mockClear()
-    cmdUsage(db, '/repo', { all: false })
+    cmdUsage(db, cfg, '/repo', { all: false })
     one = log.mock.calls.map((c) => String(c[0]))
   } finally {
     log.mockRestore()
@@ -153,7 +231,7 @@ test('usage --all on an empty database reports no turns and exits 0', () => {
   let code: number
   let lines: string[]
   try {
-    code = cmdUsage(d, '/nowhere', { all: true })
+    code = cmdUsage(d, cfg, '/nowhere', { all: true })
     lines = log.mock.calls.map((c) => String(c[0]))
   } finally {
     log.mockRestore()
@@ -168,7 +246,7 @@ test('usage with no session in this directory reports the standard error and exi
   let code: number
   let lines: string[]
   try {
-    code = cmdUsage(d, '/nowhere', { all: false })
+    code = cmdUsage(d, cfg, '/nowhere', { all: false })
     lines = err.mock.calls.map((c) => String(c[0]))
   } finally {
     err.mockRestore()
@@ -209,7 +287,7 @@ test('usage --chart prints the turns-per-day heatmap and the share-of-turns bars
   const log = spyOn(console, 'log').mockImplementation(() => {})
   let lines: string[]
   try {
-    cmdUsage(d, '/x', { all: false, chart: true })
+    cmdUsage(d, cfg, '/x', { all: false, chart: true })
     lines = log.mock.calls.map((c) => String(c[0]))
   } finally {
     log.mockRestore()
@@ -227,7 +305,7 @@ test('usage --chart also prints a per-agent turns-per-day sparkline', () => {
   const log = spyOn(console, 'log').mockImplementation(() => {})
   let lines: string[]
   try {
-    cmdUsage(d, '/x', { all: false, chart: true })
+    cmdUsage(d, cfg, '/x', { all: false, chart: true })
     lines = log.mock.calls.map((c) => String(c[0]))
   } finally {
     log.mockRestore()
@@ -246,7 +324,7 @@ test('usage without --chart prints no chart output', () => {
   const log = spyOn(console, 'log').mockImplementation(() => {})
   let lines: string[]
   try {
-    cmdUsage(d, '/x', { all: false })
+    cmdUsage(d, cfg, '/x', { all: false })
     lines = log.mock.calls.map((c) => String(c[0]))
   } finally {
     log.mockRestore()
@@ -261,7 +339,7 @@ test('usage for a session with zero turns reports that and exits 0', () => {
   let code: number
   let lines: string[]
   try {
-    code = cmdUsage(d, '/x', { all: false })
+    code = cmdUsage(d, cfg, '/x', { all: false })
     lines = log.mock.calls.map((c) => String(c[0]))
   } finally {
     log.mockRestore()

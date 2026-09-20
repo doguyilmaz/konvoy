@@ -101,7 +101,7 @@ export async function main(argv: string[]): Promise<number> {
       return cmdRm(db, cwd, target, { yes: args.flags.yes === true })
     }
     case 'usage':
-      return cmdUsage(db, cwd, { all: args.flags.all === true, slug, chart: args.flags.chart === true })
+      return cmdUsage(db, cfg, cwd, { all: args.flags.all === true, slug, chart: args.flags.chart === true })
     case 'version':
       console.log(`konvoy ${VERSION}`)
       return cmdStatus(db, cfg, cwd, slug)

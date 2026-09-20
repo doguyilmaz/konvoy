@@ -29,3 +29,9 @@ export function estimateUsd(row: Priced, pricing: Pricing): number | null {
 
   return null
 }
+
+// pricing defaults to empty, so an unconfigured user must never see a ~USD column of dashes —
+// the column exists only once there's at least one rate to estimate from
+export function isPricingConfigured(pricing: Pricing): boolean {
+  return Object.keys(pricing.models).length > 0 || Object.keys(pricing.credits).length > 0
+}

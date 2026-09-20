@@ -1,5 +1,6 @@
 import type { AgentId } from './types'
 import type { UsageRow } from './store/queries'
+import { estimateUsd, isPricingConfigured, type Pricing } from './pricing'
 
 export interface RosterRow {
   agent: AgentId
@@ -40,15 +41,36 @@ function spend(row: UsageRow): string {
   return '-'
 }
 
-export function formatUsage(rows: UsageRow[]): string {
+// a row already billed in real dollars needs no pricing table — its ~USD figure is just
+// that number; only a credit-billed row is genuinely estimated, via the configured rate
+function estimateRowUsd(row: UsageRow, pricing: Pricing): number | null {
+  if (row.costUsd > 0) return row.costUsd
+  return estimateUsd(
+    { agent: row.agent, model: null, inputTokens: row.inputTokens, outputTokens: row.outputTokens, credits: row.credits },
+    pricing,
+  )
+}
+
+function usdCell(row: UsageRow, pricing: Pricing): string {
+  const est = estimateRowUsd(row, pricing)
+  if (est === null) return '-'
+  // an already-real dollar figure keeps money's usual 2 decimals; a credit-derived estimate
+  // gets the extra precision credits themselves are shown with, or it rounds to nothing
+  return row.costUsd > 0 ? `$${est.toFixed(2)}` : `$${est.toFixed(3)}`
+}
+
+export function formatUsage(rows: UsageRow[], pricing?: Pricing): string {
+  const showUsd = pricing !== undefined && isPricingConfigured(pricing)
+  const header = ['AGENT', 'TURNS', 'IN', 'OUT', 'SPEND', ...(showUsd ? ['~USD'] : []), 'GATE']
   return table(
-    ['AGENT', 'TURNS', 'IN', 'OUT', 'SPEND', 'GATE'],
+    header,
     rows.map((r) => [
       r.agent,
       String(r.turns),
       String(r.inputTokens),
       String(r.outputTokens),
       spend(r),
+      ...(showUsd ? [usdCell(r, pricing!)] : []),
       r.gateKnown > 0 ? `${r.gatePassed}/${r.gateKnown}` : '-',
     ]),
   )

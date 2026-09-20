@@ -10,12 +10,19 @@ import {
 } from '../store/queries'
 import { formatUsage } from '../format'
 import { agentSparklines, heatmap, shareBars } from '../chart'
+import { isPricingConfigured } from '../pricing'
+import type { Config } from '../config/schema'
 import type { Session } from '../types'
 
 // the SPEND column mixes dollars and credits, so every table that shows it carries this line
 const UNITS = "spend is in each agent's own unit; a dash means the CLI reported none"
 
-export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?: string; chart?: boolean }): number {
+export function cmdUsage(
+  db: Database,
+  cfg: Config,
+  cwd: string,
+  opts: { all: boolean; slug?: string; chart?: boolean },
+): number {
   let session: Session | null = null
   let rows: UsageRow[]
 
@@ -40,8 +47,12 @@ export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?:
     console.log(`session ${session.slug}`)
   }
 
-  console.log(formatUsage(rows))
-  console.log(UNITS)
+  console.log(formatUsage(rows, cfg.pricing))
+  console.log(
+    isPricingConfigured(cfg.pricing)
+      ? `${UNITS}; ~USD is estimated from rates configured as of ${cfg.pricing.asOf || 'an unspecified date'}`
+      : UNITS,
+  )
 
   if (opts.chart) {
     const sessionId = opts.all ? undefined : session?.id
