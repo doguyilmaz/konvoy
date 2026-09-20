@@ -166,3 +166,30 @@ test('with no chain configured a block surfaces instead of moving', async () => 
   expect(calls).toEqual(['codex'])
   expect(r.error?.kind).toBe('rate')
 })
+
+test('a chain member the user never set up is skipped out loud, not silently', async () => {
+  const { db, s } = seed()
+  const calls: AgentId[] = []
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[] = []
+  try {
+    // claude sits in the middle of the chain but is disabled, so kiro must take the handoff
+    const r = await send(
+      {
+        db,
+        cfg: cfg({ agents: { claude: { enabled: false } } }),
+        adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls),
+      },
+      s, 'codex', 'hello',
+    )
+    lines = err.mock.calls.map((c) => String(c[0]))
+    expect(calls).toEqual(['codex', 'kiro'])
+    expect(r.final).toBe('kiro')
+  } finally {
+    err.mockRestore()
+  }
+  // a three-agent chain that quietly becomes a two-agent chain is the user not being told
+  const skipped = lines.find((l) => l.includes('claude') && !l.includes('kiro'))
+  expect(skipped).toBeDefined()
+  expect(skipped!.toLowerCase()).toMatch(/skip|disabled|not installed/)
+})

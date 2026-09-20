@@ -142,6 +142,7 @@ export async function send(
     let firstTurnId: string | null = null
     let result: TurnResult | undefined
 
+    let blocked: { agent: AgentId; kind: string; message: string } | null = null
     for (let i = 0; i < chain.length; i++) {
       const current = chain[i]!
       const isHead = i === 0
@@ -161,10 +162,25 @@ export async function send(
           : { agent: current, installed: false, version: null }
       }
       // A chain member the user hasn't actually set up can't take the handoff — skip it
-      // rather than aborting the whole chain, since a later member might still work.
+      // rather than aborting the whole chain, since a later member might still work. Say so:
+      // a three-agent chain that quietly becomes a two-agent chain is the user not being told.
       if (!currentSettings.enabled || !currentDetection.installed) {
+        if (!isHead) {
+          const why = !currentSettings.enabled ? 'disabled in config' : 'not installed'
+          console.error(`konvoy: skipping ${current} in the failover chain — ${why}`)
+        }
         if (result) continue
         break
+      }
+
+      // The move is announced here rather than where the block was detected, because only here
+      // is the successor known to be the one that actually runs. Naming chain[i + 1] earlier
+      // said "moving to claude" and then ran kiro when claude turned out to be unusable.
+      if (blocked) {
+        console.error(
+          `konvoy: ${blocked.agent} is blocked (${blocked.kind}) — "${blocked.message}" — ${current} is taking over`,
+        )
+        blocked = null
       }
 
       const currentEffort = clampEffort(currentSettings.effort, currentDetection.efforts)
@@ -206,10 +222,7 @@ export async function send(
       const movable = kind === 'rate' || kind === 'auth' || kind === 'upstream'
       if (!movable) return result
 
-      const next = chain[i + 1]
-      if (next) {
-        console.error(`konvoy: ${current} is blocked (${kind}) — "${result.error!.message}" — moving to ${next}`)
-      }
+      blocked = { agent: current, kind: kind!, message: result.error!.message }
     }
 
     return result!

@@ -474,4 +474,18 @@ export const mutations: Mutation[] = [
     to: '        r = await runOnce(current, currentAdapter, ctxBuild, null)',
     tests: ['tests/failover.test.ts'],
   },
+  {
+    name: 'a chain member that cannot run is skipped without telling anyone',
+    file: 'src/core/session.ts',
+    from: 'if (!isHead) {',
+    to: 'if (false) {',
+    tests: ['tests/failover.test.ts'],
+  },
+  {
+    name: 'the handover is never announced, so a switched agent looks like the one asked for',
+    file: 'src/core/session.ts',
+    from: 'blocked = { agent: current, kind: kind!, message: result.error!.message }',
+    to: 'blocked = null',
+    tests: ['tests/failover.test.ts'],
+  },
 ]
