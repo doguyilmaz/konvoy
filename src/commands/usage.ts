@@ -5,6 +5,7 @@ import {
   turnsPerDay,
   turnsPerDayByAgent,
   usageAcrossSessions,
+  usageByAgentModel,
   usageForSession,
   type UsageRow,
 } from '../store/queries'
@@ -47,7 +48,9 @@ export function cmdUsage(
     console.log(`session ${session.slug}`)
   }
 
-  console.log(formatUsage(rows, cfg.pricing))
+  const sessionId = opts.all ? undefined : session?.id
+
+  console.log(formatUsage(rows, cfg.pricing, usageByAgentModel(db, sessionId)))
   console.log(
     isPricingConfigured(cfg.pricing)
       ? `${UNITS}; ~USD is estimated from rates configured as of ${cfg.pricing.asOf || 'an unspecified date'}`
@@ -55,7 +58,6 @@ export function cmdUsage(
   )
 
   if (opts.chart) {
-    const sessionId = opts.all ? undefined : session?.id
     console.log('\nturns per day')
     console.log(heatmap(turnsPerDay(db, sessionId)))
     console.log('\nshare of turns')

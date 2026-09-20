@@ -35,3 +35,43 @@ export function estimateUsd(row: Priced, pricing: Pricing): number | null {
 export function isPricingConfigured(pricing: Pricing): boolean {
   return Object.keys(pricing.models).length > 0 || Object.keys(pricing.credits).length > 0
 }
+
+export interface ModelUsage {
+  agent: AgentId
+  model: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  credits: number
+}
+
+// Summed per model, never priced once on the aggregate: a session that ran half its turns on
+// an expensive model and half on a cheap one must not be priced as though it used either one
+// throughout — that's the whole reason `model` lives on the turn instead of the binding.
+export function estimateAgentUsd(agent: AgentId, rows: ModelUsage[], pricing: Pricing): number | null {
+  let total = 0
+  for (const row of rows) {
+    if (row.agent !== agent) continue
+
+    if (row.costUsd > 0) {
+      total += row.costUsd
+      continue
+    }
+
+    const est = estimateUsd(
+      { agent, model: row.model, inputTokens: row.inputTokens, outputTokens: row.outputTokens, credits: row.credits },
+      pricing,
+    )
+    if (est !== null) {
+      total += est
+      continue
+    }
+
+    // Unpriced only poisons the total when this row actually needed a rate to be counted.
+    // A bare null-model row — turns recorded before the `model` column existed — never needed
+    // one: it contributes nothing through the model path by definition, not through a missing rate.
+    const neededRate = row.credits > 0 || (row.model !== null && (row.inputTokens > 0 || row.outputTokens > 0))
+    if (neededRate) return null
+  }
+  return total
+}

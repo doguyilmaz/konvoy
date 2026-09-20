@@ -327,6 +327,40 @@ export function usageAcrossSessions(db: Database): UsageRow[] {
   return rows.map(toUsage)
 }
 
+export interface AgentModelUsage {
+  agent: AgentId
+  model: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  credits: number
+}
+
+// same COALESCE/SUM style as USAGE_COLUMNS, on purpose: this and the per-agent totals above
+// must never treat a null differently, or the two views of the same turns would disagree
+const USAGE_BY_MODEL_COLUMNS = `agent,
+  model,
+  COALESCE(SUM(input_tokens), 0) AS input_tokens,
+  COALESCE(SUM(output_tokens), 0) AS output_tokens,
+  COALESCE(SUM(cost_usd), 0) AS cost_usd,
+  COALESCE(SUM(credits), 0) AS credits`
+
+export function usageByAgentModel(db: Database, sessionId?: string): AgentModelUsage[] {
+  const sql = sessionId
+    ? `SELECT ${USAGE_BY_MODEL_COLUMNS} FROM turn
+       WHERE session_id = $sessionId GROUP BY agent, model ORDER BY agent, model`
+    : `SELECT ${USAGE_BY_MODEL_COLUMNS} FROM turn GROUP BY agent, model ORDER BY agent, model`
+  const rows = (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as Record<string, unknown>[]
+  return rows.map((r) => ({
+    agent: r.agent as AgentId,
+    model: (r.model as string | null) ?? null,
+    inputTokens: r.input_tokens as number,
+    outputTokens: r.output_tokens as number,
+    costUsd: r.cost_usd as number,
+    credits: r.credits as number,
+  }))
+}
+
 // 'localtime' matters: without it SQLite buckets by UTC, so every turn run between midnight
 // and the local UTC offset lands on the previous day's square — verified on this machine
 // (UTC+3), where a turn at 01:30 on the 21st was reported as the 20th.

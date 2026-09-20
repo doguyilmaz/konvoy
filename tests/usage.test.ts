@@ -7,6 +7,7 @@ import {
   setGateResult,
   turnsPerDay,
   turnsPerDayByAgent,
+  usageByAgentModel,
   usageForSession,
   usageAcrossSessions,
 } from '../src/store/queries'
@@ -89,6 +90,24 @@ test('usage across sessions sums every session', () => {
   expect(row.costUsd).toBeCloseTo(3)
 })
 
+test('usageByAgentModel groups by agent and model, keeping different models of the same agent apart', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, inputTokens: 100, model: 'cheap' })
+  recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, inputTokens: 200, model: 'cheap' })
+  recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, inputTokens: 500, model: 'expensive' })
+  recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, inputTokens: 50 }) // no model recorded
+
+  const rows = usageByAgentModel(d, s.id)
+  expect(rows).toHaveLength(3)
+  const cheap = rows.find((r) => r.model === 'cheap')!
+  const expensive = rows.find((r) => r.model === 'expensive')!
+  const noModel = rows.find((r) => r.model === null)!
+  expect(cheap.inputTokens).toBe(300)
+  expect(expensive.inputTokens).toBe(500)
+  expect(noModel.inputTokens).toBe(50)
+})
+
 test('an unreported cost shows as a dash, never as zero', () => {
   const out = formatUsage([
     { agent: 'claude', turns: 1, inputTokens: 10, outputTokens: 2, costUsd: 0.75, credits: 0, gatePassed: 0, gateKnown: 0 },
@@ -135,12 +154,17 @@ test('a gate rate is shown only where a verdict exists', () => {
 
 test('an agent billed in credits and one billed in dollars appear in the same ~USD column with comparable figures', () => {
   const pricing = { asOf: '2026-09-19', models: {}, credits: { kiro: { usdPerCredit: 0.02 } } }
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    { agent: 'claude', model: null, inputTokens: 0, outputTokens: 0, costUsd: 1.8, credits: 0 },
+    { agent: 'kiro', model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4 },
+  ]
   const out = formatUsage(
     [
       { agent: 'claude', turns: 18, inputTokens: 0, outputTokens: 0, costUsd: 1.8, credits: 0, gatePassed: 0, gateKnown: 0 },
       { agent: 'kiro', turns: 9, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4, gatePassed: 0, gateKnown: 0 },
     ],
     pricing,
+    modelRows,
   )
   expect(out).toContain('~USD')
   const claudeLine = out.split('\n').find((l) => l.startsWith('claude'))!
@@ -159,16 +183,104 @@ test('the ~USD column is absent entirely when no pricing is configured', () => {
 
 test('a row whose rate is not configured shows - in ~USD while still showing its native SPEND', () => {
   const pricing = { asOf: '2026-09-19', models: {}, credits: { kiro: { usdPerCredit: 0.02 } } }
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    { agent: 'kiro', model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4 },
+    { agent: 'opencode', model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.07 },
+  ]
   const out = formatUsage(
     [
       { agent: 'kiro', turns: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4, gatePassed: 0, gateKnown: 0 },
       { agent: 'opencode', turns: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.07, gatePassed: 0, gateKnown: 0 },
     ],
     pricing,
+    modelRows,
   )
   const opencodeLine = out.split('\n').find((l) => l.startsWith('opencode'))!
   expect(opencodeLine).toContain('0.070 cr')
   const cells = opencodeLine.trim().split(/\s{2,}/)
+  expect(cells[5]).toBe('-')
+})
+
+test('a token-only agent with a configured per-model rate shows a real ~USD, not -', () => {
+  const pricing = { asOf: '2026-09-19', models: { 'gpt-5.1': { inputPerMTok: 10, outputPerMTok: 30 } }, credits: {} }
+  const rows: Parameters<typeof formatUsage>[0] = [
+    { agent: 'codex', turns: 5, inputTokens: 1_000_000, outputTokens: 100_000, costUsd: 0, credits: 0, gatePassed: 0, gateKnown: 0 },
+  ]
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    { agent: 'codex', model: 'gpt-5.1', inputTokens: 1_000_000, outputTokens: 100_000, costUsd: 0, credits: 0 },
+  ]
+  const out = formatUsage(rows, pricing, modelRows)
+  const line = out.split('\n').find((l) => l.startsWith('codex'))!
+  const cells = line.trim().split(/\s{2,}/)
+  // 1M in @ $10/MTok + 100k out @ $30/MTok = 10 + 3 = 13
+  expect(cells[5]).toBe('$13.000')
+})
+
+test('an agent whose model changed mid-session is priced per model, not by one representative model', () => {
+  const pricing = {
+    asOf: '2026-09-19',
+    models: { cheap: { inputPerMTok: 1, outputPerMTok: 1 }, expensive: { inputPerMTok: 100, outputPerMTok: 100 } },
+    credits: {},
+  }
+  const rows: Parameters<typeof formatUsage>[0] = [
+    { agent: 'codex', turns: 2, inputTokens: 2_000_000, outputTokens: 0, costUsd: 0, credits: 0, gatePassed: 0, gateKnown: 0 },
+  ]
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    { agent: 'codex', model: 'cheap', inputTokens: 1_000_000, outputTokens: 0, costUsd: 0, credits: 0 },
+    { agent: 'codex', model: 'expensive', inputTokens: 1_000_000, outputTokens: 0, costUsd: 0, credits: 0 },
+  ]
+  // per-model sum: 1*1 + 1*100 = 101 — pricing the 2M aggregate as entirely "cheap" would give 2,
+  // entirely "expensive" would give 200; the correct answer matches neither
+  const out = formatUsage(rows, pricing, modelRows)
+  const line = out.split('\n').find((l) => l.startsWith('codex'))!
+  const cells = line.trim().split(/\s{2,}/)
+  expect(cells[5]).toBe('$101.000')
+})
+
+test('turns with model = NULL do not erase an agent estimate that comes from credits or dollars', () => {
+  const pricing = { asOf: '2026-09-19', models: {}, credits: { kiro: { usdPerCredit: 0.02 } } }
+  const rows: Parameters<typeof formatUsage>[0] = [
+    { agent: 'kiro', turns: 2, inputTokens: 500, outputTokens: 50, costUsd: 0, credits: 0.4, gatePassed: 0, gateKnown: 0 },
+  ]
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    // a pre-migration turn: tokens recorded, no model, no credits — must not poison the total
+    { agent: 'kiro', model: null, inputTokens: 500, outputTokens: 50, costUsd: 0, credits: 0 },
+    // the turn that actually carries the charge
+    { agent: 'kiro', model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4 },
+  ]
+  const out = formatUsage(rows, pricing, modelRows)
+  const line = out.split('\n').find((l) => l.startsWith('kiro'))!
+  const cells = line.trim().split(/\s{2,}/)
+  expect(cells[5]).toBe('$0.008')
+})
+
+test('an agent with tokens but no configured rate still shows -', () => {
+  const pricing = { asOf: '2026-09-19', models: { 'priced-model': { inputPerMTok: 10, outputPerMTok: 10 } }, credits: {} }
+  const rows: Parameters<typeof formatUsage>[0] = [
+    { agent: 'opencode', turns: 1, inputTokens: 1000, outputTokens: 10, costUsd: 0, credits: 0, gatePassed: 0, gateKnown: 0 },
+  ]
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    { agent: 'opencode', model: 'unpriced-model', inputTokens: 1000, outputTokens: 10, costUsd: 0, credits: 0 },
+  ]
+  const out = formatUsage(rows, pricing, modelRows)
+  expect(out).toContain('~USD')
+  const line = out.split('\n').find((l) => l.startsWith('opencode'))!
+  const cells = line.trim().split(/\s{2,}/)
+  expect(cells[5]).toBe('-')
+})
+
+test('a partially-priced agent shows -, not the partial sum of only its priced rows', () => {
+  const pricing = { asOf: '2026-09-19', models: { 'priced-model': { inputPerMTok: 10, outputPerMTok: 0 } }, credits: {} }
+  const rows: Parameters<typeof formatUsage>[0] = [
+    { agent: 'codex', turns: 2, inputTokens: 2_000_000, outputTokens: 0, costUsd: 0, credits: 0, gatePassed: 0, gateKnown: 0 },
+  ]
+  const modelRows: Parameters<typeof formatUsage>[2] = [
+    { agent: 'codex', model: 'priced-model', inputTokens: 1_000_000, outputTokens: 0, costUsd: 0, credits: 0 },
+    { agent: 'codex', model: 'unpriced-model', inputTokens: 1_000_000, outputTokens: 0, costUsd: 0, credits: 0 },
+  ]
+  const out = formatUsage(rows, pricing, modelRows)
+  const line = out.split('\n').find((l) => l.startsWith('codex'))!
+  const cells = line.trim().split(/\s{2,}/)
   expect(cells[5]).toBe('-')
 })
 
