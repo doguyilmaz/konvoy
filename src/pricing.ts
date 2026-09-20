@@ -49,29 +49,35 @@ export interface ModelUsage {
 // an expensive model and half on a cheap one must not be priced as though it used either one
 // throughout — that's the whole reason `model` lives on the turn instead of the binding.
 export function estimateAgentUsd(agent: AgentId, rows: ModelUsage[], pricing: Pricing): number | null {
-  let total = 0
-  for (const row of rows) {
-    if (row.agent !== agent) continue
+  const mine = rows.filter((r) => r.agent === agent)
+  // An agent bills one way or the other. Kiro charges credits and reports token counts beside
+  // them for information; codex and opencode report only tokens. Deciding per agent rather than
+  // per row is what keeps a kiro turn that charged no credits from reading as unpriceable, and
+  // a codex turn with real tokens and no model from reading as free.
+  const billsInCredits = mine.some((r) => r.credits > 0)
 
+  let total = 0
+  for (const row of mine) {
     if (row.costUsd > 0) {
       total += row.costUsd
       continue
     }
 
+    if (billsInCredits) {
+      if (row.credits === 0) continue
+      const rate = pricing.credits[agent]
+      if (!rate) return null
+      total += row.credits * rate.usdPerCredit
+      continue
+    }
+
+    if (row.inputTokens === 0 && row.outputTokens === 0) continue
     const est = estimateUsd(
       { agent, model: row.model, inputTokens: row.inputTokens, outputTokens: row.outputTokens, credits: row.credits },
       pricing,
     )
-    if (est !== null) {
-      total += est
-      continue
-    }
-
-    // Unpriced only poisons the total when this row actually needed a rate to be counted.
-    // A bare null-model row — turns recorded before the `model` column existed — never needed
-    // one: it contributes nothing through the model path by definition, not through a missing rate.
-    const neededRate = row.credits > 0 || (row.model !== null && (row.inputTokens > 0 || row.outputTokens > 0))
-    if (neededRate) return null
+    if (est === null) return null
+    total += est
   }
   return total
 }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { estimateUsd } from '../src/pricing'
+import { estimateAgentUsd, estimateUsd } from '../src/pricing'
 
 const pricing = {
   asOf: '2026-09-19',
@@ -43,4 +43,16 @@ test('no rates at all means no estimate', () => {
   expect(
     estimateUsd({ agent: 'claude', model: 'opus', inputTokens: 1000, outputTokens: 10, credits: 0 }, { asOf: '', models: {}, credits: {} }),
   ).toBe(null)
+})
+
+test('tokens that could not be priced report nothing, not nothing spent', () => {
+  // an agent with no model configured records model: null, which is the DEFAULT — not a
+  // legacy row. Reporting $0.00 for real tokens says they were free; a dash says we cannot say.
+  const rows = [{ agent: 'codex' as const, model: null, inputTokens: 4500, outputTokens: 1800, costUsd: 0, credits: 0 }]
+  expect(estimateAgentUsd('codex', rows, pricing)).toBe(null)
+})
+
+test('a row that consumed nothing at all still contributes nothing', () => {
+  const rows = [{ agent: 'codex' as const, model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 }]
+  expect(estimateAgentUsd('codex', rows, pricing)).toBe(0)
 })
