@@ -73,6 +73,42 @@ A failover notice, when codex hits its weekly limit mid-chain:
 konvoy: codex is blocked (rate) — "You've hit your weekly limit · resets 7am" — claude is taking over
 ```
 
+A handoff, with `delegation.enabled` on and `roles.reviewer` set to `claude`. codex ends its
+turn with a `<<<konvoy ... >>>` block naming the `reviewer` role:
+
+```text
+Fixed: the refresh call was firing on a fixed 55-minute timer, so a laptop asleep past
+that mark woke up to a 401. Switched it to refresh on 401 with a single in-flight retry.
+
+<<<konvoy
+to: reviewer
+task: check the retry does not loop when the refresh itself 401s
+open:
+- whether a second consecutive 401 should sign the user out instead of retrying again
+decisions:
+- refresh on 401 rather than on a timer, it tracks the actual failure instead of a guess
+>>>
+```
+
+konvoy resolves `reviewer` to claude, runs it, and prints:
+
+```text
+konvoy: codex handed off to claude — "check the retry does not loop when the refresh itself 401s"
+```
+
+claude's turn runs with codex's task as its prompt, preceded by this prelude:
+
+```text
+goal: fix the token refresh bug
+
+codex handed off to reviewer:
+task: check the retry does not loop when the refresh itself 401s
+open:
+- whether a second consecutive 401 should sign the user out instead of retrying again
+decisions:
+- refresh on 401 rather than on a timer, it tracks the actual failure instead of a guess
+```
+
 ## How it works
 
 One konvoy session holds a binding per agent, and each binding holds that agent's own

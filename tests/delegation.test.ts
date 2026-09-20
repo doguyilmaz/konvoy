@@ -19,16 +19,21 @@ const cfg = (over: Record<string, unknown> = {}) =>
 function harness(script: Partial<Record<AgentId, string[]>>) {
   const calls: AgentId[] = []
   const seen: Record<string, string> = {}
+  // The real adapter's own turn() builds the actual argv a CLI would receive — capturing its
+  // cmd here (rather than re-deriving withPrelude by hand) is what makes a check against it
+  // prove the instruction reaches an actual command line, not just this harness's idea of one.
+  const cmds: Record<string, string[]> = {}
   const adapterFor = (agent: AgentId): Adapter => ({
     ...claudeAdapter,
     id: agent,
     turn: (ctx) => {
       calls.push(agent)
       seen[agent] = withPrelude(ctx)
+      cmds[agent] = claudeAdapter.turn(ctx).cmd
       return { cmd: ['bun', 'tests/fixtures/fake-agent.ts', ...(script[agent] ?? ok(agent))], cwd: process.cwd() }
     },
   })
-  return { calls, seen, adapterFor }
+  return { calls, seen, cmds, adapterFor }
 }
 
 test('an envelope naming a role runs that role next', async () => {
@@ -154,4 +159,60 @@ test('a recipient the user disabled is reported, and the original answer stands'
   expect(final).toContain('done.')
   // silence here would leave the user believing a review happened
   expect(lines.join('\n')).toContain('claude')
+})
+
+// The one test the task asks for: every earlier test in this file checks a single piece of
+// the path in isolation. None of them look at the sending agent's own command line, so none
+// would fail if `ctx.delegation` were only threaded to the recipient and never to codex —
+// exactly the shape of the four capabilities (sparkline, estimateUsd, the prelude,
+// parseEnvelope) that were built, unit-tested, and never reachable from a real run. This one
+// drives send() once and checks the whole path in that single run: the instruction reached
+// codex's real command line, the named recipient actually ran, its prelude carried codex's
+// own task/open/decisions rather than a derived summary, and the two turns are linked in the
+// store — any one missing means the feature is not connected.
+test('end to end: delegation reaches the command line, runs the recipient, and links the turns', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
+  const h = harness({
+    codex: ok(
+      'done.\n\n<<<konvoy\n' +
+        'to: reviewer\n' +
+        'task: check the refresh path\n' +
+        'open:\n- the device clock drifts\n' +
+        'decisions:\n- refresh on 401 rather than on a timer\n' +
+        '>>>',
+    ),
+  })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[] = []
+  try {
+    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    lines = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+
+  // codex was asked for an envelope: the instruction reached its real command line, built by
+  // the same claudeAdapter.turn() a live run would use — not a hand-built ctx.
+  expect(h.cmds.codex!.join(' ')).toContain('<<<konvoy')
+
+  // it emitted one, and the named recipient (the reviewer role, resolved to claude) ran
+  expect(h.calls).toEqual(['codex', 'claude'])
+  expect(lines.join('\n')).toContain('codex handed off to claude')
+
+  // the recipient's prelude carried codex's own task, its open question and its stated
+  // decision — not a summary konvoy invented — and never claims the intent went unrecorded
+  const recipientCmd = h.cmds.claude!.join(' ')
+  expect(recipientCmd).toContain('check the refresh path')
+  expect(recipientCmd).toContain('the device clock drifts')
+  expect(recipientCmd).toContain('refresh on 401 rather than on a timer')
+  expect(recipientCmd.toLowerCase()).not.toContain('was not recorded')
+
+  // both turns are linked in the store through parent_turn_id
+  const rows = db
+    .query('SELECT agent, id, parent_turn_id FROM turn WHERE session_id = $id ORDER BY started_at')
+    .all({ id: s.id }) as { agent: string; id: string; parent_turn_id: string | null }[]
+  expect(rows[0]!.agent).toBe('codex')
+  expect(rows[1]!.agent).toBe('claude')
+  expect(rows[1]!.parent_turn_id).toBe(rows[0]!.id)
 })
