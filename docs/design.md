@@ -1157,6 +1157,24 @@ konvoy does not judge the work itself. It has no model, and a gate that asked an
 grade the first would cost a full turn to produce an opinion. An exit code is cheap, objective,
 and already exists in every project worth running a convoy on.
 
+### The command is the machine owner's, not the repository's
+
+A gate runs automatically after a turn, which makes it a different kind of setting from the rest
+of the configuration: a cloned repository that could name the command would have konvoy execute
+it unprompted. That is the same path `agents.<id>.bin` opened and section 30's trust rules
+closed, and it reopens wider here — `bin` at least required the user to be using that agent,
+where a gate runs on every turn.
+
+So `gate.command` is privileged: only the global configuration may set it, and a project layer
+that tries is ignored with a warning, exactly as `bin`, `permission` and `harness` already are.
+
+This costs something honest. A gate is naturally a per-project fact — `bun test` in one
+repository, `cargo test` in another — and a single global command serves a developer who works
+in one language better than one who does not. The alternative designs each carry their own
+weight: an allowlist in the global config with the project choosing among it, or a trust prompt
+remembered per directory. Neither is written now, because the safe and simple version can be
+widened later, while a hole shipped by default cannot be closed retroactively in anyone's clone.
+
 ### What it unlocks
 
 A recorded verdict per turn turns three open questions into arithmetic: whether one agent's work
