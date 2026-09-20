@@ -1,6 +1,6 @@
 import type { AgentId } from '../types'
 import { agentIds } from '../adapters'
-import { detect, type Detection } from '../core/detect'
+import { detect, type Detection, clearDetectCache } from '../core/detect'
 import { resolveAgent } from '../config/load'
 import type { Config } from '../config/schema'
 
@@ -59,6 +59,8 @@ export async function cmdUpdate(
       failures++
       continue
     }
+    // the memo would hand back the pre-update detection; the version line must come from a fresh --version
+    clearDetectCache()
     const after = await deps.detect(agent, { bin: settings.bin })
     console.log(`ok ${agent}: ${before.version} -> ${after.version}`)
   }

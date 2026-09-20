@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
+import { clearDetectCache, detect } from '../src/core/detect'
 import { cmdUpdate, updateCommand } from '../src/commands/update'
 import { configSchema } from '../src/config/schema'
 import type { AgentId } from '../src/types'
@@ -87,5 +88,33 @@ test('a non-zero spawn exit is reported, counted as a failure, and does not stop
     expect(lines).toContain('ok opencode: 2.0.10 -> 2.0.10')
   } finally {
     log.mockRestore()
+  }
+})
+
+// realUpdateDeps.detect is the memoized detect, keyed by agent, model and bin — identical before
+// and after the spawn, so the "after" version came from the memo and every update printed
+// "X -> X". The suite's own output showed "ok opencode: 2.0.10 -> 2.0.10". This drives the real
+// memoized detect with an injected --version whose answer changes when the update runs.
+test('after an update the reported version comes from a fresh detect, not the memo', async () => {
+  clearDetectCache()
+  let version = '1.0.0'
+  const deps = { run: async () => ({ stdout: `claude ${version}`, exitCode: 0 }), readText: async () => null }
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    await cmdUpdate(
+      configSchema.parse({ agents: { codex: { enabled: false }, kiro: { enabled: false }, opencode: { enabled: false } } }),
+      { all: true },
+      {
+        detect: (agent, opts) => detect(agent, { ...opts, deps }),
+        spawn: async () => {
+          version = '2.0.0'
+          return 0
+        },
+      },
+    )
+    expect(log.mock.calls.map((c) => String(c[0]))).toContain('ok claude: 1.0.0 -> 2.0.0')
+  } finally {
+    log.mockRestore()
+    clearDetectCache()
   }
 })

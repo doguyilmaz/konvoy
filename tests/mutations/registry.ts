@@ -785,4 +785,11 @@ export const mutations: Mutation[] = [
     to: "Math.max(0, Math.round((v / m) * (BLOCKS.length - 1)))",
     tests: ["tests/chart.test.ts"],
   },
+  {
+    name: "konvoy update reports X -> X because the post-update detect is served from the memo",
+    file: 'src/commands/update.ts',
+    from: "    clearDetectCache()\n    const after = await deps.detect(agent, { bin: settings.bin })",
+    to: "    const after = await deps.detect(agent, { bin: settings.bin })",
+    tests: ["tests/update.test.ts"],
+  },
 ]
