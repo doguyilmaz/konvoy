@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
 const PERMISSION: Record<Permission, string> = {
   safe: 'manual',
@@ -22,7 +22,7 @@ export const claudeAdapter: Adapter = {
     if ((ctx.harness ?? 'minimal') === 'minimal') {
       cmd.push('--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--disable-slash-commands', '--setting-sources', '')
     }
-    cmd.push('--', ctx.prompt)
+    cmd.push('--', withPrelude(ctx))
     return { cmd, cwd: ctx.cwd }
   },
 

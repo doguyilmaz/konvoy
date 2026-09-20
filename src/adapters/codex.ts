@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
 const SANDBOX: Record<Permission, string[]> = {
   safe: ['-s', 'read-only'],
@@ -20,7 +20,7 @@ export const codexAdapter: Adapter = {
     if (ctx.model) cmd.push('-m', ctx.model)
     cmd.push('-c', `model_reasoning_effort=${ctx.effort}`)
     cmd.push(...SANDBOX[ctx.permission])
-    cmd.push('--', ctx.prompt)
+    cmd.push('--', withPrelude(ctx))
     return { cmd, cwd: ctx.cwd }
   },
 

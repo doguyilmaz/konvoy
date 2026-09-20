@@ -55,6 +55,7 @@ export interface TurnContext {
   cwd: string
   sessionDir: string
   prompt: string
+  prelude?: string
   binding: Binding | null
   model?: string
   effort: string

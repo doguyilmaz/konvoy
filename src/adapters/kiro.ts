@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
 const TRUST: Record<Permission, string> = {
   safe: '--trust-tools=',
@@ -16,7 +16,7 @@ export const kiroAdapter: Adapter = {
     const cmd = [ctx.bin ?? 'kiro-cli', 'chat', '--no-interactive', '--output-format', 'stream-json']
     if (ctx.binding?.foreignId) cmd.push('--resume-id', ctx.binding.foreignId)
     if (ctx.model) cmd.push('--model', ctx.model)
-    cmd.push('--effort', ctx.effort, TRUST[ctx.permission], '--', ctx.prompt)
+    cmd.push('--effort', ctx.effort, TRUST[ctx.permission], '--', withPrelude(ctx))
     return { cmd, cwd: ctx.cwd }
   },
 

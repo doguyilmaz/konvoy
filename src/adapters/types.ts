@@ -11,6 +11,12 @@ export interface Adapter {
   resolveForeignId?(ctx: TurnContext, startedAt: number): Promise<string | null>
 }
 
+// One composition point rather than four: the adapters cannot drift in how they join these,
+// and the prelude leads because a stable prefix is what prompt caching discounts.
+export function withPrelude(ctx: TurnContext): string {
+  return ctx.prelude ? `${ctx.prelude}\n\n${ctx.prompt}` : ctx.prompt
+}
+
 export function safeJson(line: string): Record<string, unknown> | null {
   const trimmed = line.trim()
   if (!trimmed.startsWith('{')) return null

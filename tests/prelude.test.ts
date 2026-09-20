@@ -1,0 +1,110 @@
+import { expect, test } from 'bun:test'
+import { openDb } from '../src/store/db'
+import { createSession, recordTurn } from '../src/store/queries'
+import { buildPrelude, parseEnvelope } from '../src/core/prelude'
+
+const seed = () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 's', goal: 'refactor the auth layer', cwd: '/x', lead: 'claude' })
+  return { db, s }
+}
+
+test('an envelope is read out of an answer that surrounds it with prose', () => {
+  const env = parseEnvelope(`Sure, here is what I did.
+
+<<<konvoy
+to: reviewer
+task: check the refresh path for a race
+open:
+- token storage on Android is unverified
+decisions:
+- refresh on 401 rather than on a timer
+>>>
+
+Let me know if that helps.`)
+  expect(env?.to).toBe('reviewer')
+  expect(env?.task).toBe('check the refresh path for a race')
+  expect(env?.open).toEqual(['token storage on Android is unverified'])
+  expect(env?.decisions).toEqual(['refresh on 401 rather than on a timer'])
+})
+
+test('a missing field degrades to empty rather than failing the parse', () => {
+  const env = parseEnvelope('<<<konvoy\ntask: just this\n>>>')
+  expect(env?.task).toBe('just this')
+  expect(env?.open).toEqual([])
+  expect(env?.to).toBe(null)
+})
+
+test('an answer with no envelope parses to null, not to an empty envelope', () => {
+  expect(parseEnvelope('no envelope here')).toBe(null)
+})
+
+test('a cooperative prelude carries the sender own words', () => {
+  const { db, s } = seed()
+  recordTurn(db, {
+    sessionId: s.id, agent: 'codex', prompt: 'start with token refresh', exitCode: 0, costUsd: 0,
+    final: '<<<konvoy\ntask: check the retry loop\nopen:\n- the device clock drifts\n>>>',
+  })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3 })
+  expect(out).toContain('check the retry loop')
+  expect(out).toContain('the device clock drifts')
+  expect(out).not.toContain('previous agent')
+})
+
+test('a derived prelude says what it does not know', () => {
+  const { db, s } = seed()
+  recordTurn(db, {
+    sessionId: s.id, agent: 'codex', prompt: 'start with token refresh', exitCode: 0, costUsd: 0,
+    final: 'I moved refresh into AuthClient.',
+  })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3 })
+  expect(out).toContain('moved refresh into AuthClient')
+  // the receiver must know its context is partial, or it proceeds as if it were whole
+  expect(out.toLowerCase()).toContain('was not recorded')
+})
+
+test('the goal and the facts come before the turns, because a prefix is cached', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'ANSWER', exitCode: 0, costUsd: 0 })
+  const out = buildPrelude(db, s, 'FACTSMARKER', { recent: 3 })
+  expect(out.indexOf('refactor the auth layer')).toBeLessThan(out.indexOf('FACTSMARKER'))
+  expect(out.indexOf('FACTSMARKER')).toBeLessThan(out.indexOf('ANSWER'))
+})
+
+test('the prelude is capped, and says how much it left out', () => {
+  const { db, s } = seed()
+  for (let i = 0; i < 6; i++) {
+    recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: `p${i}`, final: `answer-${i}`, exitCode: 0, costUsd: 0 })
+  }
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3 })
+  expect(out).toContain('answer-5')
+  expect(out).not.toContain('answer-0')
+  // a receiver that knows it sees a window behaves differently from one that thinks it sees all
+  expect(out).toContain('3 earlier')
+})
+
+test('a session with no turns yet has no prelude to give', () => {
+  const { db, s } = seed()
+  expect(buildPrelude(db, s, 'FACTS', { recent: 3 })).toBe('')
+})
+
+test('every adapter puts the prelude in front of the prompt', async () => {
+  const { adapters } = await import('../src/adapters')
+  const ctx = {
+    sessionId: 'x', slug: 's', cwd: '/x', sessionDir: '/x/.konvoy/s',
+    prompt: 'THEPROMPT', prelude: 'THEPRELUDE', binding: null,
+    effort: 'high', permission: 'edit' as const,
+  }
+  for (const [id, adapter] of Object.entries(adapters)) {
+    const line = adapter.turn(ctx as never).cmd.join(' ')
+    expect(line, id).toContain('THEPRELUDE')
+    expect(line.indexOf('THEPRELUDE'), id).toBeLessThan(line.indexOf('THEPROMPT'))
+  }
+})
+
+test('the store keeps the prompt the user typed, not the composed one', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'just mine', final: 'f', exitCode: 0, costUsd: 0 })
+  const row = db.query('SELECT prompt FROM turn WHERE session_id = $id').get({ id: s.id }) as { prompt: string }
+  expect(row.prompt).toBe('just mine')
+})

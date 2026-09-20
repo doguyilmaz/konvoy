@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
 export const opencodeAdapter: Adapter = {
   id: 'opencode',
@@ -12,7 +12,7 @@ export const opencodeAdapter: Adapter = {
     else cmd.push('--title', `konvoy:${ctx.slug}`)
     if (ctx.model) cmd.push('-m', `${ctx.model}#${ctx.effort}`)
     if (ctx.permission === 'yolo') cmd.push('--auto')
-    cmd.push('--', ctx.prompt)
+    cmd.push('--', withPrelude(ctx))
     return { cmd, cwd: ctx.cwd }
   },
 

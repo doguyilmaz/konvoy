@@ -402,4 +402,35 @@ export const mutations: Mutation[] = [
     to: 'true',
     tests: ['tests/facts.test.ts'],
   },
+
+  // --- the prelude (src/core/prelude.ts, src/adapters/types.ts) ---
+  {
+    name: 'withPrelude drops the prelude and returns the prompt alone, undoing the handoff',
+    file: 'src/adapters/types.ts',
+    from: "  return ctx.prelude ? `${ctx.prelude}\\n\\n${ctx.prompt}` : ctx.prompt",
+    to: '  return ctx.prompt',
+    tests: ['tests/prelude.test.ts'],
+  },
+  {
+    name: 'withPrelude joins the prompt before the prelude, so the volatile part leads the cached prefix',
+    file: 'src/adapters/types.ts',
+    from: "  return ctx.prelude ? `${ctx.prelude}\\n\\n${ctx.prompt}` : ctx.prompt",
+    to: '  return ctx.prelude ? `${ctx.prompt}\\n\\n${ctx.prelude}` : ctx.prompt',
+    tests: ['tests/prelude.test.ts'],
+  },
+  {
+    name: "a derived prelude drops its not-recorded notice, so the receiver believes its context is complete",
+    file: 'src/core/prelude.ts',
+    from:
+      '    turnBlocks.push("the previous agent\'s intent was not recorded here — only what was asked and answered is known.")\n',
+    to: '',
+    tests: ['tests/prelude.test.ts'],
+  },
+  {
+    name: 'the cap on recent turns is removed, so buildPrelude replays every turn in the session instead of a window',
+    file: 'src/core/prelude.ts',
+    from: 'limit: opts.recent',
+    to: 'limit: 1000',
+    tests: ['tests/prelude.test.ts'],
+  },
 ]
