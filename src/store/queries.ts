@@ -269,7 +269,12 @@ export function acquireLock(db: Database, sessionId: string, owner: string): boo
     | { owner: string; pid: number }
     | null
   if (row) {
-    if (row.owner === owner) return true
+    if (row.owner === owner) {
+      // a lease inherited from a parent that died keeps the parent's pid; adopt this one so no
+      // third process reads the lock as stale and reclaims the session mid-turn
+      db.query('UPDATE lock SET pid = $pid WHERE session_id = $sessionId').run({ pid: process.pid, sessionId })
+      return true
+    }
     if (isAlive(row.pid)) return false
     reclaimStaleLock(db, sessionId, row.owner, row.pid)
   }

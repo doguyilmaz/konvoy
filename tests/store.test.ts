@@ -309,3 +309,17 @@ test('a binding keeps its bound status when a later turn fails to report an id',
   expect(b?.foreignId).toBe('thread-1')
   expect(b?.status).toBe('bound')
 })
+
+// A parent konvoy that is SIGKILLed never releases its lock; the agent it spawned still carries
+// KONVOY_LEASE and re-acquires as the same owner. The row kept the dead parent's pid, so
+// lockOwner read it as stale and any third process could reclaim the session mid-turn.
+test('re-acquiring a lock as its owner adopts the caller pid so the lock reads as live', () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  db.query('INSERT INTO lock (session_id, owner, pid, acquired_at) VALUES ($s, $o, $p, $t)').run({ s: s.id, o: 'lease-X', p: 2147483000, t: Date.now() })
+  expect(lockOwner(db, s.id)).toBeNull()
+  expect(acquireLock(db, s.id, 'lease-X')).toBe(true)
+  const row = db.query('SELECT pid FROM lock WHERE session_id = $s').get({ s: s.id }) as { pid: number }
+  expect(row.pid).toBe(process.pid)
+  expect(lockOwner(db, s.id)).toBe('lease-X')
+})
