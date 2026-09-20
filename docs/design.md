@@ -362,7 +362,7 @@ see the correction at the end of this section.
 | claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events — **53,336 tokens** | $0.5335 (cold cache) |
 | claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks — **20,800 tokens** | $0.0528 (warm cache) |
 | codex, `--ignore-user-config` | **18,173 tokens** (6,656 of them cached) | — |
-| kiro, v2 engine | not reported | 0.0667 credits |
+| kiro, v2 engine | no token counts; reports **4.83% of its context window** | 0.0667 credits |
 
 A **2.6× difference in context** before any work is done: the minimal harness saves about
 32,500 tokens on every turn, and a ten-turn delegation chain therefore carries roughly

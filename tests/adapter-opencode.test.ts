@@ -78,13 +78,25 @@ test('attach opens the session interactively', () => {
   expect(opencodeAdapter.attach(bound('ses_x')).cmd).toEqual(['opencode', '--session', 'ses_x'])
 })
 
-test('the captured v2 success stream parses into session and text', async () => {
+// The stream this replaced was captured from a turn that called no tools, and opencode only
+// emits step_finish once a step does tool work — so the fixture never carried usage and this
+// test asserted its absence as correct. That is how an unexercised branch reads as covered.
+// This capture does call a tool: it carries cost and tokens, and pins both.
+test('the captured v2 success stream parses into session, text, usage and cost', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/opencode.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => opencodeAdapter.parse(l))
   expect(events.filter((e) => e.t === 'session')[0]).toEqual({
     t: 'session',
-    foreignId: 'ses_f45d589c0ffeLKBxthq8xnenN2',
+    foreignId: 'ses_f3f4b6290ffeKaZ38ZuQQ4wnB7',
   })
   expect(events.find((e) => e.t === 'text')).toEqual({ t: 'text', text: 'OK' })
-  expect(events.some((e) => e.t === 'usage')).toBe(false)
+  // input 16,412 + cache.read 270 + cache.write 0 — opencode's `input` is the uncached
+  // remainder, as its own `total` arithmetic shows (input+output+cache = total). Whether its
+  // `reasoning` count sits inside `output` is not established, so output is left untouched.
+  expect(events.find((e) => e.t === 'usage')).toEqual({
+    t: 'usage',
+    inputTokens: 16682,
+    outputTokens: 80,
+    costUsd: 0.00505602,
+  })
 })

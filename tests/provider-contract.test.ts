@@ -29,6 +29,23 @@ for (const id of agentIds) {
     expect(events.some((e) => e.t !== 'error')).toBe(true)
   })
 
+  // opencode's adapter parsed usage from a step_finish event, its fixture was captured from a
+  // turn that called no tools, and opencode only emits step_finish once a step does tool work.
+  // So the branch never ran, its own test asserted usage was absent, and konvoy recorded zero
+  // tokens and zero cost for every opencode turn while opencode was reporting both. A fixture
+  // that cannot reach a branch is not coverage — this makes an adapter's own source say which
+  // branches its fixture owes, so a capture taken from too simple a turn fails here.
+  test(`${id}'s fixture exercises the usage path its adapter implements`, async () => {
+    const source = await Bun.file(`src/adapters/${id}.ts`).text()
+    if (!source.includes("t: 'usage'")) return // this adapter claims no usage path to exercise
+
+    const lines = (await Bun.file(`tests/fixtures/streams/${id}.jsonl`).text()).trim().split('\n')
+    const adapter = getAdapter(id)
+    const usage = lines.flatMap((line) => adapter.parse(line)).filter((e) => e.t === 'usage')
+    expect(usage.length, `src/adapters/${id}.ts parses usage but ${id}.jsonl never produces one — capture a turn that does`)
+      .toBeGreaterThan(0)
+  })
+
   // The adapters agree on the field names and disagree on what they mean: claude's
   // input_tokens excludes both cache fields, codex's already contains cached_input_tokens.
   // Reading each CLI's headline field therefore filled one normalized column with two units,

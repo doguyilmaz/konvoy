@@ -34,8 +34,17 @@ export const opencodeAdapter: Adapter = {
         events.push({ t: 'tool', name: part?.tool ?? 'tool', status: part?.state?.status === 'error' ? 'error' : 'ok' })
         break
       case 'step_finish': {
-        const tokens = (o.part as { tokens?: { input?: number; output?: number } } | undefined)?.tokens
-        if (tokens) events.push({ t: 'usage', inputTokens: tokens.input, outputTokens: tokens.output })
+        const step = o.part as
+          | { cost?: number; tokens?: { input?: number; output?: number; cache?: { read?: number; write?: number } } }
+          | undefined
+        const tokens = step?.tokens
+        if (tokens) {
+          // opencode's `input` is the uncached remainder, like claude's and unlike codex's —
+          // its own `total` is input + output + cache, which is what settles that. It also
+          // reports the turn's cost here, on the same part.
+          const input = (tokens.input ?? 0) + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0)
+          events.push({ t: 'usage', inputTokens: input, outputTokens: tokens.output, costUsd: step?.cost })
+        }
         break
       }
       case 'error': {

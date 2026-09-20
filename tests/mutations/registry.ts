@@ -604,4 +604,18 @@ export const mutations: Mutation[] = [
     to: '? (usage.input_tokens ?? 0)',
     tests: ['tests/adapter-claude.test.ts', 'tests/provider-contract.test.ts'],
   },
+  {
+    name: 'opencode input tokens drop the cache, recording the uncached remainder as the whole context',
+    file: 'src/adapters/opencode.ts',
+    from: 'const input = (tokens.input ?? 0) + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0)',
+    to: 'const input = tokens.input ?? 0',
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
+  {
+    name: 'opencode turns record no cost although opencode reports one on the same part',
+    file: 'src/adapters/opencode.ts',
+    from: "events.push({ t: 'usage', inputTokens: input, outputTokens: tokens.output, costUsd: step?.cost })",
+    to: "events.push({ t: 'usage', inputTokens: input, outputTokens: tokens.output })",
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
 ]
