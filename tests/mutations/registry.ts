@@ -1,0 +1,361 @@
+// Committed mutation registry: each entry is a real defect that was once proven caught by
+// hand (mutation applied, named test watched to fail, source restored) during this project's
+// development. `bun run mutate` (tests/mutations/run.ts) re-runs
+// every entry here: applies it, runs only the named test files, expects them to fail, restores
+// the file, and asserts the restore was byte-identical. A MISSED entry means a real test gap;
+// a BROKEN entry means the source moved and the entry needs updating, not deleting blindly.
+export interface Mutation {
+  /** what defect this introduces, in plain words */
+  name: string
+  /** repo-relative source path */
+  file: string
+  /** exact substring, must appear EXACTLY once in `file` */
+  from: string
+  /** what replaces it */
+  to: string
+  /** test files that must fail while the mutation is applied */
+  tests: string[]
+}
+
+export const mutations: Mutation[] = [
+  // --- security guards (src/config/load.ts, src/config/schema.ts, src/adapters/types.ts, src/commands/config.ts) ---
+  {
+    name: 'a project config can set agents.<id>.bin, seizing the binary konvoy spawns',
+    file: 'src/config/load.ts',
+    from: "const PRIVILEGED_AGENT_KEYS = ['bin', 'permission', 'harness'] as const",
+    to: "const PRIVILEGED_AGENT_KEYS = ['permission', 'harness'] as const",
+    tests: ['tests/config-security.test.ts'],
+  },
+  {
+    name: 'a leading-dash model string is accepted and reaches argv as a flag injection',
+    file: 'src/config/load.ts',
+    from: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/',
+    to: 'const MODEL_PATTERN = /^[A-Za-z0-9._:-]*$/',
+    tests: ['tests/config-security.test.ts'],
+  },
+  {
+    name: 'policy.turnTimeoutSec is no longer clamped, so a hostile repo can make konvoy wait forever',
+    file: 'src/config/schema.ts',
+    from: '.transform((v) => Math.min(v, MAX_TURN_TIMEOUT_SEC)),',
+    to: '.transform((v) => v),',
+    tests: ['tests/config-security.test.ts'],
+  },
+  {
+    name: 'stripControlChars no longer strips ESC, letting a terminal escape sequence through',
+    file: 'src/adapters/types.ts',
+    from: "  return value.replace(/[\\x00-\\x1f\\x7f]/g, '')",
+    to: "  return value.replace(/[\\x00-\\x1a\\x7f]/g, '')",
+    tests: ['tests/adapter-claude.test.ts'],
+  },
+  {
+    name: 'RATE loses its literal HTTP 429 alternative, misclassifying a real rate-limit response',
+    file: 'src/adapters/types.ts',
+    from:
+      '  /hit your \\w+ limit|rate[_ ]?limit|quota exceeded|too ?many ?requests|usage limit|weekly limit|\\d+[- ]hour (?:usage )?limit|throttl|\\b429\\b/',
+    to:
+      '  /hit your \\w+ limit|rate[_ ]?limit|quota exceeded|too ?many ?requests|usage limit|weekly limit|\\d+[- ]hour (?:usage )?limit|throttl/',
+    tests: ['tests/adapter-claude.test.ts'],
+  },
+  {
+    name: '`konvoy config set __proto__.x` reaches Object.prototype instead of being rejected',
+    file: 'src/commands/config.ts',
+    from: "const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])",
+    to: "const RESERVED = new Set(['constructor', 'prototype'])",
+    tests: ['tests/config-write.test.ts'],
+  },
+  {
+    name: 'setPath skips its own reserved-key guard, so the __proto__ check never runs for writes',
+    file: 'src/commands/config.ts',
+    from: ["  assertSafe(dotted)", "  const keys = dotted.split('.')"].join('\n'),
+    to: "  const keys = dotted.split('.')",
+    tests: ['tests/config-write.test.ts'],
+  },
+
+  // --- the error-kind exemption (src/core/turn.ts, src/cli.ts, src/core/session.ts, src/commands/attach.ts) ---
+  {
+    name: 'an auth/rate error is nulled out the moment a turn streamed any text, hiding that the agent is blocked',
+    file: 'src/core/turn.ts',
+    from: "const blocking = result.error?.kind === 'auth' || result.error?.kind === 'rate'",
+    to: 'const blocking = false',
+    tests: ['tests/turn.test.ts'],
+  },
+  {
+    name: 'the blocking exemption is narrowed to rate only, so an auth error after real output is discarded',
+    file: 'src/core/turn.ts',
+    from: "const blocking = result.error?.kind === 'auth' || result.error?.kind === 'rate'",
+    to: "const blocking = result.error?.kind === 'rate'",
+    tests: ['tests/turn.test.ts'],
+  },
+  {
+    name: 'a child that traps SIGTERM hangs forever instead of being escalated to SIGKILL',
+    file: 'src/core/turn.ts',
+    from: "if (proc.exitCode === null) proc.kill('SIGKILL')",
+    to: "if (false) proc.kill('SIGKILL')",
+    tests: ['tests/turn.test.ts'],
+  },
+  {
+    name: 'no top-level try/catch: a malformed config or an unreadable database escapes main() as a raw stack trace',
+    file: 'src/cli.ts',
+    from: [
+      '  try {',
+      '    return await dispatch(command, rest, cwd, slug, args)',
+      '  } catch (error) {',
+      "    if (Bun.env.KONVOY_DEBUG === '1') throw error",
+      '    console.error(`konvoy: ${error instanceof Error ? error.message : String(error)}`)',
+      '    return 1',
+      '  }',
+    ].join('\n'),
+    to: '  return await dispatch(command, rest, cwd, slug, args)',
+    tests: ['tests/cli.test.ts'],
+  },
+  {
+    name: 'send() no longer checks the binary is installed, so a missing agent surfaces a raw ENOENT from Bun.spawn',
+    file: 'src/core/session.ts',
+    from: 'if (!detection.installed) throw new Error(`${agent}: not installed`)',
+    to: 'if (false) throw new Error(`${agent}: not installed`)',
+    tests: ['tests/session.test.ts', 'tests/send.test.ts'],
+  },
+  {
+    name: 'cmdAttach no longer checks the binary is installed before spawning it',
+    file: 'src/commands/attach.ts',
+    from: '  if (!detection.installed) {',
+    to: '  if (false) {',
+    tests: ['tests/attach.test.ts'],
+  },
+
+  // --- day bucketing (src/store/queries.ts) ---
+  {
+    name: "turnsPerDay/turnsPerDayByAgent bucket by UTC day instead of local day, misfiling turns near midnight",
+    file: 'src/store/queries.ts',
+    from: `const DAY_EXPR = "date(started_at / 1000, 'unixepoch', 'localtime')"`,
+    to: `const DAY_EXPR = "date(started_at / 1000, 'unixepoch')"`,
+    tests: ['tests/usage.test.ts'],
+  },
+
+  // --- pricing rules (src/pricing.ts, src/format.ts, src/store/queries.ts) ---
+  {
+    name: 'estimateUsd prices a credit-billed row by its model as well, double-counting it',
+    file: 'src/pricing.ts',
+    from: [
+      '  if (row.credits > 0) {',
+      '    const rate = pricing.credits[row.agent]',
+      '    if (rate) return row.credits * rate.usdPerCredit',
+      '  }',
+      '',
+      '  if (row.model) {',
+      '    const rate = pricing.models[row.model]',
+      '    if (rate) {',
+      '      return (row.inputTokens / 1_000_000) * rate.inputPerMTok +',
+      '        (row.outputTokens / 1_000_000) * rate.outputPerMTok',
+      '    }',
+      '  }',
+    ].join('\n'),
+    to: [
+      '  if (row.model) {',
+      '    const rate = pricing.models[row.model]',
+      '    if (rate) {',
+      '      return (row.inputTokens / 1_000_000) * rate.inputPerMTok +',
+      '        (row.outputTokens / 1_000_000) * rate.outputPerMTok',
+      '    }',
+      '  }',
+      '',
+      '  if (row.credits > 0) {',
+      '    const rate = pricing.credits[row.agent]',
+      '    if (rate) return row.credits * rate.usdPerCredit',
+      '  }',
+    ].join('\n'),
+    tests: ['tests/pricing.test.ts'],
+  },
+  {
+    name: 'estimateUsd returns 0 instead of null for an unpriced model, reporting "free" instead of "unknown"',
+    file: 'src/pricing.ts',
+    from: [
+      '  return null',
+      '}',
+      '',
+      '// pricing defaults to empty, so an unconfigured user must never see a ~USD column of dashes —',
+    ].join('\n'),
+    to: [
+      '  return 0',
+      '}',
+      '',
+      '// pricing defaults to empty, so an unconfigured user must never see a ~USD column of dashes —',
+    ].join('\n'),
+    tests: ['tests/pricing.test.ts'],
+  },
+  {
+    name: 'estimateAgentUsd reports the partial sum of only its priced rows instead of "unknown" for the whole agent',
+    file: 'src/pricing.ts',
+    from: ['    if (est === null) return null', '    total += est'].join('\n'),
+    to: ['    if (est === null) continue', '    total += est'].join('\n'),
+    tests: ['tests/pricing.test.ts', 'tests/usage.test.ts'],
+  },
+  {
+    name: "spend() prefers dollars over credits, disagreeing with the estimator on which figure is real",
+    file: 'src/format.ts',
+    from: [
+      '  if (row.credits > 0) return `${row.credits.toFixed(3)} cr`',
+      '  if (row.costUsd > 0) return `$${row.costUsd.toFixed(2)}`',
+      "  return '-'",
+    ].join('\n'),
+    to: [
+      '  if (row.costUsd > 0) return `$${row.costUsd.toFixed(2)}`',
+      '  if (row.credits > 0) return `${row.credits.toFixed(3)} cr`',
+      "  return '-'",
+    ].join('\n'),
+    tests: ['tests/usage.test.ts'],
+  },
+  {
+    name: 'usageByAgentModel groups by agent only, merging different models of the same agent together',
+    file: 'src/store/queries.ts',
+    from: '       WHERE session_id = $sessionId GROUP BY agent, model ORDER BY agent, model',
+    to: '       WHERE session_id = $sessionId GROUP BY agent ORDER BY agent',
+    tests: ['tests/usage.test.ts'],
+  },
+
+  // --- rm / deleteSession cascade (src/commands/rm.ts, src/store/queries.ts) ---
+  {
+    name: 'cmdRm no longer refuses when another process holds the session lock',
+    file: 'src/commands/rm.ts',
+    from: '  if (busy) {',
+    to: '  if (false && busy) {',
+    tests: ['tests/resume.test.ts'],
+  },
+  {
+    name: 'cmdRm deletes a session without requiring --yes',
+    file: 'src/commands/rm.ts',
+    from: '  if (!opts.yes) {',
+    to: '  if (false) {',
+    tests: ['tests/resume.test.ts'],
+  },
+  {
+    name: 'cmdRm reports the total binding count instead of only the bound ones, and lists unbound agents as survivors',
+    file: 'src/commands/rm.ts',
+    from: '  const bound = listBindings(db, session.id).filter((b) => b.foreignId)',
+    to: '  const bound = listBindings(db, session.id)',
+    tests: ['tests/resume.test.ts'],
+  },
+  {
+    name: "deleteSession's cascade skips the lock table, leaving a dangling lock row behind",
+    file: 'src/store/queries.ts',
+    from: "    db.query('DELETE FROM lock WHERE session_id = $id').run({ id })\n",
+    to: '',
+    tests: ['tests/store.test.ts'],
+  },
+  {
+    name: 'deleteSession runs its cascade without a transaction, so a failing statement leaves earlier deletes applied',
+    file: 'src/store/queries.ts',
+    from: [
+      'export function deleteSession(db: Database, id: string): void {',
+      '  db.transaction(() => {',
+      "    db.query('DELETE FROM event WHERE turn_id IN (SELECT id FROM turn WHERE session_id = $id)').run({ id })",
+      "    db.query('DELETE FROM turn WHERE session_id = $id').run({ id })",
+      "    db.query('DELETE FROM binding WHERE session_id = $id').run({ id })",
+      "    db.query('DELETE FROM lock WHERE session_id = $id').run({ id })",
+      "    db.query('DELETE FROM session WHERE id = $id').run({ id })",
+      '  })()',
+      '}',
+    ].join('\n'),
+    to: [
+      'export function deleteSession(db: Database, id: string): void {',
+      "  db.query('DELETE FROM event WHERE turn_id IN (SELECT id FROM turn WHERE session_id = $id)').run({ id })",
+      "  db.query('DELETE FROM turn WHERE session_id = $id').run({ id })",
+      "  db.query('DELETE FROM binding WHERE session_id = $id').run({ id })",
+      "  db.query('DELETE FROM lock WHERE session_id = $id').run({ id })",
+      "  db.query('DELETE FROM session WHERE id = $id').run({ id })",
+      '}',
+    ].join('\n'),
+    tests: ['tests/store.test.ts'],
+  },
+  {
+    name: 'reclaimStaleLock deletes by session id alone, reintroducing the TOCTOU race it was written to close',
+    file: 'src/store/queries.ts',
+    from: "    .query('DELETE FROM lock WHERE session_id = $sessionId AND owner = $owner AND pid = $pid')",
+    to: "    .query('DELETE FROM lock WHERE session_id = $sessionId')",
+    tests: ['tests/store.test.ts'],
+  },
+
+  // --- dashboard (src/dashboard/page.ts, src/commands/dashboard.ts) ---
+  {
+    name: 'the dashboard page no longer HTML-escapes values pulled from the database',
+    file: 'src/dashboard/page.ts',
+    from: `  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)`,
+    to: '  return text',
+    tests: ['tests/dashboard.test.ts'],
+  },
+  {
+    name: 'the dashboard server binds to every interface instead of loopback only',
+    file: 'src/commands/dashboard.ts',
+    from: ["    hostname: '127.0.0.1',", '    port: opts.port ?? 0,'].join('\n'),
+    to: '    port: opts.port ?? 0,',
+    tests: ['tests/dashboard.test.ts'],
+  },
+  {
+    name: 'an unpriced agent renders $0.00 on the dashboard instead of a dash',
+    file: 'src/dashboard/page.ts',
+    from: "  if (a.estimateUsd === null) return '-'",
+    to: "  if (a.estimateUsd === null) return '$0.00'",
+    tests: ['tests/dashboard.test.ts'],
+  },
+  {
+    name: "the dashboard's per-agent bars each scale to their own row instead of a shared maximum",
+    file: 'src/dashboard/page.ts',
+    from: 'const h = v > 0 ? Math.max(1, Math.round((v / sharedMax) * (rowHeight - 2))) : 0',
+    to: 'const h = v > 0 ? Math.max(1, Math.round((v / Math.max(...values, 1)) * (rowHeight - 2))) : 0',
+    tests: ['tests/dashboard.test.ts'],
+  },
+  {
+    name: 'dashboard collect() ignores its sessionId argument and always aggregates every session',
+    file: 'src/dashboard/page.ts',
+    from: [
+      'export function collect(db: Database, cfg: Config, sessionId?: string): DashboardData {',
+      '  const rows = sessionId ? usageForSession(db, sessionId) : usageAcrossSessions(db)',
+      '  const modelRows = usageByAgentModel(db, sessionId)',
+    ].join('\n'),
+    to: [
+      'export function collect(db: Database, cfg: Config, sessionId?: string): DashboardData {',
+      '  const rows = usageAcrossSessions(db)',
+      '  const modelRows = usageByAgentModel(db)',
+    ].join('\n'),
+    tests: ['tests/dashboard.test.ts'],
+  },
+
+  // --- the CLI command table single source of truth (src/commands/table.ts) ---
+  {
+    name: 'the `rm` command is dropped from commandTable, so README still documents a command that no longer resolves',
+    file: 'src/commands/table.ts',
+    from: [
+      '  {',
+      "    name: 'rm',",
+      '    aliases: [],',
+      "    usage: 'rm <session> --yes',",
+      "    summary: 'delete a konvoy session (foreign sessions survive)',",
+      '  },',
+    ].join('\n'),
+    to: '',
+    tests: ['tests/docs.test.ts'],
+  },
+
+  // --- the update guard (src/commands/update.ts) ---
+  {
+    name: 'updateCommand ignores a configured bin and always runs the bare CLI name',
+    file: 'src/commands/update.ts',
+    from: 'return [bin ?? name!, ...rest]',
+    to: 'return [name!, ...rest]',
+    tests: ['tests/update.test.ts'],
+  },
+  {
+    name: 'cmdUpdate no longer skips agents disabled in config',
+    file: 'src/commands/update.ts',
+    from: '    if (!settings.enabled) {',
+    to: '    if (false) {',
+    tests: ['tests/update.test.ts'],
+  },
+  {
+    name: "a failing agent update is not counted as a failure, so cmdUpdate exits 0 even though one update failed",
+    file: 'src/commands/update.ts',
+    from: 'failures++',
+    to: '',
+    tests: ['tests/update.test.ts'],
+  },
+]
