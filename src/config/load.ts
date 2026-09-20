@@ -14,7 +14,7 @@ export interface AgentSettings {
   subagentEffort?: Effort
 }
 
-function stripJsonc(text: string): string {
+export function stripJsonc(text: string): string {
   let result = ''
   let inString = false
   let i = 0

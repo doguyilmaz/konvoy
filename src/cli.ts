@@ -1,5 +1,7 @@
-import { parseArgs } from './args'
+import type { Database } from 'bun:sqlite'
+import { parseArgs, type Args } from './args'
 import { loadConfig, resolveAgent } from './config/load'
+import type { Config } from './config/schema'
 import { openDb } from './store/db'
 import { dbPath } from './paths'
 import { cmdNew } from './commands/new'
@@ -14,30 +16,81 @@ import { cmdConfig } from './commands/config'
 import { cmdResume } from './commands/resume'
 import { cmdRm } from './commands/rm'
 import { cmdUsage } from './commands/usage'
+import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
 import type { AgentId } from './types'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
 
-const USAGE = `konvoy ${VERSION}
+export const USAGE = `konvoy ${VERSION}
 
-  konvoy new "<goal>"           create a session in this directory
-  konvoy send <agent> "<msg>"   run one turn against one agent
-  konvoy ls                     list sessions
-  konvoy resume [session]       make a session current and show its roster
-  konvoy config get|set         read or write layered configuration
-  konvoy rm <session> --yes     delete a konvoy session (foreign sessions survive)
-  konvoy roster                 who is in the convoy
-  konvoy usage [--all] [--chart]  what this session spent, per agent
-  konvoy status                 versions, auth and roster
-  konvoy attach <agent>         open that agent's own interface, same session
-  konvoy doctor                 check installs, logins, effort and model overlap
-  konvoy update [--all]         update konvoy, and with --all the agent CLIs
-  konvoy version                konvoy and agent versions
+${formatCommandList()}
 
 agents: claude, codex, kiro, opencode
 flags:  --session <slug>
 `
+
+interface CommandContext {
+  db: Database
+  cfg: Config
+  cwd: string
+  args: Args
+  slug: string | undefined
+}
+
+type Handler = (ctx: CommandContext, rest: string[]) => number | Promise<number>
+
+// Every key of CommandName must be handled here — TypeScript's excess/missing property
+// checks on an object literal assigned to Record<CommandName, Handler> make an
+// undocumented-yet-dispatched or dispatched-yet-undocumented command a compile error.
+const handlers: Record<CommandName, Handler> = {
+  new: (ctx, rest) => cmdNew(ctx.db, ctx.cfg, ctx.cwd, rest.join(' ')),
+  send: (ctx, rest) => {
+    const [agent, ...prompt] = rest
+    if (!agent || prompt.length === 0) {
+      console.error('usage: konvoy send <agent> "<message>"')
+      console.error('a message beginning with a dash goes after --, as in: konvoy send codex -- "-1 first"')
+      return 2
+    }
+    return cmdSend(ctx.db, ctx.cfg, ctx.cwd, agent, prompt.join(' '), ctx.slug)
+  },
+  ls: (ctx) => cmdLs(ctx.db),
+  roster: (ctx) => cmdRoster(ctx.db, ctx.cfg, ctx.cwd, ctx.slug),
+  status: (ctx) => cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug),
+  attach: (ctx, rest) => {
+    const [agent] = rest
+    if (!agent) {
+      console.error('usage: konvoy attach <agent>')
+      return 2
+    }
+    return cmdAttach(ctx.db, ctx.cwd, agent, ctx.slug, resolveAgent(ctx.cfg, agent as AgentId).bin)
+  },
+  doctor: (ctx) => cmdDoctor(ctx.cfg),
+  update: (ctx) => cmdUpdate(ctx.cfg, { all: ctx.args.flags.all === true }),
+  resume: (ctx, rest) => cmdResume(ctx.db, ctx.cfg, ctx.cwd, rest[0] ?? ctx.slug),
+  config: (ctx, rest) => {
+    const [action, key, value] = rest
+    return cmdConfig(ctx.cfg, ctx.cwd, action ?? 'get', key, value, { global: ctx.args.flags.global === true })
+  },
+  rm: (ctx, rest) => {
+    const [target] = rest
+    if (!target) {
+      console.error('usage: konvoy rm <session> --yes')
+      return 2
+    }
+    return cmdRm(ctx.db, ctx.cwd, target, { yes: ctx.args.flags.yes === true })
+  },
+  usage: (ctx) =>
+    cmdUsage(ctx.db, ctx.cfg, ctx.cwd, {
+      all: ctx.args.flags.all === true,
+      slug: ctx.slug,
+      chart: ctx.args.flags.chart === true,
+    }),
+  version: (ctx) => {
+    console.log(`konvoy ${VERSION}`)
+    return cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug)
+  },
+}
 
 export async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv)
@@ -60,72 +113,18 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-async function dispatch(
-  command: string,
-  rest: string[],
-  cwd: string,
-  slug: string | undefined,
-  args: ReturnType<typeof parseArgs>,
-): Promise<number> {
+async function dispatch(command: string, rest: string[], cwd: string, slug: string | undefined, args: Args): Promise<number> {
   const cfg = await loadConfig({ cwd })
   const db = openDb(dbPath())
 
-  switch (command) {
-    case 'new':
-    case 'start':
-      return cmdNew(db, cfg, cwd, rest.join(' '))
-    case 'send': {
-      const [agent, ...prompt] = rest
-      if (!agent || prompt.length === 0) {
-        console.error('usage: konvoy send <agent> "<message>"')
-        console.error('a message beginning with a dash goes after --, as in: konvoy send codex -- "-1 first"')
-        return 2
-      }
-      return cmdSend(db, cfg, cwd, agent, prompt.join(' '), slug)
-    }
-    case 'ls':
-    case 'sessions':
-      return cmdLs(db)
-    case 'roster':
-      return cmdRoster(db, cfg, cwd, slug)
-    case 'status':
-      return cmdStatus(db, cfg, cwd, slug)
-    case 'attach': {
-      const [agent] = rest
-      if (!agent) {
-        console.error('usage: konvoy attach <agent>')
-        return 2
-      }
-      return cmdAttach(db, cwd, agent, slug, resolveAgent(cfg, agent as AgentId).bin)
-    }
-    case 'doctor':
-      return cmdDoctor(cfg)
-    case 'update':
-      return cmdUpdate(cfg, { all: args.flags.all === true })
-    case 'resume':
-      return cmdResume(db, cfg, cwd, rest[0] ?? slug)
-    case 'config': {
-      const [action, key, value] = rest
-      return cmdConfig(cfg, cwd, action ?? 'get', key, value, { global: args.flags.global === true })
-    }
-    case 'rm': {
-      const [target] = rest
-      if (!target) {
-        console.error('usage: konvoy rm <session> --yes')
-        return 2
-      }
-      return cmdRm(db, cwd, target, { yes: args.flags.yes === true })
-    }
-    case 'usage':
-      return cmdUsage(db, cfg, cwd, { all: args.flags.all === true, slug, chart: args.flags.chart === true })
-    case 'version':
-      console.log(`konvoy ${VERSION}`)
-      return cmdStatus(db, cfg, cwd, slug)
-    default:
-      console.error(`unknown command "${command}"`)
-      console.log(USAGE)
-      return 2
+  const name = resolveCommandName(command)
+  if (!name) {
+    console.error(`unknown command "${command}"`)
+    console.log(USAGE)
+    return 2
   }
+
+  return handlers[name]({ db, cfg, cwd, args, slug }, rest)
 }
 
 if (import.meta.main) {

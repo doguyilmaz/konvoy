@@ -16,10 +16,16 @@ bun run build          # produces ./dist/konvoy
 ```bash
 konvoy new "refactor the auth layer"
 konvoy send codex "start with the token refresh path"
+konvoy ls
+konvoy resume                  # make a session current again and show its roster
 konvoy roster
-konvoy attach codex    # drops you into the real Codex TUI, same session
+konvoy usage --all --chart
 konvoy status
+konvoy attach codex    # drops you into the real Codex TUI, same session
 konvoy doctor
+konvoy update --all    # konvoy itself, plus every agent CLI
+konvoy rm stale-slug --yes
+konvoy version
 ```
 
 ## Configure
@@ -49,8 +55,9 @@ If a CLI is not on your `PATH`, point konvoy at it directly and every command â€
 { "agents": { "opencode": { "bin": "~/.opencode/bin/opencode" } } }
 ```
 
-`konvoy config set` rewrites the layer it touches as plain JSON, so any comments in that file
-are lost. Hand-edit the file instead when you want to keep them.
+`konvoy config set <key> <value> [--global]` rewrites the layer it touches as plain JSON, so
+any comments in that file are lost â€” `--global` targets the global file instead of the
+project one. Hand-edit the file instead when you want to keep them.
 
 ## Requirements
 

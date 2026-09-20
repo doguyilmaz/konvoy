@@ -1,7 +1,14 @@
 import { expect, spyOn, test } from 'bun:test'
-import { main } from '../src/cli'
+import { main, USAGE } from '../src/cli'
+import { commandTable } from '../src/commands/table'
 
 const tmp = (name: string) => `/tmp/konvoy-test-cli-${name}-${Bun.nanoseconds()}`
+
+test('USAGE lists every dispatchable command, so it cannot drift from the table', () => {
+  for (const c of commandTable) {
+    expect(USAGE).toContain(`konvoy ${c.usage}`)
+  }
+})
 
 async function withEnv(cwd: string, home: string, fn: () => Promise<void>): Promise<void> {
   const prevCwd = process.cwd()
