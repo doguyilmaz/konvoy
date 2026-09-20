@@ -1,4 +1,5 @@
 import type { AgentId } from './types'
+import type { UsageRow } from './store/queries'
 
 export interface RosterRow {
   agent: AgentId
@@ -28,6 +29,26 @@ function cost(r: RosterRow): string {
   if (r.costUsd > 0) return `$${r.costUsd.toFixed(2)}`
   if (r.credits > 0) return `${r.credits.toFixed(3)} cr`
   return '-'
+}
+
+function spend(row: UsageRow): string {
+  if (row.costUsd > 0) return `$${row.costUsd.toFixed(2)}`
+  if (row.credits > 0) return `${row.credits.toFixed(3)} cr`
+  return '-'
+}
+
+export function formatUsage(rows: UsageRow[]): string {
+  return table(
+    ['AGENT', 'TURNS', 'IN', 'OUT', 'SPEND', 'GATE'],
+    rows.map((r) => [
+      r.agent,
+      String(r.turns),
+      String(r.inputTokens),
+      String(r.outputTokens),
+      spend(r),
+      r.gateKnown > 0 ? `${r.gatePassed}/${r.gateKnown}` : '-',
+    ]),
+  )
 }
 
 export function duplicateModels(rows: RosterRow[]): string[] {

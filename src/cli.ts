@@ -13,6 +13,7 @@ import { cmdUpdate } from './commands/update'
 import { cmdConfig } from './commands/config'
 import { cmdResume } from './commands/resume'
 import { cmdRm } from './commands/rm'
+import { cmdUsage } from './commands/usage'
 import type { AgentId } from './types'
 import pkg from '../package.json'
 
@@ -27,6 +28,7 @@ const USAGE = `konvoy ${VERSION}
   konvoy config get|set         read or write layered configuration
   konvoy rm <session> --yes     delete a konvoy session (foreign sessions survive)
   konvoy roster                 who is in the convoy
+  konvoy usage [--all]          what this session spent, per agent
   konvoy status                 versions, auth and roster
   konvoy attach <agent>         open that agent's own interface, same session
   konvoy doctor                 check installs, logins, effort and model overlap
@@ -98,6 +100,8 @@ export async function main(argv: string[]): Promise<number> {
       }
       return cmdRm(db, cwd, target, { yes: args.flags.yes === true })
     }
+    case 'usage':
+      return cmdUsage(db, cwd, { all: args.flags.all === true, slug })
     case 'version':
       console.log(`konvoy ${VERSION}`)
       return cmdStatus(db, cfg, cwd, slug)

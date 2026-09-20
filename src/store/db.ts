@@ -27,6 +27,8 @@ const MIGRATIONS: string[] = [
    CREATE TABLE event (
      turn_id TEXT NOT NULL, seq INTEGER NOT NULL, type TEXT NOT NULL,
      payload TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (turn_id, seq));`,
+  `ALTER TABLE turn ADD COLUMN parent_turn_id TEXT;
+   ALTER TABLE turn ADD COLUMN model TEXT;`,
 ]
 
 export function openDb(path: string): Database {

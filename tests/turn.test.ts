@@ -234,6 +234,20 @@ test('an informational error on a successful run does not fail the turn', async 
   expect(r.error).toBe(null)
 })
 
+test('finish writes the model onto the turn row', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([
+    { type: 'system', subtype: 'init', session_id: 'sess-1' },
+    { type: 'result', subtype: 'success', result: 'ok' },
+  ])
+  await runTurn({ db, adapter }, ctx(s.id, { model: 'opus-4' }))
+  const row = db.query('SELECT model FROM turn WHERE session_id = $s').get({ s: s.id }) as
+    | Record<string, unknown>
+    | null
+  expect(row?.model).toBe('opus-4')
+})
+
 test('every event is streamed to the callback', async () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })

@@ -134,7 +134,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     db.query(
       `UPDATE turn SET final = $final, cost_usd = $cost, credits = $credits, input_tokens = $inTok,
          output_tokens = $outTok, exit_code = $exit, error = $error, error_kind = $errorKind,
-         ended_at = $ended WHERE id = $id`,
+         ended_at = $ended, model = $model WHERE id = $id`,
     ).run({
       id: turnId,
       final: result.final,
@@ -146,6 +146,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
       error: result.error?.message ?? null,
       errorKind: result.error?.kind ?? null,
       ended: Date.now(),
+      model: ctx.model ?? null,
     })
     upsertBinding(db, {
       sessionId: ctx.sessionId,

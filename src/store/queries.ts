@@ -180,14 +180,15 @@ export function recordTurn(
     inputTokens?: number
     outputTokens?: number
     kind?: string | null
+    model?: string | null
   },
 ): string {
   const turnId = id()
   db.query(
     `INSERT INTO turn (id, session_id, agent, prompt, final, cost_usd, credits, input_tokens,
-       output_tokens, kind, gate_passed, exit_code, error, error_kind, started_at, ended_at)
+       output_tokens, kind, gate_passed, exit_code, error, error_kind, started_at, ended_at, model)
      VALUES ($id, $sessionId, $agent, $prompt, $final, $costUsd, $credits, $inputTokens,
-       $outputTokens, $kind, NULL, $exitCode, $error, NULL, $startedAt, $endedAt)`,
+       $outputTokens, $kind, NULL, $exitCode, $error, NULL, $startedAt, $endedAt, $model)`,
   ).run({
     id: turnId,
     sessionId: input.sessionId,
@@ -203,6 +204,7 @@ export function recordTurn(
     error: input.error ?? null,
     startedAt: now(),
     endedAt: now(),
+    model: input.model ?? null,
   })
   return turnId
 }
@@ -278,4 +280,49 @@ export function bumpBinding(
     `UPDATE binding SET turns = turns + 1, cost_usd = cost_usd + $costUsd, credits = credits + $credits,
        last_seen = $lastSeen WHERE session_id = $sessionId AND agent = $agent`,
   ).run({ sessionId, agent, costUsd, credits, lastSeen: now() })
+}
+
+export interface UsageRow {
+  agent: AgentId
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  credits: number
+  gatePassed: number
+  gateKnown: number
+}
+
+const USAGE_COLUMNS = `agent,
+  COUNT(*) AS turns,
+  COALESCE(SUM(input_tokens), 0) AS input_tokens,
+  COALESCE(SUM(output_tokens), 0) AS output_tokens,
+  COALESCE(SUM(cost_usd), 0) AS cost_usd,
+  COALESCE(SUM(credits), 0) AS credits,
+  COALESCE(SUM(CASE WHEN gate_passed = 1 THEN 1 ELSE 0 END), 0) AS gate_passed,
+  COALESCE(SUM(CASE WHEN gate_passed IS NULL THEN 0 ELSE 1 END), 0) AS gate_known`
+
+const toUsage = (r: Record<string, unknown>): UsageRow => ({
+  agent: r.agent as AgentId,
+  turns: r.turns as number,
+  inputTokens: r.input_tokens as number,
+  outputTokens: r.output_tokens as number,
+  costUsd: r.cost_usd as number,
+  credits: r.credits as number,
+  gatePassed: r.gate_passed as number,
+  gateKnown: r.gate_known as number,
+})
+
+export function usageForSession(db: Database, sessionId: string): UsageRow[] {
+  const rows = db
+    .query(`SELECT ${USAGE_COLUMNS} FROM turn WHERE session_id = $sessionId GROUP BY agent ORDER BY agent`)
+    .all({ sessionId }) as Record<string, unknown>[]
+  return rows.map(toUsage)
+}
+
+export function usageAcrossSessions(db: Database): UsageRow[] {
+  const rows = db
+    .query(`SELECT ${USAGE_COLUMNS} FROM turn GROUP BY agent ORDER BY agent`)
+    .all() as Record<string, unknown>[]
+  return rows.map(toUsage)
 }

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { Database } from 'bun:sqlite'
 import { openDb } from '../src/store/db'
 import {
   createSession,
@@ -197,6 +198,36 @@ test('the stale-lock reclaim deletes only the row it observed', () => {
   })
   expect(reclaimStaleLock(d, s.id, 'ghost', DEAD)).toBe(false)
   expect(lockOwner(d, s.id)).toBe('other')
+})
+
+test('a database created before migration 1 gains the new turn columns', () => {
+  const path = `/tmp/konvoy-test-migrate-${Bun.nanoseconds()}.db`
+  const old = new Database(path)
+  old.exec(`CREATE TABLE turn (
+     id TEXT PRIMARY KEY, session_id TEXT NOT NULL, agent TEXT NOT NULL,
+     prompt TEXT NOT NULL, final TEXT NOT NULL, cost_usd REAL NOT NULL DEFAULT 0,
+     credits REAL NOT NULL DEFAULT 0, input_tokens INTEGER NOT NULL DEFAULT 0,
+     output_tokens INTEGER NOT NULL DEFAULT 0, kind TEXT, gate_passed INTEGER,
+     exit_code INTEGER NOT NULL, error TEXT, error_kind TEXT,
+     started_at INTEGER NOT NULL, ended_at INTEGER NOT NULL);
+   PRAGMA user_version = 1;`)
+  old.close()
+
+  const d = openDb(path)
+  const cols = (d.query('PRAGMA table_info(turn)').all() as { name: string }[]).map((c) => c.name)
+  expect(cols).toContain('model')
+  expect(cols).toContain('parent_turn_id')
+  d.close()
+})
+
+test('a recorded turn keeps its model', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const turnId = recordTurn(d, {
+    sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, model: 'opus-4',
+  })
+  const row = d.query('SELECT model FROM turn WHERE id = $id').get({ id: turnId }) as Record<string, unknown>
+  expect(row.model).toBe('opus-4')
 })
 
 test('a binding keeps its bound status when a later turn fails to report an id', () => {
