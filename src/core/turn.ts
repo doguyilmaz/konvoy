@@ -80,7 +80,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
 
   const proc = Bun.spawn(plan.cmd, {
     cwd: plan.cwd ?? ctx.cwd,
-    env: { ...(plan.env ?? (process.env as Record<string, string>)), ...(ctx.lease ? { KONVOY_LEASE: ctx.lease } : {}) },
+    env: { ...(process.env as Record<string, string>), ...(plan.env ?? {}), ...(ctx.lease ? { KONVOY_LEASE: ctx.lease } : {}) },
     stdin: plan.stdin ? new Response(plan.stdin) : 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',

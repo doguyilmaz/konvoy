@@ -358,3 +358,20 @@ test('an error with no words that survives stream and stderr is given a stated m
   expect(r.error?.kind).toBe('unknown')
   expect(r.error?.message).toMatch(/claude exited 0 and reported an error without a message/)
 })
+
+// An adapter that sets env must extend the child's environment, not replace it: with only its
+// own variables the child has no PATH, the spawn throws before any turn row is written, and
+// the failure names neither the adapter nor the variable.
+test('an adapter env extends the process environment instead of replacing it', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([{ type: 'result', subtype: 'success', result: 'ran' }], {
+    turn: () => ({
+      cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'result', subtype: 'success', result: 'ran' })],
+      env: { MY_ONLY_VAR: '1' },
+    }),
+  })
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.final).toBe('ran')
+  expect(r.exitCode).toBe(0)
+})

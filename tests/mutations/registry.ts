@@ -43,8 +43,8 @@ export const mutations: Mutation[] = [
   {
     name: 'stripControlChars no longer strips ESC, letting a terminal escape sequence through',
     file: 'src/adapters/types.ts',
-    from: "  return value.replace(/[\\x00-\\x1f\\x7f]/g, '')",
-    to: "  return value.replace(/[\\x00-\\x1a\\x7f]/g, '')",
+    from: "  return value.replace(ANSI, '').replace(/[\\x00-\\x1f\\x7f]/g, '')",
+    to: "  return value",
     tests: ['tests/adapter-claude.test.ts'],
   },
   {
@@ -735,5 +735,19 @@ export const mutations: Mutation[] = [
     from: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:\\/-]*$/',
     to: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/',
     tests: ['tests/config-security.test.ts'],
+  },
+  {
+    name: "credits with no configured rate fall through to token pricing for a model the agent is not billed by",
+    file: 'src/pricing.ts',
+    from: "    return rate ? row.credits * rate.usdPerCredit : null",
+    to: "    if (rate) return row.credits * rate.usdPerCredit",
+    tests: ["tests/pricing.test.ts"],
+  },
+  {
+    name: "an adapter env replaces the child environment, leaving it without PATH",
+    file: 'src/core/turn.ts',
+    from: "env: { ...(process.env as Record<string, string>), ...(plan.env ?? {}),",
+    to: "env: { ...(plan.env ?? (process.env as Record<string, string>)),",
+    tests: ["tests/turn.test.ts"],
   },
 ]
