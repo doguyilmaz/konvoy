@@ -1,35 +1,53 @@
 import type { Database } from 'bun:sqlite'
-import { currentSession, getSessionBySlug, usageAcrossSessions, usageForSession } from '../store/queries'
+import {
+  currentSession,
+  getSessionBySlug,
+  turnsPerDay,
+  usageAcrossSessions,
+  usageForSession,
+  type UsageRow,
+} from '../store/queries'
 import { formatUsage } from '../format'
+import { heatmap, shareBars } from '../chart'
+import type { Session } from '../types'
 
 // the SPEND column mixes dollars and credits, so every table that shows it carries this line
 const UNITS = "spend is in each agent's own unit; a dash means the CLI reported none"
 
-export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?: string }): number {
+export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?: string; chart?: boolean }): number {
+  let session: Session | null = null
+  let rows: UsageRow[]
+
   if (opts.all) {
-    const rows = usageAcrossSessions(db)
+    rows = usageAcrossSessions(db)
     if (rows.length === 0) {
       console.log('no turns recorded yet')
       return 0
     }
     console.log('all sessions')
-    console.log(formatUsage(rows))
-    console.log(UNITS)
-    return 0
+  } else {
+    session = opts.slug ? getSessionBySlug(db, opts.slug) : currentSession(db, cwd)
+    if (!session) {
+      console.error('no konvoy session here — run `konvoy new "<goal>"` first')
+      return 2
+    }
+    rows = usageForSession(db, session.id)
+    if (rows.length === 0) {
+      console.log(`session ${session.slug} — no turns yet`)
+      return 0
+    }
+    console.log(`session ${session.slug}`)
   }
 
-  const session = opts.slug ? getSessionBySlug(db, opts.slug) : currentSession(db, cwd)
-  if (!session) {
-    console.error('no konvoy session here — run `konvoy new "<goal>"` first')
-    return 2
-  }
-  const rows = usageForSession(db, session.id)
-  if (rows.length === 0) {
-    console.log(`session ${session.slug} — no turns yet`)
-    return 0
-  }
-  console.log(`session ${session.slug}`)
   console.log(formatUsage(rows))
   console.log(UNITS)
+
+  if (opts.chart) {
+    console.log('\nturns per day')
+    console.log(heatmap(turnsPerDay(db, opts.all ? undefined : session?.id)))
+    console.log('\nshare of turns')
+    console.log(shareBars(rows.map((r) => ({ label: r.agent, value: r.turns }))))
+  }
+
   return 0
 }

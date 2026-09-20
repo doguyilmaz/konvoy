@@ -326,3 +326,17 @@ export function usageAcrossSessions(db: Database): UsageRow[] {
     .all() as Record<string, unknown>[]
   return rows.map(toUsage)
 }
+
+// 'localtime' matters: without it SQLite buckets by UTC, so every turn run between midnight
+// and the local UTC offset lands on the previous day's square — verified on this machine
+// (UTC+3), where a turn at 01:30 on the 21st was reported as the 20th.
+const DAY_EXPR = "date(started_at / 1000, 'unixepoch', 'localtime')"
+
+export function turnsPerDay(db: Database, sessionId?: string): { day: string; count: number }[] {
+  const sql = sessionId
+    ? `SELECT ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn
+       WHERE session_id = $sessionId GROUP BY day ORDER BY day`
+    : `SELECT ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn GROUP BY day ORDER BY day`
+  const rows = (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as Record<string, unknown>[]
+  return rows.map((r) => ({ day: r.day as string, count: r.count as number }))
+}

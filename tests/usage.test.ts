@@ -1,7 +1,14 @@
 import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { cmdUsage } from '../src/commands/usage'
-import { createSession, recordTurn, setGateResult, usageForSession, usageAcrossSessions } from '../src/store/queries'
+import {
+  createSession,
+  recordTurn,
+  setGateResult,
+  turnsPerDay,
+  usageForSession,
+  usageAcrossSessions,
+} from '../src/store/queries'
 import { formatUsage } from '../src/format'
 
 const db = () => openDb(':memory:')
@@ -167,6 +174,52 @@ test('usage with no session in this directory reports the standard error and exi
   }
   expect(code).toBe(2)
   expect(lines).toContain('no konvoy session here — run `konvoy new "<goal>"` first')
+})
+
+test('a turn after midnight is counted on its own local day, not the UTC one', () => {
+  const d = db()
+  const s = createSession(d, { slug: 'late', goal: 'g', cwd: '/repo', lead: 'claude' })
+  // 01:30 local is the previous day in UTC for any timezone ahead of it
+  const ms = Date.parse('2026-09-21T01:30:00+03:00')
+  const id = recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
+  d.query('UPDATE turn SET started_at = $ms WHERE id = $id').run({ ms, id })
+
+  // en-CA formats as YYYY-MM-DD, so this is the machine's own local calendar day
+  const expected = new Date(ms).toLocaleDateString('en-CA')
+  expect(turnsPerDay(d)).toEqual([{ day: expected, count: 1 }])
+})
+
+test('usage --chart prints the turns-per-day heatmap and the share-of-turns bars', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 1, exitCode: 0 })
+  recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0.5, exitCode: 0 })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    cmdUsage(d, '/x', { all: false, chart: true })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(lines.some((l) => l.includes('turns per day'))).toBe(true)
+  expect(lines.some((l) => l.includes('share of turns'))).toBe(true)
+  expect(lines.some((l) => l.includes('claude') && l.includes('%'))).toBe(true)
+})
+
+test('usage without --chart prints no chart output', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 1, exitCode: 0 })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    cmdUsage(d, '/x', { all: false })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(lines.some((l) => l.includes('turns per day'))).toBe(false)
 })
 
 test('usage for a session with zero turns reports that and exits 0', () => {

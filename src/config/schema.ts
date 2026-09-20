@@ -50,6 +50,14 @@ export const configSchema = z
     agents: z.partialRecord(agentIdSchema, agentConfigSchema).default({}),
     roles: rolesObjectSchema.prefault({}),
     policy: policyObjectSchema.prefault({}),
+    pricing: z
+      .object({
+        asOf: z.string().default(''),
+        models: z.record(z.string(), z.object({ inputPerMTok: z.number(), outputPerMTok: z.number() }).strict()).default({}),
+        credits: z.record(z.string(), z.object({ usdPerCredit: z.number() }).strict()).default({}),
+      })
+      .strict()
+      .prefault({}),
   })
   .strict()
 
