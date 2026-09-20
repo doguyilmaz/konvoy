@@ -123,16 +123,6 @@ test('an error event is surfaced and classified', async () => {
   expect(r.error?.kind).toBe('auth')
 })
 
-test('resolveForeignId is the fallback when the stream carries no session id', async () => {
-  const db = openDb(':memory:')
-  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
-  const adapter = fakeAdapter([{ type: 'result', subtype: 'success', result: 'ok' }], {
-    resolveForeignId: async () => 'recovered-id',
-  })
-  const r = await runTurn({ db, adapter }, ctx(s.id))
-  expect(r.foreignId).toBe('recovered-id')
-})
-
 test('a parser that throws is contained and the turn still completes', async () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })

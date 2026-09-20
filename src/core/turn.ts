@@ -202,9 +202,6 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     result.exitCode = await proc.exited
 
     if (!sawDone) result.final = accumulated
-    if (!result.foreignId && adapter.resolveForeignId) {
-      result.foreignId = await adapter.resolveForeignId(ctx, startedAt)
-    }
 
     // an error event that carries no words (claude's is_error result on a dead session id)
     // must not stand in for stderr, which is where that CLI puts the reason

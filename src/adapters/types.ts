@@ -8,7 +8,6 @@ export interface Adapter {
   parse(line: string): KonvoyEvent[]
   attach(binding: Binding): SpawnPlan
   prepare?(ctx: TurnContext): Promise<void>
-  resolveForeignId?(ctx: TurnContext, startedAt: number): Promise<string | null>
 }
 
 // konvoy's own instruction, owned here rather than vendored from any installed skill — a
