@@ -10,7 +10,8 @@
     "build": "bun build ./src/cli.ts --compile --outfile dist/konvoy",
     "typecheck": "bunx tsc --noEmit",
     "mutate": "bun run tests/mutations/run.ts",
-    "verify:claims": "bun run scripts/verify-claims.ts"
+    "verify:claims": "bun run scripts/verify-claims.ts",
+    "smoke": "bun run scripts/smoke.ts"
   },
   "dependencies": {
     "zod": "^4.6.5"

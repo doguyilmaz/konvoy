@@ -182,6 +182,7 @@ bun test
 bun run typecheck
 bun run mutate         # mutation coverage of src/
 bun run verify:claims  # checks konvoy's own claims about the four CLIs against what --help says here
+bun run smoke          # one real turn per installed, authenticated agent — spends quota
 ```
 
 `verify:claims` is the standing form of a manual check: it re-reads each CLI's own `--help`
@@ -189,3 +190,10 @@ and confirms things this README and the adapters assume — that each agent's up
 subcommand exists, that only claude accepts a caller-chosen session id, and that opencode's
 `--session` continues a session rather than creating one. It never sends a prompt or spends
 quota, and it isn't part of `bun test` since it needs the CLIs installed to mean anything.
+
+`smoke` closes the gap `verify:claims` and the frozen fixtures in `tests/fixtures/streams/`
+both leave open: it runs one minimal turn per installed, logged-in agent through konvoy's real
+`send()` and asserts a foreign session id came back, some final text came back, and the turn
+ended without an error. It skips an agent that isn't installed or isn't logged in, and flags
+when an installed CLI's version has drifted from the one a fixture was captured against — the
+moment to re-capture. It spends real quota, so it is opt-in and never part of `bun test`.
