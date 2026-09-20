@@ -388,4 +388,18 @@ export const mutations: Mutation[] = [
     to: 'if (true) {',
     tests: ['tests/facts.test.ts'],
   },
+  {
+    name: 'a facts field carrying the delimiter is emitted unquoted, so every later column shifts',
+    file: 'src/core/facts.ts',
+    from: 'function cell(value: string): string {',
+    to: 'function cell(value: string): string { return value;',
+    tests: ['tests/facts.test.ts'],
+  },
+  {
+    name: 'every facts field is quoted whether it needs it or not, spending tokens on nothing',
+    file: 'src/core/facts.ts',
+    from: '/[",\\n]/.test(value)',
+    to: 'true',
+    tests: ['tests/facts.test.ts'],
+  },
 ]

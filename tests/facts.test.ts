@@ -41,3 +41,28 @@ test('an empty session renders without a section rather than an empty one', () =
   expect(out).not.toContain('files[0]')
   expect(out.trim().length).toBeGreaterThanOrEqual(0)
 })
+
+test('a field containing the delimiter is quoted, so a row cannot shift', () => {
+  // 48% of this repo's own commit subjects contain a comma — this is the common case
+  const out = formatFacts({
+    commits: [{ sha: 'a1b2c3d', subject: 'feat: single-binary build, update command and readme' }],
+    files: [{ path: 'src/a,b.ts', added: 1, removed: 2 }],
+    agents: [],
+  })
+  expect(out).toContain('a1b2c3d,"feat: single-binary build, update command and readme"')
+  expect(out).toContain('"src/a,b.ts",1,2')
+})
+
+test('a field containing a quote has it doubled, as csv requires', () => {
+  const out = formatFacts({
+    commits: [{ sha: 'a1b2c3d', subject: 'fix: the "brief" style, finally' }],
+    files: [], agents: [],
+  })
+  expect(out).toContain('"fix: the ""brief"" style, finally"')
+})
+
+test('an ordinary field is not quoted, because quotes nobody needs are tokens nobody wanted', () => {
+  const out = formatFacts({ commits: [{ sha: 'a1b2c3d', subject: 'plain subject' }], files: [], agents: [] })
+  expect(out).toContain('a1b2c3d,plain subject')
+  expect(out).not.toContain('"plain subject"')
+})
