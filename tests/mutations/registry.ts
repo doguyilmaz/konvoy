@@ -533,15 +533,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the prelude is built but never put on the context, so a successor agent arrives blind',
     file: 'src/core/session.ts',
-    from: "        prelude: prelude === '' ? undefined : prelude,",
+    from: '        prompt,\n        prelude,',
     to: '',
     tests: ['tests/session.test.ts'],
-  },
-  {
-    name: 'an empty prelude is passed as an empty string, decorating every first turn with blank lines',
-    file: 'src/core/session.ts',
-    from: "        prelude: prelude === '' ? undefined : prelude,",
-    to: '        prelude,',
-    tests: ['tests/prelude.test.ts', 'tests/session.test.ts'],
   },
 ]

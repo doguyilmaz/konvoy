@@ -207,7 +207,7 @@ export async function send(
         cwd: session.cwd,
         sessionDir: sessionDir(session.cwd, session.slug),
         prompt,
-        prelude: prelude === '' ? undefined : prelude,
+        prelude,
         binding: getBinding(deps.db, session.id, current),
         model: currentSettings.model,
         effort: currentEffort.value,
