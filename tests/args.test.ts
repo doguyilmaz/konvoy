@@ -34,3 +34,13 @@ test('everything after a bare double dash is positional', () => {
 test('a lone dash is a positional, not a flag', () => {
   expect(parseArgs(['send', 'codex', '-'])._).toEqual(['send', 'codex', '-'])
 })
+
+// `konvoy rm --yes <slug>` printed the usage line while `konvoy rm <slug> --yes` worked: a flag
+// swallowed the positional after it as its value. Flags that are switches never take one.
+test('a switch never swallows the positional that follows it; a value flag still takes its value', () => {
+  expect(parseArgs(['rm', '--yes', 'doomed'])).toEqual({ _: ['rm', 'doomed'], flags: { yes: true } })
+  expect(parseArgs(['config', 'set', '--global', 'defaults.effort', 'low'])).toEqual({ _: ['config', 'set', 'defaults.effort', 'low'], flags: { global: true } })
+  expect(parseArgs(['usage', '--all', '--chart'])).toEqual({ _: ['usage'], flags: { all: true, chart: true } })
+  expect(parseArgs(['dashboard', '--port', '4000'])).toEqual({ _: ['dashboard'], flags: { port: '4000' } })
+  expect(parseArgs(['send', 'codex', '--session', 'demo', 'hello'])).toEqual({ _: ['send', 'codex', 'hello'], flags: { session: 'demo' } })
+})

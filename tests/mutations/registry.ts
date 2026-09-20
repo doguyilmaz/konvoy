@@ -792,4 +792,11 @@ export const mutations: Mutation[] = [
     to: "    const after = await deps.detect(agent, { bin: settings.bin })",
     tests: ["tests/update.test.ts"],
   },
+  {
+    name: "a switch like --yes swallows the positional after it as its value",
+    file: 'src/args.ts',
+    from: "    if (!SWITCHES.has(name) && next !== undefined && !next.startsWith('-')) {",
+    to: "    if (next !== undefined && !next.startsWith('-')) {",
+    tests: ["tests/args.test.ts"],
+  },
 ]
