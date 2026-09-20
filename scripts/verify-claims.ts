@@ -207,6 +207,29 @@ function flagCheck(id: AgentId, kind: 'turn' | 'attach'): Check {
 
 for (const id of agentIds) checks.push(flagCheck(id, 'turn'), flagCheck(id, 'attach'))
 
+// The auth-status commands src/core/detect.ts runs on `konvoy status`. Running each is the
+// check: exit 127 means no binary, and a CLI that has dropped the subcommand says so in its
+// own words. Logged in or not, the subcommand existing is what konvoy depends on.
+const AUTH_ARGS: Record<AgentId, string[]> = { claude: ['auth', 'status'], codex: ['login', 'status'], kiro: ['whoami'], opencode: ['auth', 'list'] }
+const UNKNOWN_SUBCOMMAND = /unrecognized subcommand|unknown (?:sub)?command|invalid (?:sub)?command|no such (?:sub)?command|is not a .*command|command not found/i
+
+function authCheck(id: AgentId): Check {
+  return {
+    label: `${id} auth-status subcommand exists (${AUTH_ARGS[id].join(' ')})`,
+    run: async () => {
+      const bin = await resolveBin(BIN_CANDIDATES[AGENT_KEY[id]])
+      if (!bin) return { ok: false, detail: `${id} not found on this machine — cannot verify` }
+      const result = await run([bin, ...AUTH_ARGS[id]])
+      if (!result) return { ok: false, detail: `${bin} ${AUTH_ARGS[id].join(' ')} failed to spawn` }
+      if (result.exitCode === 127) return { ok: false, detail: 'exit 127' }
+      if (UNKNOWN_SUBCOMMAND.test(result.output)) return { ok: false, detail: `rejected: ${firstLine(result.output)}` }
+      return { ok: true, detail: `exit ${result.exitCode}: ${firstLine(result.output).slice(0, 60)}` }
+    },
+  }
+}
+
+for (const id of agentIds) checks.push(authCheck(id))
+
 let staleCount = 0
 console.log("verify:claims — checking konvoy's documented CLI claims against what's installed here\n")
 for (const check of checks) {
