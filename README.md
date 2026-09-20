@@ -157,6 +157,17 @@ preamble and pleasantries — it shapes the answer you read, not what agents sen
 { "defaults": { "style": "brief" }, "agents": { "kiro": { "style": null } } }
 ```
 
+Set `delegation.enabled` to have every turn told how to hand work to another agent — a
+`<<<konvoy ... >>>` block naming `to:` and `task:`, with optional `open:` and `decisions:`
+lists — instead of the weaker summary konvoy derives on its own. The agent decides when a
+turn is actually handing off; a turn that isn't emits no block at all, so this costs nothing
+on the turns that don't need it. Off by default: a single-agent session has no handoff to
+describe.
+
+```jsonc
+{ "delegation": { "enabled": true } }
+```
+
 Name a `gate` command — your test suite, a linter, whatever exits non-zero on bad work — and
 konvoy runs it after each turn that produced something, recording a pass or fail against that
 turn. A command that can't even be spawned records nothing, and a failed turn is never gated:

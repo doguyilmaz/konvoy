@@ -78,6 +78,9 @@ export const configSchema = z
     // project layer may never set this; see stripProjectPrivileges in config/load.ts.
     gate: z.object({ command: z.string().nullish() }).strict().prefault({}),
     failover: failoverObjectSchema.prefault({}),
+    // Off by default: a single-agent session has no handoff to describe, and asking for one
+    // anyway would cost output tokens on every turn for a format nobody reads.
+    delegation: z.object({ enabled: z.boolean().default(false) }).strict().prefault({}),
     pricing: z
       .object({
         asOf: z.string().default(''),

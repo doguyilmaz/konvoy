@@ -17,12 +17,27 @@ export interface Adapter {
 export const BRIEF_INSTRUCTION =
   'Lead with the action. Number multi-step work. End with one concrete next step. Skip preamble, recap, and closing pleasantries.'
 
+// konvoy has no model and cannot decide when a turn hands off — only the agent running it
+// knows. This instruction is what asks it to say so. A turn not handing work over must emit
+// nothing: the envelope costs output tokens only on the turns that actually use it.
+export const DELEGATION_INSTRUCTION =
+  'If you are handing work to another agent, end your reply with a block like:\n' +
+  '<<<konvoy\n' +
+  'to: <agent id or role>\n' +
+  'task: <imperative, one line>\n' +
+  'open: <optional list>\n' +
+  'decisions: <optional list>\n' +
+  '>>>\n' +
+  'If this turn is not handing work over, emit nothing — no block at all.'
+
 // One composition point rather than four: the adapters cannot drift in how they join these,
 // and the prelude leads because a stable prefix is what prompt caching discounts. The style
-// instruction trails the prompt for the same reason — it must never join the cached prefix.
+// and delegation instructions trail the prompt for the same reason — they must never join
+// the cached prefix.
 export function withPrelude(ctx: TurnContext): string {
   const base = ctx.prelude ? `${ctx.prelude}\n\n${ctx.prompt}` : ctx.prompt
-  return ctx.style === 'brief' ? `${base}\n\n${BRIEF_INSTRUCTION}` : base
+  const styled = ctx.style === 'brief' ? `${base}\n\n${BRIEF_INSTRUCTION}` : base
+  return ctx.delegation ? `${styled}\n\n${DELEGATION_INSTRUCTION}` : styled
 }
 
 export function safeJson(line: string): Record<string, unknown> | null {

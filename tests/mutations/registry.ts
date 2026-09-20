@@ -501,6 +501,29 @@ export const mutations: Mutation[] = [
     tests: ['tests/style.test.ts'],
   },
 
+  // --- the delegation envelope instruction (src/adapters/types.ts) ---
+  {
+    name: 'the delegation instruction is emitted even when delegation is off, paying for it on every turn',
+    file: 'src/adapters/types.ts',
+    from: "  return ctx.delegation ? `${styled}\\n\\n${DELEGATION_INSTRUCTION}` : styled",
+    to: "  return `${styled}\\n\\n${DELEGATION_INSTRUCTION}`",
+    tests: ['tests/envelope.test.ts'],
+  },
+  {
+    name: 'the delegation instruction is prepended ahead of the prompt instead of appended after it',
+    file: 'src/adapters/types.ts',
+    from: "  return ctx.delegation ? `${styled}\\n\\n${DELEGATION_INSTRUCTION}` : styled",
+    to: "  return ctx.delegation ? `${DELEGATION_INSTRUCTION}\\n\\n${styled}` : styled",
+    tests: ['tests/envelope.test.ts'],
+  },
+  {
+    name: 'the "emit nothing when not handing over" sentence is dropped, so every turn pays for a block nobody reads',
+    file: 'src/adapters/types.ts',
+    from: "  '>>>\\n' +\n  'If this turn is not handing work over, emit nothing — no block at all.'",
+    to: "  '>>>\\n' +\n  ''",
+    tests: ['tests/envelope.test.ts'],
+  },
+
   // --- the gate (src/core/gate.ts, src/config/load.ts) ---
   {
     name: 'a command that cannot be spawned records a failing verdict instead of no verdict at all',

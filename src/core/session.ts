@@ -215,6 +215,7 @@ export async function send(
         harness: currentSettings.harness,
         bin: currentSettings.bin,
         style: currentSettings.style,
+        delegation: deps.cfg.delegation.enabled,
       })
 
       let retries = 0

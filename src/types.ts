@@ -65,4 +65,5 @@ export interface TurnContext {
   lease?: string
   kind?: string
   style?: Style
+  delegation?: boolean
 }
