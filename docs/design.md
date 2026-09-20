@@ -162,7 +162,7 @@ type KonvoyEvent =
   | { t: 'thinking'; text: string }
   | { t: 'tool'; name: string; input?: unknown; status: 'start'|'ok'|'error' }
   | { t: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number }
-  | { t: 'error'; message: string; kind: 'auth'|'rate'|'crash'|'unknown' }
+  | { t: 'error'; message: string; kind: 'auth'|'rate'|'upstream'|'crash'|'timeout'|'interrupted'|'unknown' }
   | { t: 'done'; final: string }
 ```
 
@@ -998,7 +998,175 @@ Where a CLI reports context pressure before it compacts — kiro does — konvoy
 off *before* the compaction rather than after, which keeps the detail in the agent that earned
 it instead of in a summary.
 
-## 28. Roadmap
+## 28. The prelude: carrying a session across agents
+
+Section 21 specifies how one agent hands work to another: the sender writes a bounded envelope
+of intent, konvoy adds machine facts it can compute itself, and anything the receiver can fetch
+travels as a pointer. That protocol assumes a **cooperative sender** — an agent that finishes
+its turn and describes what it is passing on.
+
+Failover is exactly the case where that assumption fails. A codex that has hit its weekly limit
+cannot write a handoff for claude. The envelope protocol has nothing to offer there, and this
+section closes that gap.
+
+### Two modes, and the second is honestly weaker
+
+**Cooperative.** The previous turn ended with a `<<<konvoy … >>>` envelope. konvoy parses it and
+uses the sender's own account of the task, the open questions and the decisions taken.
+
+**Derived.** The previous turn was blocked — `auth`, `rate` or `upstream` — and produced no
+envelope. konvoy synthesises a prelude from what it already stores: the session goal, the last
+few turns as prompt-and-answer pairs, and the machine facts.
+
+A derived prelude carries less than a cooperative one and konvoy says so rather than hiding it.
+It knows what was asked and what was answered; it does not know why the previous agent chose its
+approach, or what it had not yet settled — the two things section 21 calls the most valuable part
+of a handoff. The receiving agent is told, in the prelude itself, that this is a failover handoff
+and that the previous agent's intent was never recorded. An agent that knows its context is
+partial asks; one that believes it is complete proceeds.
+
+### Order is a cost decision, not a style one
+
+The prelude is a prefix. Prompt caching discounts a stable prefix by roughly an order of
+magnitude, so the prelude is ordered **stable parts first**: the session goal, then the machine
+facts, then the recent turns. A prelude that reshuffles itself every turn pays full price for all
+of it and would cost more than the compression it was meant to save.
+
+### Bounded by construction
+
+Section 18 measured a per-turn floor near 5,400 tokens. A prelude that grows with session length
+would eventually dominate every turn, so it is capped: the goal always, machine facts always, and
+at most the three most recent turns, each truncated. When turns are dropped, the prelude says how
+many — a receiver that knows it is seeing a window behaves differently from one that believes it
+is seeing everything.
+
+## 29. Machine facts travel as a table
+
+konvoy computes the facts it supplies — changed files, commit range, per-agent turns and spend —
+from git and its own store. These are uniform rows: the same fields repeated per item. That is
+the one shape where a tabular encoding measurably beats JSON, at roughly forty per cent fewer
+tokens with equal or better retrieval accuracy, so konvoy emits them as a table rather than as
+objects:
+
+```
+files[3]{path,added,removed}:
+  src/core/turn.ts,12,3
+  src/pricing.ts,8,2
+  tests/turn.test.ts,40,0
+```
+
+Two limits keep this honest. It applies **only to data konvoy generates**, never to an agent's
+prose: a table cannot lose meaning by being tabulated, where a compressed summary can. And it
+applies **only to what konvoy sends in**; what an agent is asked to *write* stays in the sentinel
+form section 21 already chose, because models generate that reliably and wrap JSON in fences.
+
+konvoy emits this format directly. It takes no dependency to print a table.
+
+## 30. Failover between agents
+
+A user names an ordered chain — "codex, then claude, then kiro" — globally or for one session.
+When the agent at the head of the chain cannot work, konvoy moves to the next one and says so.
+
+### What counts as blocked
+
+| `error_kind` | konvoy's move | why |
+|---|---|---|
+| `rate` | switch immediately | the window is hours; retrying in seconds is pointless |
+| `auth` | switch immediately | a human must act before this agent works again |
+| `upstream` | retry with backoff, then switch | the API is transiently unavailable and usually returns |
+| `crash`, `timeout` | never switch | the fault is in the work, and the next agent inherits it |
+| `interrupted` | never switch | the user stopped it |
+
+`upstream` is a new kind. It covers an API that is reachable but refusing — at capacity,
+overloaded, temporarily unavailable, service unavailable, server busy, internal server error,
+upstream connect failures. Those predicates are taken from opencode's own classifier rather than
+invented.
+
+### Told, not asked
+
+The user configured the chain, so konvoy does not ask permission to follow it. It reports which
+agent was blocked, what it said — the reset time travels inside the message text, so quoting it
+is enough — and which agent took over. One line, not a stream of retries.
+
+### No failback
+
+Once konvoy moves from codex to claude it stays on claude, even when codex's quota returns. The
+alternative is an agent that changes under the user mid-session, and a context that has to be
+carried backwards as well as forwards. This is a deliberate simplification and may be revisited.
+
+### The replacement turn is linked, not orphaned
+
+The turn that runs on the successor sets `parent_turn_id` to the turn it replaced. `konvoy usage`
+can then say that an answer cost two attempts across two agents, rather than presenting them as
+unrelated work. This is the first writer of a column the schema has carried since the beginning.
+
+## 31. Output style
+
+konvoy has no model of its own, so it cannot reformat an agent's answer — it can only ask for a
+different one. A style is therefore a request that travels with the prompt, and whatever comes
+back is what gets stored. There is no shorter view over a fuller record.
+
+That makes the scope decision a safety decision. konvoy offers one style, `brief`, and applies it
+**only to what the user reads**. The envelope agents exchange is untouched: it is already bounded
+by section 21 and nobody is watching it for omissions.
+
+### Why this is safe where compression would not be
+
+`brief` removes what carries no information — preamble, recap, closing pleasantries — and
+restructures what remains: lead with the action, number multi-step work, end with one concrete
+next step. Nothing is compressed; filler is dropped.
+
+That is a different operation from lossy compression of prose, and it needs no verification
+apparatus because there is nothing to verify: a removed "Hope this helps!" cannot be the thing the
+user needed. A compressed summary can.
+
+The user is also in the loop for this path in a way no agent is for the other one. A person who
+reads a brief answer and finds something missing asks again. A successor agent handed a lossy
+handoff does not know to.
+
+### konvoy owns the intent, not the text
+
+`brief` names a short set of rules konvoy defines. It does not vendor anyone else's prompt.
+Third-party styles exist — some ship as skills for one CLI and as nothing at all for the others —
+and a copy taken into konvoy would rot with no owner and no way to tell it had. Where a user has
+installed such a skill themselves, `harness: inherit` already exposes it; `konvoy doctor` reports
+which ones it can see, and that is the whole of konvoy's involvement.
+
+### Lossy styles are not shipped on evidence we do not have
+
+Styles that compress prose rather than drop filler report substantial output-token savings, and
+the sources reporting them are vendor write-ups rather than measurements on this workload. konvoy
+does not adopt one until section 32's gate can show that the saving did not cost quality. The
+measurement comes first; the feature follows it or does not arrive.
+
+## 32. The gate: a quality axis that is not an opinion
+
+Section 22 claims that a convoy can beat the best single agent at lower total cost. Cost is
+already measured per turn, per agent and per model. Quality is not measured at all, so the claim
+currently reduces to "cheaper", which was never the interesting half.
+
+`turn.gate_passed` has existed since the first schema and nothing has ever written it. This gives
+it a writer.
+
+### The simplest honest mechanism
+
+A session may configure a gate command — `bun test`, `cargo check`, anything that exits zero or
+non-zero. After a turn that changed files, konvoy runs it and records the verdict on the turn.
+
+konvoy does not judge the work itself. It has no model, and a gate that asked another agent to
+grade the first would cost a full turn to produce an opinion. An exit code is cheap, objective,
+and already exists in every project worth running a convoy on.
+
+### What it unlocks
+
+A recorded verdict per turn turns three open questions into arithmetic: whether one agent's work
+holds up more often than another's, whether an expensive model earns its price on this codebase,
+and whether a compressed style costs accuracy. Until then each of those is a matter of taste.
+
+Where no gate is configured, `gate_passed` stays null and every rate reads as a dash, exactly as
+`konvoy usage` already renders it. A missing measurement is shown as missing.
+
+## 33. Roadmap
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
