@@ -4,11 +4,11 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 
 export function sparkline(values: number[]): string {
   if (values.length === 0) return ''
-  const min = Math.min(...values)
   const max = Math.max(...values)
-  // a flat series has no range to scale against — (v - min) / (max - min) would be 0 / 0
-  if (max === min) return BLOCKS[0]!.repeat(values.length)
-  return values.map((v) => BLOCKS[Math.round(((v - min) / (max - min)) * (BLOCKS.length - 1))]!).join('')
+  // counts have a fixed baseline of zero, not the series' own minimum — a flat run of busy
+  // days must render full, not empty. Guard only the case where there's no signal at all.
+  if (max <= 0) return BLOCKS[0]!.repeat(values.length)
+  return values.map((v) => BLOCKS[Math.round((v / max) * (BLOCKS.length - 1))]!).join('')
 }
 
 export function shareBars(rows: { label: string; value: number }[], width = 18): string {

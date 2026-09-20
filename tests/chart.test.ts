@@ -2,14 +2,13 @@ import { expect, test } from 'bun:test'
 import { heatmap, shareBars, sparkline } from '../src/chart'
 
 test('a sparkline uses the full block range and scales to its own maximum', () => {
-  // the brief's own value here decodes to block indices [0,0,1,2,3,4,5,7] — not reachable by
-  // any min/max-normalized scale; corrected to the canonical 8-value ramp (as the reference
-  // `spark` CLI produces for this exact input) so every one of the 8 blocks is used once, in order
   expect(sparkline([0, 1, 2, 3, 4, 5, 6, 7])).toBe('▁▂▃▄▅▆▇█')
 })
 
-test('a flat series renders flat rather than dividing by zero', () => {
-  expect(sparkline([3, 3, 3])).toBe('▁▁▁')
+test('a busy flat series is full, not empty — the baseline is zero, not the minimum', () => {
+  expect(sparkline([3, 3, 3])).toBe('███')
+  expect(sparkline([5, 6, 7])).toBe('▆▇█')
+  expect(sparkline([0, 0, 0])).toBe('▁▁▁')
   expect(sparkline([])).toBe('')
 })
 
