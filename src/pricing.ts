@@ -22,6 +22,9 @@ export function estimateUsd(row: Priced, pricing: Pricing): number | null {
   if (row.model) {
     const rate = pricing.models[row.model]
     if (rate) {
+      // inputTokens is the whole context sent, cache reads included, and those bill at a
+      // tenth of this rate — so a cache-heavy turn estimates high. Only turns whose CLI
+      // reported no cost of its own reach here, which today is never claude's.
       return (row.inputTokens / 1_000_000) * rate.inputPerMTok +
         (row.outputTokens / 1_000_000) * rate.outputPerMTok
     }

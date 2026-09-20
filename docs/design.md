@@ -352,16 +352,37 @@ Schemas the MCP tool definitions require, so it earns its place twice.
 One-shot execution pays each CLI's startup context on every turn, so that cost was measured
 rather than assumed. Each run below is a single turn whose entire task was to reply `OK`.
 
-| | context loaded | cost of one trivial turn |
-|---|---|---|
-| claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events, **42,098 cache-write tokens** | **$0.0850** |
-| claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks, **5,456 tokens** | **$0.0130** |
-| codex, `--ignore-user-config` | 18,173 input tokens (6,656 cached) | — |
-| kiro, v2 engine | — | 0.0667 credits |
+**Context sent** below means every token the CLI put in front of the model:
+`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. Reading any one of
+those alone is not the turn's context, and mixing them across agents is not a comparison —
+see the correction at the end of this section.
 
-A 7.7× difference in context and 6.5× in cost, before any work is done. A ten-turn
-delegation chain therefore costs roughly $0.85 in pure startup on the full setup versus
-$0.13 on a minimal one — and that gap widens on larger models.
+| | context sent | cost of one trivial turn |
+|---|---|---|
+| claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events — **53,336 tokens** | $0.5335 (cold cache) |
+| claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks — **20,800 tokens** | $0.0528 (warm cache) |
+| codex, `--ignore-user-config` | **18,173 tokens** (6,656 of them cached) | — |
+| kiro, v2 engine | not reported | 0.0667 credits |
+
+A **2.6× difference in context** before any work is done: the minimal harness saves about
+32,500 tokens on every turn, and a ten-turn delegation chain therefore carries roughly
+325,000 fewer tokens. Two agents' floors landing within 15% of each other (20,800 and 18,173)
+is the expected result once both are measured the same way.
+
+The cost column is not a clean ratio. Cache writes bill at 1.25× the input rate and cache
+reads at 0.1×, so a cold turn and a warm one are priced an order of magnitude apart for the
+same context — the inherit run above was cold and the minimal run warm. Context is the
+comparable quantity; cost follows it only once cache warmth matches.
+
+**Correction (2026-09-21).** The first version of this table read 42,098 against 5,456 and
+claimed 7.7×. Both figures were `cache_creation_input_tokens` alone, and the minimal run's
+16,344 cache-*read* tokens were context that had been sent and went uncounted — so a cold
+run's write was being compared against a warm run's write. The same mistake was in the code:
+`src/adapters/claude.ts` recorded `input_tokens` alone, which is claude's *uncached
+remainder* and reads as 2 on a cached turn, while `src/adapters/codex.ts` recorded codex's
+`input_tokens`, which already contains its cached count. One normalized column held two
+units, and `src/pricing.ts` priced it while `src/dashboard/page.ts` summed it across
+agents. Fixed, with the invariant pinned in `tests/provider-contract.test.ts`.
 
 **Decision: `harness` is a first-class setting, defaulting to `minimal`.**
 
@@ -424,10 +445,11 @@ means a nested turn asking for a lock its own parent already holds.
 ## 21. Inter-agent message protocol
 
 Every delegation and handoff is a message from one agent into another's context window,
-paid for at that agent's per-turn floor (section 18 measured it at roughly 5,400 tokens
-minimal). A 2,000-token handoff is therefore not a rounding error — it is a third of the
-turn's budget before any work begins. The protocol below is shaped by that arithmetic and by
-one principle.
+paid for at that agent's per-turn floor (section 18 measured it at roughly 20,800 tokens
+minimal). A 2,000-token handoff is therefore about a tenth of the turn's context before any
+work begins — and unlike the floor, it is paid again at every hop and grows with the session
+if it carries payloads rather than pointers. A floor is fixed; a handoff compounds. The
+protocol below is shaped by that asymmetry and by one principle.
 
 ### Pointers, not payloads
 
@@ -816,7 +838,7 @@ comparative-advantage routing of section 22, where a squad is people with the sa
 group says nothing at all.
 
 **What they cost.** A formation's price is the number of turn startups it spends per unit of
-work, and section 18 measured a startup at roughly 5,400 tokens even on a minimal harness.
+work, and section 18 measured a startup at roughly 20,800 tokens even on a minimal harness.
 `solo` and `relay` pay one startup per step of real work. `party` also pays one per piece,
 but the pieces are independent, so wall-clock drops while spend stays flat. `race` pays N
 startups for one result and buys a success rate of `1-(1-q)^N`. `parley` pays two startups
@@ -1034,7 +1056,7 @@ of it and would cost more than the compression it was meant to save.
 
 ### Bounded by construction
 
-Section 18 measured a per-turn floor near 5,400 tokens. A prelude that grows with session length
+Section 18 measured a per-turn floor near 20,800 tokens. A prelude that grows with session length
 would eventually dominate every turn, so it is capped: the goal always, machine facts always, and
 at most the three most recent turns, each truncated. When turns are dropped, the prelude says how
 many — a receiver that knows it is seeing a window behaves differently from one that believes it
