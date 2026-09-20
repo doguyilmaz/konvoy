@@ -192,3 +192,22 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   expect(classifyError('RangeError: Maximum call stack size exceeded')).toBe('unknown')
   expect(classifyError('ENOSPC: no space left on device, write')).toBe('unknown')
 })
+
+test('an API that is reachable but refusing is upstream, not a crash', () => {
+  expect(classifyError('the service is at capacity')).toBe('upstream')
+  expect(classifyError('Overloaded')).toBe('upstream')
+  expect(classifyError('temporarily unavailable')).toBe('upstream')
+  expect(classifyError('503 Service Unavailable')).toBe('upstream')
+  expect(classifyError('server is busy, try again')).toBe('upstream')
+  expect(classifyError('Internal Server Error')).toBe('upstream')
+  expect(classifyError('upstream connect error')).toBe('upstream')
+
+  // a rate limit is not an outage: it does not clear by retrying in seconds
+  expect(classifyError("You've hit your weekly limit")).toBe('rate')
+  // order matters: a message that is both rate-limited and mentions 503 is still a rate limit,
+  // because that window is hours, not seconds
+  expect(classifyError("You've hit your weekly limit — upstream also returned 503")).toBe('rate')
+  // and ordinary failures stay where they were
+  expect(classifyError('ENOENT: no such file or directory')).toBe('unknown')
+  expect(classifyError('TypeError: cannot read property of undefined')).toBe('unknown')
+})

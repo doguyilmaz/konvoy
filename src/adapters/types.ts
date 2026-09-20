@@ -45,10 +45,19 @@ const AUTH =
 // window is worded "5-hour usage limit", which "usage limit" already covers.
 const RATE =
   /hit your \w+ limit|rate[_ ]?limit|quota exceeded|too ?many ?requests|usage limit|weekly limit|\d+[- ]hour (?:usage )?limit|throttl|\b429\b/
+// Captured verbatim from opencode's embedded overload classifier, recovered from its binary on
+// 2026-09-20: "the service is at capacity", "Overloaded", "temporarily unavailable", "503
+// Service Unavailable", "server is busy, try again", "Internal Server Error", and "upstream
+// connect error". These describe an API that is reachable but refusing — the one failure worth
+// retrying before giving up on an agent, unlike a rate limit (checked first: a message that is
+// both rate-limited and mentions 503 is a rate limit, since that window is hours, not seconds).
+const UPSTREAM =
+  /at capacity|overloaded?|temporarily unavailable|\b503\b|server is busy|internal server error|upstream connect error/
 
-export function classifyError(message: string): 'auth' | 'rate' | 'crash' | 'unknown' {
+export function classifyError(message: string): 'auth' | 'rate' | 'upstream' | 'crash' | 'unknown' {
   const m = message.toLowerCase()
   if (AUTH.test(m)) return 'auth'
   if (RATE.test(m)) return 'rate'
+  if (UPSTREAM.test(m)) return 'upstream'
   return 'unknown'
 }

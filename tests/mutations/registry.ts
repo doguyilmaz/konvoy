@@ -57,6 +57,20 @@ export const mutations: Mutation[] = [
     tests: ['tests/adapter-claude.test.ts'],
   },
   {
+    name: 'classifyError drops the UPSTREAM check, misclassifying a refusing-but-reachable API as unknown',
+    file: 'src/adapters/types.ts',
+    from: "  if (UPSTREAM.test(m)) return 'upstream'\n",
+    to: '',
+    tests: ['tests/adapter-claude.test.ts'],
+  },
+  {
+    name: 'classifyError checks UPSTREAM before RATE, so a rate limit mentioning 503 is misread as an outage',
+    file: 'src/adapters/types.ts',
+    from: "  if (RATE.test(m)) return 'rate'\n  if (UPSTREAM.test(m)) return 'upstream'\n",
+    to: "  if (UPSTREAM.test(m)) return 'upstream'\n  if (RATE.test(m)) return 'rate'\n",
+    tests: ['tests/adapter-claude.test.ts'],
+  },
+  {
     name: '`konvoy config set __proto__.x` reaches Object.prototype instead of being rejected',
     file: 'src/commands/config.ts',
     from: "const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])",
