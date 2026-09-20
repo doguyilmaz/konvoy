@@ -117,3 +117,26 @@ test('turnTimeoutSec under the cap is left alone', async () => {
   const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
   expect(cfg.policy.turnTimeoutSec).toBe(1200)
 })
+
+// opencode names models as `provider/model` — its own `--help` says so — and MODEL_PATTERN had no
+// `/`, so every opencode model a user configured was stripped with a warning and opencode ran on
+// its default model instead. `#` stays excluded: the variant after it is konvoy's effort dial.
+test('a provider/model value survives for opencode; a leading dash and a variant suffix still do not', async () => {
+  const dir = (await Bun.$`mktemp -d`.text()).trim()
+  await Bun.$`mkdir -p ${dir}/proj/.konvoy`.quiet()
+  await Bun.write(`${dir}/glob.jsonc`, '{}')
+  await Bun.write(
+    `${dir}/proj/.konvoy/config.jsonc`,
+    JSON.stringify({ agents: { opencode: { model: 'openai/gpt-5' }, codex: { model: '--yolo' }, kiro: { model: 'anthropic/claude#high' } } }),
+  )
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const cfg = await loadConfig({ cwd: `${dir}/proj`, globalPath: `${dir}/glob.jsonc` })
+    expect(resolveAgent(cfg, 'opencode').model).toBe('openai/gpt-5')
+    expect(resolveAgent(cfg, 'codex').model).toBeUndefined()
+    expect(resolveAgent(cfg, 'kiro').model).toBeUndefined()
+  } finally {
+    err.mockRestore()
+    await Bun.$`rm -rf ${dir}`.quiet()
+  }
+})

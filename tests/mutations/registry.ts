@@ -729,4 +729,11 @@ export const mutations: Mutation[] = [
     to: "— \"${envelope.task}\"`)",
     tests: ["tests/delegation.test.ts"],
   },
+  {
+    name: 'MODEL_PATTERN rejects the slash every opencode model carries, so opencode never runs with a configured model',
+    file: 'src/config/load.ts',
+    from: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:\\/-]*$/',
+    to: 'const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/',
+    tests: ['tests/config-security.test.ts'],
+  },
 ]

@@ -222,7 +222,9 @@ function stripProjectPrivileges(layer: Record<string, unknown>): Record<string, 
 // lands as the next argv token with no `--` guard, unlike the prompt. Unlike bin/permission/
 // harness, a project may legitimately pin a model — so this is validated, not merge-source
 // restricted, and applies to whichever layer's value survives the merge.
-const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
+// `/` because opencode names models provider/model; `#` stays out because the variant after
+// it is konvoy's own effort dial, appended by the adapter
+const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/
 
 function stripInvalidModels(layer: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...layer }
