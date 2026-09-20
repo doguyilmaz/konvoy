@@ -372,4 +372,20 @@ export const mutations: Mutation[] = [
     to: '',
     tests: ['tests/update.test.ts'],
   },
+
+  // --- machine facts render as rows, not objects (src/core/facts.ts) ---
+  {
+    name: 'formatFacts emits a JSON object per file row instead of a comma-separated row',
+    file: 'src/core/facts.ts',
+    from: 'facts.files.map((f) => [f.path, String(f.added), String(f.removed)])',
+    to: 'facts.files.map((f) => [JSON.stringify(f)])',
+    tests: ['tests/facts.test.ts'],
+  },
+  {
+    name: 'formatFacts prints a files[] header even when there are no changed files',
+    file: 'src/core/facts.ts',
+    from: 'if (facts.files.length > 0) {',
+    to: 'if (true) {',
+    tests: ['tests/facts.test.ts'],
+  },
 ]
