@@ -150,8 +150,8 @@ test('an unknown model leaves capabilities undefined', async () => {
 test('the right model is found among several in the cache', async () => {
   const cache = JSON.stringify({
     models: [
-      { id: 'other', supported_reasoning_levels: ['low'] },
-      { id: 'gpt-6-astra', supported_reasoning_levels: ['low', 'medium', 'high', 'max'] },
+      { slug: 'other', supported_reasoning_levels: [{ effort: 'low' }] },
+      { slug: 'gpt-6-astra', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'medium' }, { effort: 'high' }, { effort: 'max' }] },
     ],
   })
   const d = await detectWith(
