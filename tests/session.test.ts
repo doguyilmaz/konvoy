@@ -4,6 +4,7 @@ import { acquireLock, getBinding, lockOwner, upsertBinding, usageForSession } fr
 import { newSession, send, slugify, uniqueSlug } from '../src/core/session'
 import { configSchema } from '../src/config/schema'
 import { claudeAdapter } from '../src/adapters/claude'
+import { kiroAdapter } from '../src/adapters/kiro'
 import { withPrelude, type Adapter } from '../src/adapters/types'
 import type { AgentId } from '../src/types'
 
@@ -303,4 +304,48 @@ test('the agent taking over receives what the previous one did, not a bare quest
   expect(seen.claude).toContain('refactor the auth layer')
   expect(seen.claude).toContain('moved refresh into AuthClient')
   expect(seen.claude).toContain('now review it')
+})
+
+// Measured against kiro-cli 2.22.1 on 2026-09-21 by resuming a truncated session id: it exits
+// 1 with `error: ACP load_session failed` on stderr and emits no stream events at all. The
+// comment above STALE recorded the opposite — that kiro silently opens an empty session under
+// whatever id it is handed — which was captured on 2026-09-19 and is no longer what it does.
+// That wording matters because it is the only thing standing between a dead binding and a
+// rebind: a resume that fails this way must clear the foreign id and start fresh, not fail
+// the turn. Truncated ids are not hypothetical — kiro's own `/session-id` panel prints the
+// resume command on a line it wraps, so the id shown there is short by its last characters.
+test('a kiro resume that cannot load the session rebinds instead of failing the turn', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'kiro' })
+  upsertBinding(db, { sessionId: s.id, agent: 'kiro', foreignId: 'gone', effort: 'high', permission: 'edit' })
+
+  let call = 0
+  const adapter: Adapter = {
+    ...kiroAdapter,
+    turn: (ctx) => {
+      call++
+      const resuming = ctx.binding?.foreignId != null
+      if (resuming) {
+        return {
+          cmd: ['bun', 'tests/fixtures/fake-agent.ts'],
+          cwd: process.cwd(),
+          env: { ...(process.env as Record<string, string>), FAKE_AGENT_EXIT: '1', FAKE_AGENT_STDERR: 'error: ACP load_session failed' },
+        }
+      }
+      return {
+        cmd: [
+          'bun',
+          'tests/fixtures/fake-agent.ts',
+          JSON.stringify({ type: 'metadata', data: { sessionId: 'kiro-new' } }),
+          JSON.stringify({ type: 'runFinished', data: { status: 'success', finalText: 'recovered' } }),
+        ],
+        cwd: process.cwd(),
+      }
+    },
+  }
+
+  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'kiro', 'hello')
+  expect(call).toBe(2)
+  expect(r.final).toBe('recovered')
+  expect(getBinding(db, s.id, 'kiro')?.foreignId).toBe('kiro-new')
 })

@@ -31,11 +31,13 @@ const RECENT_TURNS = 3
 //   claude   "No conversation found with session ID <uuid>"
 //   codex    "no rollout found for thread id <uuid>"
 //   opencode {"type":"error","error":{"message":"Session not found"}}
-//   kiro     no error at all — it starts a session under the id it was given, so a konvoy
-//            binding pointing at a deleted kiro session silently continues with an empty
-//            context. Nothing konvoy can detect; recorded as a limit rather than handled.
+//   kiro     "error: ACP load_session failed" on stderr, exit 1, no stream events at all
+//            (re-measured 2026-09-21 against kiro-cli 2.22.1). The 2026-09-19 note here said
+//            kiro reported nothing and silently opened an empty session under whatever id it
+//            was handed, and recorded that as an undetectable limit — it is detectable, and
+//            leaving the old wording in place is what kept the rebind from firing for kiro.
 const STALE =
-  /no conversation found|no rollout found|session not found|no such session|unknown session|not found with session/i
+  /no conversation found|no rollout found|session not found|no such session|unknown session|not found with session|load_session failed/i
 
 export function slugify(goal: string): string {
   const base = goal

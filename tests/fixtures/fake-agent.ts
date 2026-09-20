@@ -12,4 +12,7 @@ for (const line of args) {
   if (delayMs > 0) await Bun.sleep(delayMs)
   process.stdout.write(line + '\n')
 }
+// A CLI that dies before it can emit a single stream event reports only on stderr — the shape
+// kiro uses for a session id it cannot load, which no stdout-only fake could reproduce.
+if (Bun.env.FAKE_AGENT_STDERR) process.stderr.write(Bun.env.FAKE_AGENT_STDERR + '\n')
 process.exit(exitCode)

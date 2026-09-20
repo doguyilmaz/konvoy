@@ -624,4 +624,11 @@ export const mutations: Mutation[] = [
     to: "events.push({ t: 'usage', inputTokens: input, outputTokens: tokens.output })",
     tests: ['tests/adapter-opencode.test.ts'],
   },
+  {
+    name: 'a kiro session id that cannot be loaded fails the turn instead of rebinding',
+    file: 'src/core/session.ts',
+    from: '|not found with session|load_session failed/i',
+    to: '|not found with session/i',
+    tests: ['tests/session.test.ts'],
+  },
 ]
