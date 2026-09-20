@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test'
+import * as factsMod from '../src/core/facts'
+import { newSession as newFactsSession } from '../src/core/session'
+import { openDb as openFactsDb } from '../src/store/db'
 import { openDb } from '../src/store/db'
 import { createSession, recordTurn } from '../src/store/queries'
 import { collectFacts, formatFacts } from '../src/core/facts'
@@ -65,4 +68,19 @@ test('an ordinary field is not quoted, because quotes nobody needs are tokens no
   const out = formatFacts({ commits: [{ sha: 'a1b2c3d', subject: 'plain subject' }], files: [], agents: [] })
   expect(out).toContain('a1b2c3d,plain subject')
   expect(out).not.toContain('"plain subject"')
+})
+
+// The turns half of the prelude is capped at three and says why (§29); the facts half was not
+// capped at all — every commit since the session began and every changed file, prepended to
+// every prompt for every agent. Thirty rows per section, and a count of what was left out.
+test('a facts section shows at most thirty rows and says how many more there were', async () => {
+  const db = openFactsDb(':memory:')
+  const s = newFactsSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  const log = Array.from({ length: 50 }, (_, i) => `${(1000000 + i).toString(16)} subject ${i}`).join('\n')
+  const facts = await factsMod.collectFacts({ git: async (args) => (args[0] === 'log' ? log : '') }, db, s)
+  const out = factsMod.formatFacts(facts)
+  expect(out).toContain('commits[30]{sha,subject}:')
+  expect(out).toContain('subject 29')
+  expect(out).not.toContain('subject 30')
+  expect(out).toContain('(+20 more commits)')
 })

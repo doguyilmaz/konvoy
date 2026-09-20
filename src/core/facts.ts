@@ -44,7 +44,7 @@ function parseDiffStat(output: string): { path: string; added: number; removed: 
 
 export async function collectFacts(deps: FactsDeps, db: Database, session: Session): Promise<Facts> {
   const [logOut, diffOut] = await Promise.all([
-    deps.git(['log', '--oneline', '--since', new Date(session.createdAt).toISOString()], session.cwd),
+    deps.git(['log', '--oneline', '-n', '100', '--since', new Date(session.createdAt).toISOString()], session.cwd),
     deps.git(['diff', '--stat'], session.cwd),
   ])
   const agents = usageForSession(db, session.id).map((r) => ({ agent: r.agent, turns: r.turns, spend: spend(r) }))
@@ -58,8 +58,15 @@ function cell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 }
 
+// The turns half of the prelude is capped (prelude.ts); this half must be too, or a busy
+// repository prepends its whole history to every prompt for every agent.
+const FACTS_ROW_CAP = 30
+
 function section(name: string, fields: string[], rows: string[][]): string {
-  return [`${name}[${rows.length}]{${fields.join(',')}}:`, ...rows.map((r) => r.map(cell).join(','))].join('\n')
+  const shown = rows.slice(0, FACTS_ROW_CAP)
+  const lines = [`${name}[${shown.length}]{${fields.join(',')}}:`, ...shown.map((r) => r.map(cell).join(','))]
+  if (rows.length > shown.length) lines.push(`(+${rows.length - shown.length} more ${name})`)
+  return lines.join('\n')
 }
 
 export function formatFacts(facts: Facts): string {
@@ -92,7 +99,9 @@ export function realFactsDeps(): FactsDeps {
   return {
     git: async (args, cwd) => {
       try {
-        const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
+        // stderr is never read, so it is not piped — a chatty git would fill the pipe and block;
+        // and a git that hangs must not hang the turn
+        const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'ignore', timeout: 10_000 })
         const stdout = await new Response(proc.stdout).text()
         await proc.exited
         return stdout

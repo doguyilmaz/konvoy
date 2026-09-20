@@ -806,4 +806,11 @@ export const mutations: Mutation[] = [
     to: "  await Bun.write(ledger, `# Ledger — ${session.slug}\\n`)",
     tests: ["tests/new.test.ts"],
   },
+  {
+    name: "the facts half of the prelude is uncapped, prepending a repository’s whole history to every prompt",
+    file: 'src/core/facts.ts',
+    from: "  const shown = rows.slice(0, FACTS_ROW_CAP)",
+    to: "  const shown = rows.slice(0)",
+    tests: ["tests/facts.test.ts"],
+  },
 ]
