@@ -396,3 +396,21 @@ test('a kiro turn whose finalText is truncated keeps the full streamed answer', 
   expect(r.final).toBe('long answer')
   expect(r.error).toBeNull()
 })
+
+// Measured before the fix: the agent exited at ~50 ms, the grandchild held the pipe for 3 s,
+// and runTurn returned after the grandchild — 4,071 ms against a 1.2 s budget — reporting
+// exit 0 and no error, with the session lock held the whole time. The SIGKILL escalation was
+// guarded on the child still being alive; the drain loop ended only when every holder of the
+// pipe closed it. The turn must end on konvoy's clock: once the child is gone, a short grace,
+// then the read is cancelled.
+test('a descendant holding stdout after the agent exits does not extend the turn past the grace', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([], { turn: () => ({ cmd: ['bun', 'tests/fixtures/leaky-agent.ts'] }) })
+  const t0 = Date.now()
+  const r = await runTurn({ db, adapter }, ctx(s.id), { timeoutSec: 1, killGraceMs: 200, drainGraceMs: 300 })
+  expect(Date.now() - t0).toBeLessThan(1500)
+  expect(r.final).toBe('done')
+  expect(r.exitCode).toBe(0)
+  expect(r.error).toBeNull()
+})

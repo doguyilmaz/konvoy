@@ -26,17 +26,26 @@ export interface TurnOptions {
   onEvent?: (event: KonvoyEvent) => void
   /** grace period after the timeout's SIGTERM before konvoy escalates to SIGKILL */
   killGraceMs?: number
+  drainGraceMs?: number
   /** the first blocked turn this one replaces, when a failover chain moved to a new agent */
   parentTurnId?: string | null
 }
 
 const DEFAULT_KILL_GRACE_MS = 5000
+// how long a pipe may stay open after the child is gone before the read is cut off
+const DEFAULT_DRAIN_GRACE_MS = 500
 
-export async function drain(stream: ReadableStream<Uint8Array>, cap: number): Promise<string> {
+// `until` ends the read on the caller's clock: a descendant that inherited the pipe would
+// otherwise keep it open, and with it the turn, for as long as it lives
+export async function drain(stream: ReadableStream<Uint8Array>, cap: number, until?: Promise<unknown>): Promise<string> {
   const decoder = new TextDecoder()
+  const reader = stream.getReader()
+  void until?.then(() => reader.cancel().catch(() => undefined))
   let text = ''
-  for await (const chunk of stream) {
-    text += decoder.decode(chunk, { stream: true })
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    text += decoder.decode(value, { stream: true })
     if (text.length > cap) {
       text = text.slice(-cap)
       const lead = text.charCodeAt(0)
@@ -49,7 +58,6 @@ export async function drain(stream: ReadableStream<Uint8Array>, cap: number): Pr
 export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOptions = {}): Promise<TurnResult> {
   const { db, adapter } = deps
   const timeoutMs = (opts.timeoutSec ?? 900) * 1000
-  const startedAt = Date.now()
 
   await adapter.prepare?.(ctx)
   const plan = adapter.turn(ctx)
@@ -78,6 +86,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     }
   }
 
+  const spawnedAt = Date.now()
   const proc = Bun.spawn(plan.cmd, {
     cwd: plan.cwd ?? ctx.cwd,
     env: { ...(process.env as Record<string, string>), ...(plan.env ?? {}), ...(ctx.lease ? { KONVOY_LEASE: ctx.lease } : {}) },
@@ -98,7 +107,10 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   }, timeoutMs + killGraceMs)
   escalate.unref?.()
 
-  const stderrText = drain(proc.stderr as ReadableStream<Uint8Array>, 64 * 1024)
+  // once the child has exited, whoever still holds its pipes is something it left behind;
+  // it gets this long to flush, then both reads end
+  const afterExit = proc.exited.then(() => Bun.sleep(opts.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS))
+  const stderrText = drain(proc.stderr as ReadableStream<Uint8Array>, 64 * 1024, afterExit)
 
   const turnId = recordTurn(db, {
     sessionId: ctx.sessionId,
@@ -188,8 +200,12 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   let buffer = ''
   try {
     try {
-      for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
-        buffer += decoder.decode(chunk, { stream: true })
+      const stdout = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+      void afterExit.then(() => stdout.cancel().catch(() => undefined))
+      while (true) {
+        const { value, done } = await stdout.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) for (const event of parseLine(line)) emit(event)
@@ -207,7 +223,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     // must not stand in for stderr, which is where that CLI puts the reason
     if (result.exitCode !== 0 && !result.error?.message.trim()) {
       const stderr = await stderrText
-      const timedOut = Date.now() - startedAt >= timeoutMs
+      const timedOut = Date.now() - spawnedAt >= timeoutMs
       result.error = {
         message: timedOut ? `turn timed out after ${opts.timeoutSec ?? 900}s` : stderr.trim() || `exit ${result.exitCode}`,
         kind: timedOut ? 'timeout' : 'crash',
