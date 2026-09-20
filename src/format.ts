@@ -32,8 +32,11 @@ function cost(r: RosterRow): string {
 }
 
 function spend(row: UsageRow): string {
-  if (row.costUsd > 0) return `$${row.costUsd.toFixed(2)}`
+  // credits win when both are non-zero: they're what the agent actually charged, and the
+  // cost estimator derives its dollar figure from credits the same way — the two must
+  // never disagree about which number is the real one for a given row.
   if (row.credits > 0) return `${row.credits.toFixed(3)} cr`
+  if (row.costUsd > 0) return `$${row.costUsd.toFixed(2)}`
   return '-'
 }
 

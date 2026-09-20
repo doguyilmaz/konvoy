@@ -33,13 +33,18 @@ test('an agent with no turns does not appear', () => {
 test('the gate rate counts only turns that have a verdict', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  // asymmetric on purpose (2 known, 1 unknown): a 1/1 split can't tell "known" and
+  // "unknown" apart if the CASE that computes gate_known is inverted — both readings
+  // land on 1. This shape breaks under inversion (2 vs 1) instead of surviving it.
   const a = recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
+  const b = recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
   recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
   setGateResult(d, a, true)
+  setGateResult(d, b, false)
 
   const row = usageForSession(d, s.id)[0]!
-  expect(row.turns).toBe(2)
-  expect(row.gateKnown).toBe(1)
+  expect(row.turns).toBe(3)
+  expect(row.gateKnown).toBe(2)
   expect(row.gatePassed).toBe(1)
 })
 
@@ -91,6 +96,15 @@ test('the spend column reads a dash, not a zero, when nothing was reported', () 
   expect(cells[4]).toBe('-')
 })
 
+test('spend prefers credits over dollars when a row somehow carries both', () => {
+  const out = formatUsage([
+    { agent: 'claude', turns: 1, inputTokens: 1, outputTokens: 1, costUsd: 1.5, credits: 0.02, gatePassed: 1, gateKnown: 1 },
+  ])
+  const row = out.split('\n').find((l) => l.startsWith('claude'))!
+  const cells = row.trim().split(/\s{2,}/)
+  expect(cells[4]).toBe('0.020 cr')
+})
+
 test('a gate rate is shown only where a verdict exists', () => {
   const withVerdict = formatUsage([
     { agent: 'codex', turns: 4, inputTokens: 1, outputTokens: 1, costUsd: 0, credits: 0, gatePassed: 3, gateKnown: 4 },
@@ -123,4 +137,50 @@ test('both usage tables explain the mixed SPEND unit, not only the per-session o
   const note = (lines: string[]) => lines.some((l) => l.includes("each agent's own unit"))
   expect(note(one)).toBe(true)
   expect(note(all)).toBe(true)
+})
+
+test('usage --all on an empty database reports no turns and exits 0', () => {
+  const d = db()
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let code: number
+  let lines: string[]
+  try {
+    code = cmdUsage(d, '/nowhere', { all: true })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(code).toBe(0)
+  expect(lines).toContain('no turns recorded yet')
+})
+
+test('usage with no session in this directory reports the standard error and exits 2', () => {
+  const d = db()
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let code: number
+  let lines: string[]
+  try {
+    code = cmdUsage(d, '/nowhere', { all: false })
+    lines = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+  expect(code).toBe(2)
+  expect(lines).toContain('no konvoy session here — run `konvoy new "<goal>"` first')
+})
+
+test('usage for a session with zero turns reports that and exits 0', () => {
+  const d = db()
+  createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let code: number
+  let lines: string[]
+  try {
+    code = cmdUsage(d, '/x', { all: false })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(code).toBe(0)
+  expect(lines).toContain('session s — no turns yet')
 })
