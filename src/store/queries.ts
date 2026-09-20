@@ -182,14 +182,17 @@ export function recordTurn(
     outputTokens?: number
     kind?: string | null
     model?: string | null
+    parentTurnId?: string | null
   },
 ): string {
   const turnId = id()
   db.query(
     `INSERT INTO turn (id, session_id, agent, prompt, final, cost_usd, credits, input_tokens,
-       output_tokens, kind, gate_passed, exit_code, error, error_kind, started_at, ended_at, model)
+       output_tokens, kind, gate_passed, exit_code, error, error_kind, started_at, ended_at, model,
+       parent_turn_id)
      VALUES ($id, $sessionId, $agent, $prompt, $final, $costUsd, $credits, $inputTokens,
-       $outputTokens, $kind, NULL, $exitCode, $error, NULL, $startedAt, $endedAt, $model)`,
+       $outputTokens, $kind, NULL, $exitCode, $error, NULL, $startedAt, $endedAt, $model,
+       $parentTurnId)`,
   ).run({
     id: turnId,
     sessionId: input.sessionId,
@@ -206,8 +209,16 @@ export function recordTurn(
     startedAt: now(),
     endedAt: now(),
     model: input.model ?? null,
+    parentTurnId: input.parentTurnId ?? null,
   })
   return turnId
+}
+
+export function lastTurnId(db: Database, sessionId: string): string | null {
+  const row = db.query('SELECT id FROM turn WHERE session_id = $sessionId ORDER BY rowid DESC LIMIT 1').get({
+    sessionId,
+  }) as { id: string } | null
+  return row?.id ?? null
 }
 
 export function recordEvent(db: Database, turnId: string, seq: number, type: string, payload: unknown): void {

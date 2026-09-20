@@ -60,6 +60,19 @@ If a CLI is not on your `PATH`, point konvoy at it directly and every command �
 any comments in that file are lost — `--global` targets the global file instead of the
 project one. Hand-edit the file instead when you want to keep them.
 
+Name a `failover` chain and konvoy follows it when an agent can't work, instead of asking:
+
+```jsonc
+{ "failover": { "chain": ["codex", "claude", "kiro"], "upstreamRetries": 3 } }
+```
+
+A rate limit or an auth failure moves to the next agent in the chain at once. An upstream
+error (a reachable-but-refusing API) retries the same agent with backoff up to
+`upstreamRetries` times before moving on. A crash, a timeout, or an interrupted turn never
+moves the chain — the fault is in the work, and the next agent would just fail the same way.
+There is no failback: once konvoy moves, it stays moved. An empty chain (the default) turns
+the feature off.
+
 ## Requirements
 
 Bun 1.4+, and whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy.

@@ -26,6 +26,8 @@ export interface TurnOptions {
   onEvent?: (event: KonvoyEvent) => void
   /** grace period after the timeout's SIGTERM before konvoy escalates to SIGKILL */
   killGraceMs?: number
+  /** the first blocked turn this one replaces, when a failover chain moved to a new agent */
+  parentTurnId?: string | null
 }
 
 const DEFAULT_KILL_GRACE_MS = 5000
@@ -106,6 +108,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     costUsd: 0,
     exitCode: -1,
     kind: ctx.kind ?? null,
+    parentTurnId: opts.parentTurnId ?? null,
   })
 
   // exit_code -1 means konvoy itself died before it could record the turn. Every ordinary

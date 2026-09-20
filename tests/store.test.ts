@@ -147,6 +147,17 @@ test('a turn records what it cost and how it was classified', () => {
   expect(row.gate_passed).toBe(null)
 })
 
+test('a recorded turn keeps its parent', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const first = recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
+  const second = recordTurn(d, {
+    sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0, parentTurnId: first,
+  })
+  const row = d.query('SELECT parent_turn_id FROM turn WHERE id = $id').get({ id: second }) as Record<string, unknown>
+  expect(row.parent_turn_id).toBe(first)
+})
+
 test('a turn records why it failed, not only that it did', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })

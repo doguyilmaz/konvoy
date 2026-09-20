@@ -53,12 +53,23 @@ const policyObjectSchema = z
   })
   .strict()
 
+// An empty chain means the feature is off, which is the default. A project layer may set
+// this: naming an ordering among agents the user already enabled grants nothing new, unlike
+// `bin` or `permission`.
+const failoverObjectSchema = z
+  .object({
+    chain: z.array(agentIdSchema).default([]),
+    upstreamRetries: z.number().int().min(0).max(10).default(3),
+  })
+  .strict()
+
 export const configSchema = z
   .object({
     defaults: defaultsObjectSchema.prefault({}),
     agents: z.partialRecord(agentIdSchema, agentConfigSchema).default({}),
     roles: rolesObjectSchema.prefault({}),
     policy: policyObjectSchema.prefault({}),
+    failover: failoverObjectSchema.prefault({}),
     pricing: z
       .object({
         asOf: z.string().default(''),

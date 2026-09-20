@@ -433,4 +433,45 @@ export const mutations: Mutation[] = [
     to: 'limit: 1000',
     tests: ['tests/prelude.test.ts'],
   },
+
+  // --- the failover chain (src/core/session.ts) ---
+  {
+    name: "the failover chain also moves on a crash, so a second agent spends its budget failing the same way",
+    file: 'src/core/session.ts',
+    from: "      const movable = kind === 'rate' || kind === 'auth' || kind === 'upstream'",
+    to: "      const movable = kind === 'rate' || kind === 'auth' || kind === 'upstream' || kind === 'crash'",
+    tests: ['tests/failover.test.ts'],
+  },
+  {
+    name: 'an upstream error moves to the next agent immediately instead of retrying with backoff first',
+    file: 'src/core/session.ts',
+    from: "        if (r.error?.kind === 'upstream' && retries < upstreamRetries) {",
+    to: '        if (false) {',
+    tests: ['tests/failover.test.ts'],
+  },
+  {
+    name: 'a rate limit is retried on the same agent before moving, burning seconds against an hours-long window',
+    file: 'src/core/session.ts',
+    from: "        if (r.error?.kind === 'upstream' && retries < upstreamRetries) {",
+    to: "        if ((r.error?.kind === 'upstream' || r.error?.kind === 'rate') && retries < upstreamRetries) {",
+    tests: ['tests/failover.test.ts'],
+  },
+  {
+    name: 'the chain moves to the next agent silently, without telling the user who was blocked or why',
+    file: 'src/core/session.ts',
+    from: [
+      '      if (next) {',
+      '        console.error(`konvoy: ${current} is blocked (${kind}) — "${result.error!.message}" — moving to ${next}`)',
+      '      }',
+    ].join('\n'),
+    to: ['      if (next) {', '      }'].join('\n'),
+    tests: ['tests/failover.test.ts'],
+  },
+  {
+    name: 'the replacement turn is recorded with no parentTurnId, losing the link to the turn it replaced',
+    file: 'src/core/session.ts',
+    from: '        r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId)',
+    to: '        r = await runOnce(current, currentAdapter, ctxBuild, null)',
+    tests: ['tests/failover.test.ts'],
+  },
 ]
