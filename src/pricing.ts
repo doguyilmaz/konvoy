@@ -16,7 +16,7 @@ export function estimateUsd(row: Priced, pricing: Pricing): number | null {
   // credits it actually charges, so pricing its model as well would double the row.
   if (row.credits > 0) {
     const rate = pricing.credits[row.agent]
-    if (rate) return row.credits * rate.usdPerCredit
+    return rate ? row.credits * rate.usdPerCredit : null
   }
 
   if (row.model) {

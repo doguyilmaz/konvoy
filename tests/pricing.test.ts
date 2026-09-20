@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { configSchema } from '../src/config/schema'
 import { estimateAgentUsd, estimateUsd } from '../src/pricing'
 
 const pricing = {
@@ -55,4 +56,13 @@ test('tokens that could not be priced report nothing, not nothing spent', () => 
 test('a row that consumed nothing at all still contributes nothing', () => {
   const rows = [{ agent: 'codex' as const, model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 }]
   expect(estimateAgentUsd('codex', rows, pricing)).toBe(0)
+})
+
+// An agent bills in credits or in tokens, never both — the comment above estimateUsd says so,
+// and format.ts's spend() relies on it. A credits row with no configured credit rate must
+// estimate to null (unknown), not fall through to a token price for a model the agent is not
+// billed by: kiro at 5 credits was showing ~USD $3.000 from claude-sonnet-5's token rate.
+test('credits with no configured rate estimate to null rather than falling through to model pricing', () => {
+  const pricing = configSchema.parse({ pricing: { models: { 'claude-sonnet-5': { inputPerMTok: 3, outputPerMTok: 15 } } } }).pricing
+  expect(estimateUsd({ agent: 'kiro', model: 'claude-sonnet-5', inputTokens: 1_000_000, outputTokens: 0, credits: 5 }, pricing)).toBeNull()
 })
