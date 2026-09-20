@@ -560,4 +560,34 @@ export const mutations: Mutation[] = [
     to: '',
     tests: ['tests/session.test.ts'],
   },
+
+  // --- the delegation handoff (src/core/session.ts) ---
+  {
+    name: 'a handoff envelope is followed even when delegation is disabled in config',
+    file: 'src/core/session.ts',
+    from: 'if (!deps.cfg.delegation.enabled || result.error) return null',
+    to: 'if (result.error) return null',
+    tests: ['tests/delegation.test.ts'],
+  },
+  {
+    name: 'the delegated turn is allowed to hand off again, chaining past the one hop per send',
+    file: 'src/core/session.ts',
+    from: '    return handoff',
+    to: '    return (await followHandoff(handoff, handoffTurnId)) ?? handoff',
+    tests: ['tests/delegation.test.ts'],
+  },
+  {
+    name: 'an envelope naming no real agent or role is silently dropped instead of reported, leaving nobody told the turn stood',
+    file: 'src/core/session.ts',
+    from: "    if (!recipient) {\n      console.error(\n        `konvoy: ${ranAsAgent} handed off to \"${envelope.to}\" — no such agent or role, ${ranAsAgent}'s turn stands`,\n      )\n      return null\n    }",
+    to: '    if (!recipient) return null',
+    tests: ['tests/delegation.test.ts'],
+  },
+  {
+    name: 'the delegated turn is run with no parentTurnId, losing the link to the turn that handed it over',
+    file: 'src/core/session.ts',
+    from: '      }),\n      turnId,\n    )\n  }',
+    to: '      }),\n      null,\n    )\n  }',
+    tests: ['tests/delegation.test.ts'],
+  },
 ]

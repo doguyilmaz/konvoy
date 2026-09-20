@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { AgentId, Session, TurnContext } from '../types'
 import type { Config } from '../config/schema'
 import type { Adapter } from '../adapters/types'
-import { resolveAgent, type AgentSettings } from '../config/load'
+import { resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
 import { getAdapter } from '../adapters'
 import { clampEffort } from '../adapters/effort'
 import { detect, type Detection } from './detect'
@@ -12,6 +12,7 @@ import {
   createSession,
   getBinding,
   getSessionBySlug,
+  lastTurnAgent,
   lastTurnId,
   lockOwner,
   releaseLock,
@@ -19,7 +20,7 @@ import {
 import { runTurn, type TurnOptions, type TurnResult } from './turn'
 import { runGate } from './gate'
 import { collectFacts, formatFacts, realFactsDeps } from './facts'
-import { buildPrelude } from './prelude'
+import { buildPrelude, parseEnvelope } from './prelude'
 import { sessionDir } from '../paths'
 
 // The prelude carries at most this many recent turns; section 28 caps it so a long session
@@ -102,15 +103,87 @@ export async function send(
     throw new Error(`session "${session.slug}" is busy — another konvoy turn is running`)
   }
 
+  // Set once withLock() has built the primary prelude — followHandoff needs its own, built
+  // fresh after the handing-off turn is recorded, so it is read rather than recomputed here.
+  let facts = ''
+
   try {
     const result = await withLock()
     // The turn just finished writing its own row — runGate reads that row itself to decide
     // whether there is anything for it to judge, so it is always safe to call here.
     const turnId = lastTurnId(deps.db, session.id)
     if (turnId) await runGate(deps.db, deps.cfg, session, turnId)
-    return result
+
+    const handoff = turnId ? await followHandoff(result, turnId) : null
+    if (!handoff) return result
+
+    const handoffTurnId = lastTurnId(deps.db, session.id)
+    if (handoffTurnId) await runGate(deps.db, deps.cfg, session, handoffTurnId)
+    return handoff
   } finally {
     if (!alreadyHeld) releaseLock(deps.db, session.id, lease)
+  }
+
+  // One hop per send: this reads the envelope on the turn `send()` was asked to run, resolves
+  // it once, and returns whatever that recipient's own turn produces — including an envelope
+  // of its own, which is never fed back in here. A mistaken `to:` pointing back at the sender
+  // would otherwise loop until something ran out, and the caller asked for one turn.
+  async function followHandoff(result: TurnResult, turnId: string): Promise<TurnResult | null> {
+    if (!deps.cfg.delegation.enabled || result.error) return null
+    const envelope = parseEnvelope(result.final)
+    if (!envelope?.to) return null
+
+    const ranAsAgent = lastTurnAgent(deps.db, session.id) ?? agent
+    const recipient = resolveRecipient(deps.cfg, envelope.to)
+    if (!recipient) {
+      console.error(
+        `konvoy: ${ranAsAgent} handed off to "${envelope.to}" — no such agent or role, ${ranAsAgent}'s turn stands`,
+      )
+      return null
+    }
+
+    const recipientSettings = resolveAgent(deps.cfg, recipient)
+    const recipientDetection = recipientSettings.enabled
+      ? await detect(recipient, { model: recipientSettings.model, bin: recipientSettings.bin })
+      : { agent: recipient, installed: false, version: null }
+    // Reported, not silently dropped — the same rule the failover chain already follows for a
+    // disabled or uninstalled member.
+    if (!recipientSettings.enabled || !recipientDetection.installed) {
+      const why = !recipientSettings.enabled ? 'disabled in config' : 'not installed'
+      console.error(
+        `konvoy: ${ranAsAgent} handed off to ${recipient}, but ${recipient} is ${why} — ${ranAsAgent}'s turn stands`,
+      )
+      return null
+    }
+
+    console.error(`konvoy: ${ranAsAgent} handed off to ${recipient} — "${envelope.task}"`)
+
+    const recipientEffort = clampEffort(recipientSettings.effort, recipientDetection.efforts)
+    // Built fresh, after the handing-off turn was recorded: the prelude built at the top of
+    // this send() describes the state before that turn ran — the opposite of what the
+    // recipient needs, which is its own cooperative handoff, envelope and all.
+    const delegatedPrelude = buildPrelude(deps.db, session, facts, { recent: RECENT_TURNS })
+    return runOnce(
+      recipient,
+      adapterFor(recipient),
+      () => ({
+        sessionId: session.id,
+        slug: session.slug,
+        cwd: session.cwd,
+        sessionDir: sessionDir(session.cwd, session.slug),
+        prompt: envelope.task,
+        prelude: delegatedPrelude,
+        binding: getBinding(deps.db, session.id, recipient),
+        model: recipientSettings.model,
+        effort: recipientEffort.value,
+        permission: recipientSettings.permission,
+        harness: recipientSettings.harness,
+        bin: recipientSettings.bin,
+        style: recipientSettings.style,
+        delegation: deps.cfg.delegation.enabled,
+      }),
+      turnId,
+    )
   }
 
   // One attempt at one agent: run the turn, and — exactly as before failover existed — rebind
@@ -156,7 +229,7 @@ export async function send(
 
     // Built once for the whole send, not per chain member: recomputing would spend git calls
     // and, worse, let the handover shift between attempts at the same question.
-    const facts = formatFacts(await collectFacts(realFactsDeps(), deps.db, session))
+    facts = formatFacts(await collectFacts(realFactsDeps(), deps.db, session))
     const prelude = buildPrelude(deps.db, session, facts, { recent: RECENT_TURNS })
 
     let blocked: { agent: AgentId; kind: string; message: string } | null = null

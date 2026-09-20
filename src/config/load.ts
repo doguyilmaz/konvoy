@@ -1,4 +1,13 @@
-import { configSchema, type AgentId, type Config, type Effort, type Harness, type Permission, type Style } from './schema'
+import {
+  agentIds,
+  configSchema,
+  type AgentId,
+  type Config,
+  type Effort,
+  type Harness,
+  type Permission,
+  type Style,
+} from './schema'
 import { configDir, home, join } from '../paths'
 
 export const globalConfigPath = (): string => join(configDir(), 'config.jsonc')
@@ -282,6 +291,21 @@ export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
     subagentEffort: a.subagentEffort,
     style,
   }
+}
+
+const isAgentId = (value: string): value is AgentId => (agentIds as readonly string[]).includes(value)
+
+// An envelope's `to` is free text a model wrote, not a validated key — trimmed and
+// lower-cased before either check runs, since a model may write "Reviewer" or " claude ".
+// An agent id wins over a role of the same name: a role can be reassigned mid-session, an
+// agent id cannot.
+export function resolveRecipient(cfg: Config, to: string): AgentId | null {
+  const norm = to.trim().toLowerCase()
+  if (isAgentId(norm)) return norm
+  if (norm === 'lead' || norm === 'implementer' || norm === 'reviewer' || norm === 'researcher') {
+    return cfg.roles[norm] ?? null
+  }
+  return null
 }
 
 export function explain(

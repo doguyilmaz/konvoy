@@ -221,6 +221,15 @@ export function lastTurnId(db: Database, sessionId: string): string | null {
   return row?.id ?? null
 }
 
+// Who actually produced the most recent turn — which, after a failover move, is not
+// necessarily the agent `send()` was originally asked to run.
+export function lastTurnAgent(db: Database, sessionId: string): AgentId | null {
+  const row = db.query('SELECT agent FROM turn WHERE session_id = $sessionId ORDER BY rowid DESC LIMIT 1').get({
+    sessionId,
+  }) as { agent: AgentId } | null
+  return row?.agent ?? null
+}
+
 export function recordEvent(db: Database, turnId: string, seq: number, type: string, payload: unknown): void {
   db.query('INSERT INTO event (turn_id, seq, type, payload, ts) VALUES ($turnId, $seq, $type, $payload, $ts)').run({
     turnId,
