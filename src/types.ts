@@ -1,6 +1,6 @@
-import type { AgentId, Effort, Permission } from './config/schema'
+import type { AgentId, Effort, Permission, Style } from './config/schema'
 
-export type { AgentId, Effort, Permission }
+export type { AgentId, Effort, Permission, Style }
 
 export type KonvoyEvent =
   | { t: 'session'; foreignId: string }
@@ -64,4 +64,5 @@ export interface TurnContext {
   bin?: string
   lease?: string
   kind?: string
+  style?: Style
 }

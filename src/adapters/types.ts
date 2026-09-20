@@ -11,10 +11,18 @@ export interface Adapter {
   resolveForeignId?(ctx: TurnContext, startedAt: number): Promise<string | null>
 }
 
+// konvoy's own instruction, owned here rather than vendored from any installed skill — a
+// user's own such skill is already reachable via `harness: inherit`. It shapes what the user
+// reads, not what agents exchange, so it asks for omission, never compression.
+export const BRIEF_INSTRUCTION =
+  'Lead with the action. Number multi-step work. End with one concrete next step. Skip preamble, recap, and closing pleasantries.'
+
 // One composition point rather than four: the adapters cannot drift in how they join these,
-// and the prelude leads because a stable prefix is what prompt caching discounts.
+// and the prelude leads because a stable prefix is what prompt caching discounts. The style
+// instruction trails the prompt for the same reason — it must never join the cached prefix.
 export function withPrelude(ctx: TurnContext): string {
-  return ctx.prelude ? `${ctx.prelude}\n\n${ctx.prompt}` : ctx.prompt
+  const base = ctx.prelude ? `${ctx.prelude}\n\n${ctx.prompt}` : ctx.prompt
+  return ctx.style === 'brief' ? `${base}\n\n${BRIEF_INSTRUCTION}` : base
 }
 
 export function safeJson(line: string): Record<string, unknown> | null {

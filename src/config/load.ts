@@ -1,4 +1,4 @@
-import { configSchema, type AgentId, type Config, type Effort, type Harness, type Permission } from './schema'
+import { configSchema, type AgentId, type Config, type Effort, type Harness, type Permission, type Style } from './schema'
 import { configDir, home, join } from '../paths'
 
 export const globalConfigPath = (): string => join(configDir(), 'config.jsonc')
@@ -12,6 +12,7 @@ export interface AgentSettings {
   harness: Harness
   bin?: string
   subagentEffort?: Effort
+  style?: Style
 }
 
 export function stripJsonc(text: string): string {
@@ -255,6 +256,11 @@ export async function loadConfig(opts: { cwd: string; globalPath?: string }): Pr
 
 export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
   const a = cfg.agents[agent] ?? {}
+  const ownStyle = a.style
+  const defaultStyle = cfg.defaults.style ?? undefined
+  // an explicit `null` opts an agent out of a `defaults.style`, unlike `effort`/`permission`
+  // where the per-agent value is only ever absent or set — so this can't reuse `??`.
+  const style = ownStyle === null ? undefined : (ownStyle ?? defaultStyle)
   return {
     enabled: a.enabled ?? true,
     model: a.model,
@@ -263,6 +269,7 @@ export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
     harness: a.harness ?? cfg.defaults.harness,
     bin: a.bin,
     subagentEffort: a.subagentEffort,
+    style,
   }
 }
 

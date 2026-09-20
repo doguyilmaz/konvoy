@@ -73,6 +73,13 @@ moves the chain — the fault is in the work, and the next agent would just fail
 There is no failback: once konvoy moves, it stays moved. An empty chain (the default) turns
 the feature off.
 
+Set `style: "brief"` to have an agent lead with the action, number multi-step work, and skip
+preamble and pleasantries — it shapes the answer you read, not what agents send each other:
+
+```jsonc
+{ "defaults": { "style": "brief" }, "agents": { "kiro": { "style": null } } }
+```
+
 ## Requirements
 
 Bun 1.4+, and whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy.

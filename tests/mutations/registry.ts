@@ -477,4 +477,27 @@ export const mutations: Mutation[] = [
     to: 'blocked = null',
     tests: ['tests/failover.test.ts'],
   },
+
+  // --- the brief style (src/adapters/types.ts, src/config/load.ts) ---
+  {
+    name: 'the brief instruction is prepended ahead of the prompt instead of appended after it',
+    file: 'src/adapters/types.ts',
+    from: "  return ctx.style === 'brief' ? `${base}\\n\\n${BRIEF_INSTRUCTION}` : base",
+    to: "  return ctx.style === 'brief' ? `${BRIEF_INSTRUCTION}\\n\\n${base}` : base",
+    tests: ['tests/style.test.ts'],
+  },
+  {
+    name: 'the brief instruction is appended even when style is unset, decorating every prompt',
+    file: 'src/adapters/types.ts',
+    from: "  return ctx.style === 'brief' ? `${base}\\n\\n${BRIEF_INSTRUCTION}` : base",
+    to: '  return `${base}\\n\\n${BRIEF_INSTRUCTION}`',
+    tests: ['tests/style.test.ts'],
+  },
+  {
+    name: 'a per-agent style: null no longer overrides a defaults.style, so an agent cannot opt out',
+    file: 'src/config/load.ts',
+    from: 'const style = ownStyle === null ? undefined : (ownStyle ?? defaultStyle)',
+    to: 'const style = ownStyle ?? defaultStyle',
+    tests: ['tests/style.test.ts'],
+  },
 ]

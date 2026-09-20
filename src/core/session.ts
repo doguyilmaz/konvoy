@@ -196,6 +196,7 @@ export async function send(
         permission: currentSettings.permission,
         harness: currentSettings.harness,
         bin: currentSettings.bin,
+        style: currentSettings.style,
       })
 
       let retries = 0

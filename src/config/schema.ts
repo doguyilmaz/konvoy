@@ -5,6 +5,9 @@ export const effortSchema = z.enum(['low', 'medium', 'high', 'max'])
 export const permissionSchema = z.enum(['safe', 'edit', 'yolo'])
 export const harnessSchema = z.enum(['minimal', 'inherit'])
 export const agentIdSchema = z.enum(agentIds)
+// konvoy's own instruction, not a model capability — `.nullish()` so a per-agent `null` can
+// opt out of a `defaults.style` of 'brief', which a plain `.optional()` cannot express.
+export const styleSchema = z.enum(['brief'])
 
 const agentConfigSchema = z
   .object({
@@ -16,6 +19,7 @@ const agentConfigSchema = z
     bin: z.string().optional(),
     subagentEffort: effortSchema.optional(),
     engine: z.string().optional(),
+    style: styleSchema.nullish(),
   })
   .strict()
 
@@ -24,6 +28,7 @@ const defaultsObjectSchema = z
     effort: effortSchema.default('high'),
     permission: permissionSchema.default('edit'),
     harness: harnessSchema.default('minimal'),
+    style: styleSchema.nullish(),
   })
   .strict()
 
@@ -86,3 +91,4 @@ export type AgentId = z.infer<typeof agentIdSchema>
 export type Effort = z.infer<typeof effortSchema>
 export type Permission = z.infer<typeof permissionSchema>
 export type Harness = z.infer<typeof harnessSchema>
+export type Style = z.infer<typeof styleSchema>
