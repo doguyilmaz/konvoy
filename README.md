@@ -239,7 +239,7 @@ bun test
 bun run typecheck
 bun run mutate         # mutation coverage of src/
 bun run verify:claims  # checks konvoy's own claims about the four CLIs against what --help says here
-bun run smoke          # one real turn per installed, authenticated agent — spends quota
+bun run smoke          # two real turns per installed, authenticated agent, the second resumed — spends quota
 ```
 
 `verify:claims` is the standing form of a manual check: it re-reads each CLI's own `--help`
@@ -251,8 +251,10 @@ added to an adapter is checked without touching the script. It never sends a pro
 quota, and it isn't part of `bun test` since it needs the CLIs installed to mean anything.
 
 `smoke` closes the gap `verify:claims` and the frozen fixtures in `tests/fixtures/streams/`
-both leave open: it runs one minimal turn per installed, logged-in agent through konvoy's real
-`send()` and asserts a foreign session id came back, some final text came back, and the turn
-ended without an error. It skips an agent that isn't installed or isn't logged in, and flags
+both leave open: it runs two turns per installed, logged-in agent through konvoy's real
+`send()`. The first stores a nonce and must return a foreign session id, some text and no
+error; the second is resumed through the binding konvoy captured and must give the nonce back —
+the one cheap proof that a bound session carries its context, which every unit test of it
+checks with fakes. It skips an agent that isn't installed or isn't logged in, and flags
 when an installed CLI's version has drifted from the one a fixture was captured against — the
 moment to re-capture. It spends real quota, so it is opt-in and never part of `bun test`.

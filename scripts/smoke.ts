@@ -1,5 +1,8 @@
-// bun run smoke — one live turn per installed, authenticated agent, run through konvoy's own
-// send() so the real adapter, parser and store are exercised instead of a reimplementation.
+// bun run smoke — two live turns per installed, authenticated agent, run through konvoy's own
+// send() so the real adapter, parser, store and resume path are exercised instead of a
+// reimplementation. The first turn stores a nonce; the second resumes the binding konvoy
+// captured and asks for it back. That second answer is the only cheap proof of konvoy's central
+// promise — that a bound session carries its context — and every unit test of it uses fakes.
 // This spends real agent quota: opt-in only, and never reachable from `bun test`.
 //
 // The fixtures in tests/fixtures/streams/ are frozen against a CLI version captured on the day
@@ -16,13 +19,16 @@ import { loadConfig, resolveAgent } from '../src/config/load'
 import { detect, detectAuth, type DetectDeps } from '../src/core/detect'
 import { newSession, send } from '../src/core/session'
 import { loginHint } from '../src/commands/send'
+import { oneLine } from '../src/adapters/types'
 import provenanceData from '../tests/fixtures/streams/provenance.json'
 
 const provenance = provenanceData as Record<AgentId, { cliVersion: string; capturedAt: string }>
 
-// Short enough to invite no elaboration, distinctive enough that a real reply proves the turn
-// actually ran rather than echoing a cached greeting.
-const SMOKE_PROMPT = 'Reply with only the single word: pong'
+// A fresh nonce per agent: distinctive enough that the second answer cannot be a cached greeting
+// or a guess, short enough to invite no elaboration.
+const nonce = (): string => Math.random().toString(16).slice(2, 8)
+const storePrompt = (word: string): string => `The secret word is ${word}. Reply with only: stored`
+const RECALL_PROMPT = 'What is the secret word? Reply with only the word.'
 const DEFAULT_TIMEOUT_SEC = 120
 
 export interface SmokeDeps {
@@ -42,6 +48,7 @@ export type AgentOutcome =
       status: 'ok'
       foreignId: string
       tokens: number
+      resumed: boolean
       version: string | null
       versionDrift: string | null
     }
@@ -78,29 +85,42 @@ export async function runSmoke(deps: SmokeDeps): Promise<AgentOutcome[]> {
     const session = newSession(deps.db, { cwd: deps.tmpDir, goal: `konvoy smoke — ${agent}`, lead: agent })
 
     try {
-      const result = await send(
-        { db: deps.db, cfg: deps.cfg, adapterFor: deps.adapterFor },
-        session,
-        agent,
-        SMOKE_PROMPT,
-        { timeoutSec: deps.timeoutSec ?? DEFAULT_TIMEOUT_SEC },
-      )
+      const opts = { timeoutSec: deps.timeoutSec ?? DEFAULT_TIMEOUT_SEC }
+      const sendDeps = { db: deps.db, cfg: deps.cfg, adapterFor: deps.adapterFor }
+      const word = nonce()
+      const first = await send(sendDeps, session, agent, storePrompt(word), opts)
 
       const missing: string[] = []
-      if (!result.foreignId) missing.push('no foreign session id captured')
-      if (result.final.trim() === '') missing.push('no final text')
-      if (result.error) missing.push(`${result.error.kind}: ${result.error.message}`)
-
+      if (!first.foreignId) missing.push('no foreign session id captured')
+      if (first.final.trim() === '') missing.push('no final text')
+      if (first.error) missing.push(`${first.error.kind}: ${first.error.message}`)
       if (missing.length > 0) {
         results.push({ agent, status: 'failed', reason: missing.join('; ') })
+        continue
+      }
+
+      // The binding now holds the agent's own id; this turn is resumed through it. An answer that
+      // carries the nonce is the promise kept; anything else is a session that did not carry.
+      const second = await send(sendDeps, session, agent, RECALL_PROMPT, opts)
+      if (second.error) {
+        results.push({ agent, status: 'failed', reason: `resume: ${second.error.kind}: ${second.error.message}` })
+        continue
+      }
+      if (!second.final.includes(word)) {
+        results.push({
+          agent,
+          status: 'failed',
+          reason: `resume did not carry context — stored ${word}, got "${oneLine(second.final, 80)}"`,
+        })
         continue
       }
 
       results.push({
         agent,
         status: 'ok',
-        foreignId: result.foreignId!,
-        tokens: result.inputTokens + result.outputTokens,
+        foreignId: first.foreignId!,
+        tokens: first.inputTokens + first.outputTokens + second.inputTokens + second.outputTokens,
+        resumed: true,
         version: detection.version,
         versionDrift: versionDrift(agent, detection.version),
       })
@@ -116,7 +136,7 @@ function formatOutcome(o: AgentOutcome): string {
   const label = o.agent.padEnd(8)
   if (o.status === 'ok') {
     const versionTag = o.version ? ` (v${o.version})` : ''
-    const line = `[ok    ] ${label} ${o.foreignId} · ${o.tokens} tokens${versionTag}`
+    const line = `[ok    ] ${label} ${o.foreignId} · ${o.tokens} tokens · resume carried context${versionTag}`
     return o.versionDrift ? `${line}\n         note: ${o.versionDrift}` : line
   }
   if (o.status === 'skipped') return `[skip  ] ${label} ${o.reason}`
@@ -138,7 +158,7 @@ async function main(): Promise<number> {
     // otherwise leak into a run meant to be isolated. The global layer still applies, since that
     // is where a real agents.opencode.bin override (opencode has none on PATH) would live.
     const cfg = await loadConfig({ cwd: tmpDir })
-    console.log('smoke — one live turn per installed, authenticated agent (spends real quota)\n')
+    console.log('smoke — two live turns per installed, authenticated agent, the second resumed (spends real quota)\n')
     const results = await runSmoke({ db, cfg, tmpDir })
     for (const r of results) console.log(formatOutcome(r))
 
