@@ -407,15 +407,15 @@ export const mutations: Mutation[] = [
   {
     name: 'withPrelude drops the prelude and returns the prompt alone, undoing the handoff',
     file: 'src/adapters/types.ts',
-    from: "  return ctx.prelude ? `${ctx.prelude}\\n\\n${ctx.prompt}` : ctx.prompt",
-    to: '  return ctx.prompt',
+    from: "  const base = ctx.prelude ? `${ctx.prelude}\\n\\n${ctx.prompt}` : ctx.prompt",
+    to: '  const base = ctx.prompt',
     tests: ['tests/prelude.test.ts'],
   },
   {
     name: 'withPrelude joins the prompt before the prelude, so the volatile part leads the cached prefix',
     file: 'src/adapters/types.ts',
-    from: "  return ctx.prelude ? `${ctx.prelude}\\n\\n${ctx.prompt}` : ctx.prompt",
-    to: '  return ctx.prelude ? `${ctx.prompt}\\n\\n${ctx.prelude}` : ctx.prompt',
+    from: "  const base = ctx.prelude ? `${ctx.prelude}\\n\\n${ctx.prompt}` : ctx.prompt",
+    to: '  const base = ctx.prelude ? `${ctx.prompt}\\n\\n${ctx.prelude}` : ctx.prompt',
     tests: ['tests/prelude.test.ts'],
   },
   {
