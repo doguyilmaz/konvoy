@@ -73,6 +73,7 @@ export async function send(
 
   const adapter = deps.adapterFor?.(agent) ?? getAdapter(agent)
   const detection = await detect(agent, { model: settings.model, bin: settings.bin })
+  if (!detection.installed) throw new Error(`${agent}: not installed`)
   const effort = clampEffort(settings.effort, detection.efforts)
   const build = (): TurnContext => ({
     sessionId: session.id,

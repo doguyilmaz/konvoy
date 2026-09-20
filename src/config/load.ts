@@ -111,10 +111,39 @@ function stripJsonc(text: string): string {
   return result
 }
 
+// V8 reports a JSON.parse failure as "... in JSON at position N"; Bun's JSC does not. When a
+// position is knowable it is translated to a line/column so the message points somewhere in the
+// file; when it isn't, the file path plus the engine's own wording is still better than a raw
+// SyntaxError with no file attached at all.
+function describeJsonError(path: string, text: string, error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  const offset = /position (\d+)/.exec(message)?.[1]
+  let where = ''
+  if (offset !== undefined) {
+    let line = 1
+    let column = 1
+    for (let i = 0; i < Number(offset) && i < text.length; i++) {
+      if (text[i] === '\n') {
+        line++
+        column = 1
+      } else {
+        column++
+      }
+    }
+    where = ` (line ${line}, column ${column})`
+  }
+  return new Error(`malformed config at ${path}${where}: ${message}`)
+}
+
 export async function readLayer(path: string): Promise<unknown> {
   const file = Bun.file(path)
   if (!(await file.exists())) return {}
-  return JSON.parse(stripJsonc(await file.text()))
+  const text = await file.text()
+  try {
+    return JSON.parse(stripJsonc(text))
+  } catch (error) {
+    throw describeJsonError(path, text, error)
+  }
 }
 
 function merge(base: Record<string, unknown>, top: Record<string, unknown>): Record<string, unknown> {

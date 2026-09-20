@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { AgentId, Session, SpawnPlan } from '../types'
 import { agentIds, getAdapter } from '../adapters'
 import { currentSession, getBinding, getSessionBySlug } from '../store/queries'
+import { detect } from '../core/detect'
 
 export function attachPlan(db: Database, session: Session, agent: AgentId, bin?: string): SpawnPlan {
   const binding = getBinding(db, session.id, agent)
@@ -38,6 +39,12 @@ export async function cmdAttach(
   const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
   if (!session) {
     console.error('no konvoy session here — run `konvoy new "<goal>"` first')
+    return 2
+  }
+
+  const detection = await detect(agent as AgentId, { bin })
+  if (!detection.installed) {
+    console.error(`${agent}: not installed`)
     return 2
   }
 

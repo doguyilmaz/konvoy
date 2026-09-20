@@ -219,6 +219,13 @@ test('an inherited lease does not deadlock against the process that already hold
   }
 })
 
+test('send refuses cleanly when the agent binary is not installed', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  const missing = configSchema.parse({ agents: { codex: { bin: 'konvoy-test-nonexistent-binary-xyz' } } })
+  await expect(send({ db, cfg: missing }, s, 'codex', 'hi')).rejects.toThrow(/codex: not installed/)
+})
+
 test('a disabled agent is refused with a clear message', async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })

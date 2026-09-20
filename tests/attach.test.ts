@@ -1,7 +1,7 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { createSession, upsertBinding } from '../src/store/queries'
-import { attachPlan } from '../src/commands/attach'
+import { attachPlan, cmdAttach } from '../src/commands/attach'
 
 function seeded() {
   const db = openDb(':memory:')
@@ -28,4 +28,16 @@ test('a configured binary path replaces the default command name', () => {
 test('the attach plan runs in the session directory', () => {
   const { db, s } = seeded()
   expect(attachPlan(db, s, 'codex').cwd).toBe('/x')
+})
+
+test('attach against an uninstalled agent prints the friendly line, not a raw spawn error', async () => {
+  const { db } = seeded()
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const code = await cmdAttach(db, '/x', 'codex', 'demo', 'konvoy-test-nonexistent-binary-xyz')
+    expect(code).toBe(2)
+    expect(err.mock.calls.some((c) => String(c[0]).includes('codex: not installed'))).toBe(true)
+  } finally {
+    err.mockRestore()
+  }
 })

@@ -258,6 +258,75 @@ test('an informational error on a successful run does not fail the turn', async 
   expect(r.error).toBe(null)
 })
 
+test('a rate-limit error survives a turn that streamed text and exited 0', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'partial answer' }] } },
+    { type: 'result', is_error: true, result: "You've hit your session limit · resets 12:40am" },
+  ])
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.exitCode).toBe(0)
+  expect(r.final).toBe('partial answer')
+  expect(r.error?.kind).toBe('rate')
+  expect(r.error?.message).toContain('session limit')
+
+  const row = db.query('SELECT error_kind, exit_code, final FROM turn WHERE session_id = $s').get({ s: s.id }) as
+    | Record<string, unknown>
+    | null
+  expect(row?.error_kind).toBe('rate')
+  expect(row?.exit_code).toBe(0)
+  expect(row?.final).toBe('partial answer')
+})
+
+test('an auth error survives a turn that streamed text and exited 0', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'partial' }] } },
+    { type: 'result', is_error: true, result: 'Invalid API key provided' },
+  ])
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.exitCode).toBe(0)
+  expect(r.final).toBe('partial')
+  expect(r.error?.kind).toBe('auth')
+})
+
+test('a crash-kind error is still discarded once the turn produced text, as today', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter: Adapter = {
+    ...fakeAdapter([{ type: 'assistant', message: { content: [{ type: 'text', text: 'ok' }] } }]),
+    parse: (line: string) => [...claudeAdapter.parse(line), { t: 'error', message: 'transient failure', kind: 'crash' }],
+  }
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.exitCode).toBe(0)
+  expect(r.final).toBe('ok')
+  expect(r.error).toBe(null)
+})
+
+test('a child that traps SIGTERM is still killed, within the grace period', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: () => ({
+      cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'assistant', message: { content: [] } })],
+      env: {
+        ...process.env,
+        FAKE_AGENT_DELAY_MS: '5000',
+        FAKE_AGENT_TRAP_SIGTERM: '1',
+      } as Record<string, string>,
+    }),
+  }
+  const startedAt = Date.now()
+  const r = await runTurn({ db, adapter }, ctx(s.id), { timeoutSec: 1, killGraceMs: 300 })
+  const elapsedMs = Date.now() - startedAt
+  expect(elapsedMs).toBeLessThan(3000)
+  expect(r.error?.kind).toBe('timeout')
+  expect(liveCount()).toBe(0)
+})
+
 test('finish writes the model onto the turn row', async () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })

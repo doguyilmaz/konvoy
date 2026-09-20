@@ -230,6 +230,18 @@ test('a recorded turn keeps its model', () => {
   expect(row.model).toBe('opus-4')
 })
 
+test('opening a file that is not a SQLite database names the path, not the raw driver error', async () => {
+  const path = `/tmp/konvoy-test-notadb-${Bun.nanoseconds()}.db`
+  await Bun.write(path, 'this is definitely not a sqlite file, just padding text')
+  expect(() => openDb(path)).toThrow(new RegExp(`cannot open konvoy database at ${path}`))
+  try {
+    openDb(path)
+    throw new Error('expected openDb to throw')
+  } catch (e) {
+    expect((e as Error).message).not.toContain('SQLITE_NOTADB')
+  }
+})
+
 test('a binding keeps its bound status when a later turn fails to report an id', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })

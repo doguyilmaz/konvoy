@@ -24,7 +24,11 @@ export interface TurnDeps {
 export interface TurnOptions {
   timeoutSec?: number
   onEvent?: (event: KonvoyEvent) => void
+  /** grace period after the timeout's SIGTERM before konvoy escalates to SIGKILL */
+  killGraceMs?: number
 }
+
+const DEFAULT_KILL_GRACE_MS = 5000
 
 export async function drain(stream: ReadableStream<Uint8Array>, cap: number): Promise<string> {
   const decoder = new TextDecoder()
@@ -82,6 +86,15 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     killSignal: 'SIGTERM',
   })
   track(proc)
+
+  // Bun's own `timeout` sends killSignal once and never follows up — a child that traps or
+  // ignores SIGTERM then hangs forever. This escalates to SIGKILL, which cannot be trapped,
+  // after the timeout has had one grace period to work.
+  const killGraceMs = opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS
+  const escalate = setTimeout(() => {
+    if (proc.exitCode === null) proc.kill('SIGKILL')
+  }, timeoutMs + killGraceMs)
+  escalate.unref?.()
 
   const stderrText = drain(proc.stderr as ReadableStream<Uint8Array>, 64 * 1024)
 
@@ -199,14 +212,20 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
       }
     }
 
+    // The exit code says whether the turn produced its output; the error says whether the
+    // agent is now blocked. auth and rate never mean "just informational" — the agent cannot
+    // work until something changes — so they survive even a turn that answered and exited 0.
+    // crash and unknown keep the old behaviour: discarded once there was any output at all.
     const failed = result.exitCode !== 0 || (result.error !== null && result.final.trim() === '')
-    if (!failed) result.error = null
+    const blocking = result.error?.kind === 'auth' || result.error?.kind === 'rate'
+    if (!failed && !blocking) result.error = null
   } catch (error) {
     result.error = result.error ?? { message: String(error), kind: 'crash' }
     if (result.exitCode === 0) {
       result.exitCode = proc.exitCode ?? (await proc.exited.catch(() => -1))
     }
   } finally {
+    clearTimeout(escalate)
     releaseExitHandler()
     untrack(proc)
     finish()

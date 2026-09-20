@@ -114,3 +114,18 @@ test('JSONC: escaped quote in string with double-slash after', async () => {
   const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
   expect(cfg.agents.codex?.bin).toBe('a"b//c')
 })
+
+test('a malformed project config names the file, not a raw SyntaxError', async () => {
+  const dir = tmp('malformed')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{ "defaults": { "effort": }')
+  await expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(
+    new RegExp(`${dir}/\\.konvoy/config\\.jsonc`),
+  )
+  try {
+    await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+    throw new Error('expected loadConfig to reject')
+  } catch (e) {
+    expect((e as Error).message).not.toContain('SyntaxError')
+    expect((e as Error).name).not.toBe('SyntaxError')
+  }
+})

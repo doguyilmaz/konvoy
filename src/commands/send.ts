@@ -36,13 +36,35 @@ export async function cmdSend(
     return 2
   }
 
+  const outcome = decideOutcome(agent as AgentId, result)
+  for (const line of outcome.stderrLines) console.error(line)
+  if (outcome.stdout !== null) console.log(outcome.stdout)
+  return outcome.code
+}
+
+export interface SendOutcome {
+  code: number
+  stdout: string | null
+  stderrLines: string[]
+}
+
+// The exit code is decided here, once, from the same two facts turn.ts keeps separate: whether
+// output was produced (result.final) and whether the agent is now blocked (result.error.kind).
+// A turn that answered and then hit a limit is both successful and blocked — it prints what it
+// produced, plus the one line saying the agent can't keep going, and exits 0.
+export function decideOutcome(agent: AgentId, result: TurnResult): SendOutcome {
   if (result.error) {
-    console.error(`${agent} failed (${result.error.kind}): ${result.error.message}`)
-    if (result.error.kind === 'auth') console.error(loginHint(agent as AgentId))
-    return 1
+    const blocked = result.error.kind === 'auth' || result.error.kind === 'rate'
+    if (blocked && result.final.trim() !== '') {
+      const stderrLines = [`${agent} is blocked (${result.error.kind}): ${result.error.message}`]
+      if (result.error.kind === 'auth') stderrLines.push(loginHint(agent))
+      return { code: 0, stdout: result.final, stderrLines }
+    }
+    const stderrLines = [`${agent} failed (${result.error.kind}): ${result.error.message}`]
+    if (result.error.kind === 'auth') stderrLines.push(loginHint(agent))
+    return { code: 1, stdout: null, stderrLines }
   }
-  console.log(result.final)
-  return 0
+  return { code: 0, stdout: result.final, stderrLines: [] }
 }
 
 export function loginHint(agent: AgentId): string {

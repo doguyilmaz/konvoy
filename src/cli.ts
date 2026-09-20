@@ -51,6 +51,22 @@ export async function main(argv: string[]): Promise<number> {
     return command || args.flags.help ? 0 : 1
   }
 
+  try {
+    return await dispatch(command, rest, cwd, slug, args)
+  } catch (error) {
+    if (Bun.env.KONVOY_DEBUG === '1') throw error
+    console.error(`konvoy: ${error instanceof Error ? error.message : String(error)}`)
+    return 1
+  }
+}
+
+async function dispatch(
+  command: string,
+  rest: string[],
+  cwd: string,
+  slug: string | undefined,
+  args: ReturnType<typeof parseArgs>,
+): Promise<number> {
   const cfg = await loadConfig({ cwd })
   const db = openDb(dbPath())
 
