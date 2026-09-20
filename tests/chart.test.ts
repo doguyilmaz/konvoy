@@ -36,7 +36,8 @@ test('agentSparklines draws every agent on one shared scale, not each against it
   expect(claude).toBe('██')
   // codex is far quieter — on its OWN scale it would also render at the top; on the
   // scale shared with claude it must render near the bottom instead
-  expect(codex).toBe('▁▁')
+  // two turns a day on a scale set by a much busier agent: near the bottom, but visible
+  expect(codex).toBe('▂▂')
 })
 
 test('an agent idle in the middle of the range renders zeros there, and every row has the same length', () => {
@@ -102,4 +103,11 @@ test('a heatmap fills the gap between two recorded days as zero, not as missing'
   const widths = new Set(lines.map((l) => l.length))
   expect(widths.size).toBe(1)
   expect(out).toContain('·')
+})
+
+// Math.round((v / m) * 7) is 0 for any v below m/14, so a day with 7 turns beside a day with 100
+// drew the same glyph as a day with none. heatmap in the same file uses Math.ceil for this
+// reason; sparkline now floors any nonzero value at the first visible block.
+test('a quiet but active day renders one block above zero, never as zero', () => {
+  expect(sparkline([0, 7, 100])).toBe('▁▂█')
 })

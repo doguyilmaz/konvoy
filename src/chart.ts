@@ -10,7 +10,11 @@ export function sparkline(values: number[], max?: number): string {
   // counts have a fixed baseline of zero, not the series' own minimum — a flat run of busy
   // days must render full, not empty. Guard only the case where there's no signal at all.
   if (m <= 0) return BLOCKS[0]!.repeat(values.length)
-  return values.map((v) => BLOCKS[Math.min(BLOCKS.length - 1, Math.round((v / m) * (BLOCKS.length - 1)))]!).join('')
+  // a nonzero count is never the zero glyph: below m/14 Math.round lands on 0, and a quiet day
+  // must still read as a day with turns
+  return values
+    .map((v) => (v <= 0 ? BLOCKS[0]! : BLOCKS[Math.min(BLOCKS.length - 1, Math.max(1, Math.round((v / m) * (BLOCKS.length - 1))))]!))
+    .join('')
 }
 
 export function shareBars(rows: { label: string; value: number }[], width = 18): string {

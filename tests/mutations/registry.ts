@@ -771,4 +771,18 @@ export const mutations: Mutation[] = [
     to: "at capacity|overloaded?",
     tests: ["tests/adapter-claude.test.ts"],
   },
+  {
+    name: "a descendant holding the agent’s stdout keeps the turn open for its own lifetime",
+    file: 'src/core/turn.ts',
+    from: "void afterExit.then(() => stdout.cancel().catch(() => undefined))",
+    to: "void afterExit",
+    tests: ["tests/turn.test.ts"],
+  },
+  {
+    name: "a quiet but active day renders as the zero glyph",
+    file: 'src/chart.ts',
+    from: "Math.max(1, Math.round((v / m) * (BLOCKS.length - 1)))",
+    to: "Math.max(0, Math.round((v / m) * (BLOCKS.length - 1)))",
+    tests: ["tests/chart.test.ts"],
+  },
 ]
