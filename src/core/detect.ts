@@ -76,12 +76,16 @@ async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly 
   try {
     const cache = JSON.parse(raw) as { models?: unknown }
     if (!Array.isArray(cache.models)) return undefined
-    const hit = (cache.models as { id?: string; supported_reasoning_levels?: unknown }[]).find(
-      (m) => m.id === model,
+    // the real file (codex 0.155.1, 2026-09-21) keys models by `slug` and lists each level as
+    // `{ effort, description }` — see tests/fixtures/codex-models-cache.json
+    const hit = (cache.models as { slug?: string; supported_reasoning_levels?: unknown }[]).find(
+      (m) => m.slug === model,
     )
-    return Array.isArray(hit?.supported_reasoning_levels)
-      ? (hit.supported_reasoning_levels as string[])
-      : undefined
+    if (!Array.isArray(hit?.supported_reasoning_levels)) return undefined
+    const levels = hit.supported_reasoning_levels.flatMap((l) =>
+      typeof (l as { effort?: unknown } | null)?.effort === 'string' ? [(l as { effort: string }).effort] : [],
+    )
+    return levels.length > 0 ? levels : undefined
   } catch {
     return undefined
   }

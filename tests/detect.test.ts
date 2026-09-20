@@ -78,10 +78,13 @@ test('a configured binary path reaches the auth check for opencode', async () =>
 })
 
 
-test('codex effort capabilities come from the model cache', async () => {
-  const cache = JSON.stringify({
-    models: [{ id: 'gpt-6-astra', supported_reasoning_levels: ['low', 'medium', 'high', 'max'] }],
-  })
+// tests/fixtures/codex-models-cache.json is a slice of the real ~/.codex/models_cache.json
+// (codex 0.155.1, 2026-09-21): only slug, default_reasoning_level and supported_reasoning_levels
+// per model. The test this replaced faked the file as `{ id, supported_reasoning_levels: [string] }`
+// — the real file has no `id` (the key is `slug`) and each level is `{ effort, description }`. The
+// lookup therefore never matched on a real machine and codex effort was never clamped.
+test('codex effort capabilities come from the model cache, keyed by slug, levels by their effort field', async () => {
+  const cache = await Bun.file('tests/fixtures/codex-models-cache.json').text()
   const d = await detectWith(
     deps({
       run: async () => ({ stdout: 'codex-cli 0.155.1', exitCode: 0 }),
@@ -90,7 +93,22 @@ test('codex effort capabilities come from the model cache', async () => {
     'codex',
     { model: 'gpt-6-astra' },
   )
-  expect(d.efforts).toEqual(['low', 'medium', 'high', 'max'])
+  expect(d.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+})
+
+test('a level entry that is not an object carrying an effort string is skipped', async () => {
+  const cache = JSON.stringify({
+    models: [{ slug: 'm', supported_reasoning_levels: [{ effort: 'low', description: 'x' }, 'high', { nope: 1 }] }],
+  })
+  const d = await detectWith(
+    deps({
+      run: async () => ({ stdout: 'codex-cli 0.155.1', exitCode: 0 }),
+      readText: async () => cache,
+    }),
+    'codex',
+    { model: 'm' },
+  )
+  expect(d.efforts).toEqual(['low'])
 })
 
 test('a model cache whose shape is not what we captured yields no capabilities', async () => {
@@ -109,7 +127,7 @@ test('a supported-level field that is not a list is rejected', async () => {
   const d = await detectWith(
     deps({
       run: async () => ({ stdout: 'codex-cli 0.155.1', exitCode: 0 }),
-      readText: async () => JSON.stringify({ models: [{ id: 'm', supported_reasoning_levels: 'low,high' }] }),
+      readText: async () => JSON.stringify({ models: [{ slug: 'm', supported_reasoning_levels: 'low,high' }] }),
     }),
     'codex',
     { model: 'm' },

@@ -680,4 +680,18 @@ export const mutations: Mutation[] = [
     to: 'if (false) {',
     tests: ['tests/turn.test.ts'],
   },
+  {
+    name: 'codex effort levels are looked up by a key the cache does not have, so clamping never runs',
+    file: 'src/core/detect.ts',
+    from: '(m) => m.slug === model,',
+    to: '(m) => m.id === model,',
+    tests: ['tests/detect.test.ts'],
+  },
+  {
+    name: 'codex effort levels lose their effort field and clamping receives nothing',
+    file: 'src/core/detect.ts',
+    from: "typeof (l as { effort?: unknown } | null)?.effort === 'string' ? [(l as { effort: string }).effort] : [],",
+    to: "typeof (l as { effort?: unknown } | null)?.effort === 'string' ? [] : [],",
+    tests: ['tests/detect.test.ts'],
+  },
 ]
