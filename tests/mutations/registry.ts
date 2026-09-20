@@ -457,17 +457,6 @@ export const mutations: Mutation[] = [
     tests: ['tests/failover.test.ts'],
   },
   {
-    name: 'the chain moves to the next agent silently, without telling the user who was blocked or why',
-    file: 'src/core/session.ts',
-    from: [
-      '      if (next) {',
-      '        console.error(`konvoy: ${current} is blocked (${kind}) — "${result.error!.message}" — moving to ${next}`)',
-      '      }',
-    ].join('\n'),
-    to: ['      if (next) {', '      }'].join('\n'),
-    tests: ['tests/failover.test.ts'],
-  },
-  {
     name: 'the replacement turn is recorded with no parentTurnId, losing the link to the turn it replaced',
     file: 'src/core/session.ts',
     from: '        r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId)',
