@@ -113,6 +113,11 @@ async function main(): Promise<void> {
   const full = run(['bun', 'test'])
   console.log(full.out.trim().split('\n').slice(-4).join('\n'))
   const suiteGreen = full.code === 0
+  // Name the casualties. The summary alone says "1 fail" and nothing else, which is how a flake
+  // in this step once went untraceable: by the time anyone looked, the run was green again.
+  if (!suiteGreen) {
+    for (const name of extractFailingTests(full.out)) console.log(`  casualty: ${name}`)
+  }
 
   console.log('')
   console.log(
