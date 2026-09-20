@@ -212,6 +212,16 @@ turn. A command that can't even be spawned records nothing, and a failed turn is
 { "gate": { "command": "bun test" } }
 ```
 
+`harness` decides how much of a CLI's own setup a turn loads. `minimal`, the default, strips
+what konvoy already supplies — claude runs with no MCP servers, slash commands or settings
+files, codex with `--ignore-user-config` — and measured 2.6× less context per turn than
+`inherit`, which runs the CLI exactly as you would by hand, hooks and skills included. kiro and
+opencode run with their own configuration either way. Privileged: the global config only.
+
+```jsonc
+{ "defaults": { "harness": "inherit" } }
+```
+
 `gate` is privileged like `bin`, `permission` and `harness` — only the global config may set
 it, since a gate runs on every turn with no per-turn opt-in, unlike an agent binary the user
 chose to run. That also means one gate command serves every project; there's no per-project
@@ -233,9 +243,11 @@ bun run smoke          # one real turn per installed, authenticated agent — sp
 ```
 
 `verify:claims` is the standing form of a manual check: it re-reads each CLI's own `--help`
-and confirms things this README and the adapters assume — that each agent's update
-subcommand exists, that only claude accepts a caller-chosen session id, and that opencode's
-`--session` continues a session rather than creating one. It never sends a prompt or spends
+and confirms what this README and the adapters assume — that every flag an adapter puts on a
+command line still exists, that each agent's update and auth-status subcommands exist, that
+only claude accepts a caller-chosen session id, and that opencode's `--session` continues a
+session rather than creating one. The flag list is built from the adapters' real argv, so a flag
+added to an adapter is checked without touching the script. It never sends a prompt or spends
 quota, and it isn't part of `bun test` since it needs the CLIs installed to mean anything.
 
 `smoke` closes the gap `verify:claims` and the frozen fixtures in `tests/fixtures/streams/`

@@ -405,8 +405,13 @@ independent CLIs is the check that the unit is defined right.
 |---|---|---|
 | claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
 | codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
-| kiro | generated agent JSON with `includeMcpJson: false` | user's `mcp.json` merged |
-| opencode | generated config via `OPENCODE_CONFIG` | user's config discovery |
+| kiro | **not implemented** — runs with the user's own agent and MCP configuration | same |
+| opencode | **not implemented** — runs with its own config discovery | same |
+
+Only claude and codex honor `harness` today (`src/adapters/claude.ts`, `src/adapters/codex.ts`);
+the kiro and opencode rows above described intended behavior that was never built, corrected
+2026-09-21 against the adapters. Bringing them under `minimal` is roadmap (§33): kiro through a
+generated agent profile, opencode through `OPENCODE_CONFIG`.
 
 `minimal` is not a degraded mode: konvoy supplies the context explicitly through the brief
 and its own MCP server, so what is stripped is duplication, not capability. `inherit` exists
@@ -1225,5 +1230,9 @@ Where no gate is configured, `gate_passed` stays null and every rate reads as a 
 
 **v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
+**v1.x** — `harness: minimal` for kiro (a generated agent profile) and opencode
+(`OPENCODE_CONFIG`); adopting a session the user started outside konvoy (`attach --id`);
+the codex rate-limit stream shape captured, so an informational error item can be told from a
+failed turn (audit 2026-09-21, C-pre-1).
 **v2** — `drive()` over each CLI's persistent protocol: live streaming, steer, cancel.
 **v3** — parallel worktrees by default with conflict-aware merge; tmux-backed live attach.
