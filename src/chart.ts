@@ -2,13 +2,15 @@ const BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const
 const DENSITY = ['·', '▫', '▪', '▩', '█'] as const
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 
-export function sparkline(values: number[]): string {
+export function sparkline(values: number[], max?: number): string {
   if (values.length === 0) return ''
-  const max = Math.max(...values)
+  // an explicit max lets several series share one scale (see agentSparklines); omitted, a
+  // series scales to its own peak, as a lone sparkline always has
+  const m = max ?? Math.max(...values)
   // counts have a fixed baseline of zero, not the series' own minimum — a flat run of busy
   // days must render full, not empty. Guard only the case where there's no signal at all.
-  if (max <= 0) return BLOCKS[0]!.repeat(values.length)
-  return values.map((v) => BLOCKS[Math.round((v / max) * (BLOCKS.length - 1))]!).join('')
+  if (m <= 0) return BLOCKS[0]!.repeat(values.length)
+  return values.map((v) => BLOCKS[Math.min(BLOCKS.length - 1, Math.round((v / m) * (BLOCKS.length - 1)))]!).join('')
 }
 
 export function shareBars(rows: { label: string; value: number }[], width = 18): string {
@@ -24,6 +26,39 @@ export function shareBars(rows: { label: string; value: number }[], width = 18):
       })
       .join('\n') + '\n'
   )
+}
+
+// a lone agent's sparkline can't reveal whether it's the busy one or the quiet one — every
+// agent must be drawn against the same peak, and every row must span the same dense day
+// range (gaps filled with zero) so the columns line up between agents
+export function agentSparklines(rows: { agent: string; day: string; count: number }[]): { agent: string; line: string }[] {
+  if (rows.length === 0) return []
+  const days = [...new Set(rows.map((r) => r.day))].sort()
+  const start = days[0]!
+  const end = days[days.length - 1]!
+
+  const denseDays: string[] = []
+  for (
+    const cursor = new Date(`${start}T00:00:00Z`);
+    cursor <= new Date(`${end}T00:00:00Z`);
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    denseDays.push(cursor.toISOString().slice(0, 10))
+  }
+
+  const byAgent = new Map<string, Map<string, number>>()
+  for (const r of rows) {
+    if (!byAgent.has(r.agent)) byAgent.set(r.agent, new Map())
+    byAgent.get(r.agent)!.set(r.day, r.count)
+  }
+
+  const series = [...byAgent.entries()].map(([agent, dayCounts]) => ({
+    agent,
+    values: denseDays.map((d) => dayCounts.get(d) ?? 0),
+  }))
+
+  const sharedMax = Math.max(...series.flatMap((s) => s.values), 0)
+  return series.map(({ agent, values }) => ({ agent, line: sparkline(values, sharedMax) }))
 }
 
 export function heatmap(days: { day: string; count: number }[]): string {

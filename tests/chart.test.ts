@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { heatmap, shareBars, sparkline } from '../src/chart'
+import { agentSparklines, heatmap, shareBars, sparkline } from '../src/chart'
 
 test('a sparkline uses the full block range and scales to its own maximum', () => {
   expect(sparkline([0, 1, 2, 3, 4, 5, 6, 7])).toBe('▁▂▃▄▅▆▇█')
@@ -10,6 +10,54 @@ test('a busy flat series is full, not empty — the baseline is zero, not the mi
   expect(sparkline([5, 6, 7])).toBe('▆▇█')
   expect(sparkline([0, 0, 0])).toBe('▁▁▁')
   expect(sparkline([])).toBe('')
+})
+
+test('sparkline still self-scales to its own maximum when no explicit max is given', () => {
+  expect(sparkline([1, 2, 4])).toBe('▃▅█')
+})
+
+test('an explicit max draws the same values differently than self-scaling would', () => {
+  // against a shared max of 8, [1,2,4] tops out at the middle of the range, not the top
+  expect(sparkline([1, 2, 4], 8)).toBe('▂▃▅')
+  expect(sparkline([1, 2, 4], 8)).not.toBe(sparkline([1, 2, 4]))
+})
+
+test('agentSparklines draws every agent on one shared scale, not each against its own', () => {
+  const rows = [
+    { agent: 'claude', day: '2026-09-01', count: 40 },
+    { agent: 'claude', day: '2026-09-02', count: 40 },
+    { agent: 'codex', day: '2026-09-01', count: 2 },
+    { agent: 'codex', day: '2026-09-02', count: 2 },
+  ]
+  const out = agentSparklines(rows)
+  const claude = out.find((r) => r.agent === 'claude')!.line
+  const codex = out.find((r) => r.agent === 'codex')!.line
+  // claude is the busiest agent, so it renders at the top of the shared scale
+  expect(claude).toBe('██')
+  // codex is far quieter — on its OWN scale it would also render at the top; on the
+  // scale shared with claude it must render near the bottom instead
+  expect(codex).toBe('▁▁')
+})
+
+test('an agent idle in the middle of the range renders zeros there, and every row has the same length', () => {
+  const rows = [
+    { agent: 'claude', day: '2026-09-01', count: 5 },
+    { agent: 'claude', day: '2026-09-05', count: 5 },
+    { agent: 'codex', day: '2026-09-03', count: 5 },
+  ]
+  const out = agentSparklines(rows)
+  const claude = out.find((r) => r.agent === 'claude')!.line
+  const codex = out.find((r) => r.agent === 'codex')!.line
+  expect(claude.length).toBe(5)
+  expect(codex.length).toBe(5)
+  // codex only turned on day 3 (the middle day) — every other day, including the ones
+  // neither endpoint mentions, must still render as an explicit zero, not be dropped
+  expect(claude).toBe('█▁▁▁█')
+  expect(codex).toBe('▁▁█▁▁')
+})
+
+test('agentSparklines of nothing is nothing, not a crash', () => {
+  expect(agentSparklines([])).toEqual([])
 })
 
 test('share bars are proportional and labelled with the percentage', () => {

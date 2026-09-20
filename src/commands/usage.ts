@@ -3,12 +3,13 @@ import {
   currentSession,
   getSessionBySlug,
   turnsPerDay,
+  turnsPerDayByAgent,
   usageAcrossSessions,
   usageForSession,
   type UsageRow,
 } from '../store/queries'
 import { formatUsage } from '../format'
-import { heatmap, shareBars } from '../chart'
+import { agentSparklines, heatmap, shareBars } from '../chart'
 import type { Session } from '../types'
 
 // the SPEND column mixes dollars and credits, so every table that shows it carries this line
@@ -43,10 +44,20 @@ export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?:
   console.log(UNITS)
 
   if (opts.chart) {
+    const sessionId = opts.all ? undefined : session?.id
     console.log('\nturns per day')
-    console.log(heatmap(turnsPerDay(db, opts.all ? undefined : session?.id)))
+    console.log(heatmap(turnsPerDay(db, sessionId)))
     console.log('\nshare of turns')
     console.log(shareBars(rows.map((r) => ({ label: r.agent, value: r.turns }))))
+
+    const perAgent = agentSparklines(turnsPerDayByAgent(db, sessionId))
+    if (perAgent.length > 0) {
+      console.log('\nturns per day by agent')
+      const labelWidth = Math.max(...perAgent.map((r) => r.agent.length))
+      for (const { agent, line } of perAgent) {
+        console.log(`${agent.padEnd(labelWidth)}  ${line}`)
+      }
+    }
   }
 
   return 0

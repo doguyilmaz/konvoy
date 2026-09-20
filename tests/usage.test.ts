@@ -6,6 +6,7 @@ import {
   recordTurn,
   setGateResult,
   turnsPerDay,
+  turnsPerDayByAgent,
   usageForSession,
   usageAcrossSessions,
 } from '../src/store/queries'
@@ -189,6 +190,17 @@ test('a turn after midnight is counted on its own local day, not the UTC one', (
   expect(turnsPerDay(d)).toEqual([{ day: expected, count: 1 }])
 })
 
+test('turnsPerDayByAgent buckets by local day too, sharing the same day expression as turnsPerDay', () => {
+  const d = db()
+  const s = createSession(d, { slug: 'late2', goal: 'g', cwd: '/repo2', lead: 'claude' })
+  const ms = Date.parse('2026-09-21T01:30:00+03:00')
+  const id = recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
+  d.query('UPDATE turn SET started_at = $ms WHERE id = $id').run({ ms, id })
+
+  const expected = new Date(ms).toLocaleDateString('en-CA')
+  expect(turnsPerDayByAgent(d)).toEqual([{ agent: 'codex', day: expected, count: 1 }])
+})
+
 test('usage --chart prints the turns-per-day heatmap and the share-of-turns bars', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
@@ -205,6 +217,26 @@ test('usage --chart prints the turns-per-day heatmap and the share-of-turns bars
   expect(lines.some((l) => l.includes('turns per day'))).toBe(true)
   expect(lines.some((l) => l.includes('share of turns'))).toBe(true)
   expect(lines.some((l) => l.includes('claude') && l.includes('%'))).toBe(true)
+})
+
+test('usage --chart also prints a per-agent turns-per-day sparkline', () => {
+  const d = db()
+  const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  recordTurn(d, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 1, exitCode: 0 })
+  recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0.5, exitCode: 0 })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    cmdUsage(d, '/x', { all: false, chart: true })
+    lines = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+  expect(lines.some((l) => l.includes('turns per day by agent'))).toBe(true)
+  const claudeLine = lines.find((l) => /^claude\s+[▁▂▃▄▅▆▇█]+$/.test(l))
+  const codexLine = lines.find((l) => /^codex\s+[▁▂▃▄▅▆▇█]+$/.test(l))
+  expect(claudeLine).toBeDefined()
+  expect(codexLine).toBeDefined()
 })
 
 test('usage without --chart prints no chart output', () => {

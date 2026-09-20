@@ -340,3 +340,15 @@ export function turnsPerDay(db: Database, sessionId?: string): { day: string; co
   const rows = (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as Record<string, unknown>[]
   return rows.map((r) => ({ day: r.day as string, count: r.count as number }))
 }
+
+export function turnsPerDayByAgent(
+  db: Database,
+  sessionId?: string,
+): { agent: AgentId; day: string; count: number }[] {
+  const sql = sessionId
+    ? `SELECT agent, ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn
+       WHERE session_id = $sessionId GROUP BY agent, day ORDER BY agent, day`
+    : `SELECT agent, ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn GROUP BY agent, day ORDER BY agent, day`
+  const rows = (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as Record<string, unknown>[]
+  return rows.map((r) => ({ agent: r.agent as AgentId, day: r.day as string, count: r.count as number }))
+}
