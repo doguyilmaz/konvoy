@@ -597,4 +597,11 @@ export const mutations: Mutation[] = [
     to: 'if (false) {',
     tests: ['tests/delegation.test.ts'],
   },
+  {
+    name: 'claude input tokens fall back to the uncached remainder, hiding the real context sent',
+    file: 'src/adapters/claude.ts',
+    from: '? (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)',
+    to: '? (usage.input_tokens ?? 0)',
+    tests: ['tests/adapter-claude.test.ts', 'tests/provider-contract.test.ts'],
+  },
 ]

@@ -28,4 +28,30 @@ for (const id of agentIds) {
     // "meaningful" rules out a fixture/adapter pairing that only ever yields error events
     expect(events.some((e) => e.t !== 'error')).toBe(true)
   })
+
+  // The adapters agree on the field names and disagree on what they mean: claude's
+  // input_tokens excludes both cache fields, codex's already contains cached_input_tokens.
+  // Reading each CLI's headline field therefore filled one normalized column with two units,
+  // which src/pricing.ts prices per million and src/dashboard/page.ts adds across agents.
+  // Whatever an adapter reports as inputTokens, it cannot be smaller than a single component
+  // of the context that CLI says it sent — that holds under either convention, needs no
+  // per-agent table, and is what a fifth adapter inherits by existing.
+  test(`${id} reports input tokens no smaller than any context component in its fixture`, async () => {
+    const raw = await Bun.file(`tests/fixtures/streams/${id}.jsonl`).text()
+    const components = [...raw.matchAll(/"([a-z_]*(?:input|cache)[a-z_]*)":\s*(\d+)/g)]
+      .filter(([, name]) => !name!.includes('output'))
+      .map(([, name, value]) => ({ name: name!, value: Number(value) }))
+    if (components.length === 0) return // this CLI reports no usage; nothing to contradict
+
+    const adapter = getAdapter(id)
+    const reported = raw
+      .trim()
+      .split('\n')
+      .flatMap((line) => adapter.parse(line))
+      .reduce((sum, e) => (e.t === 'usage' ? sum + (e.inputTokens ?? 0) : sum), 0)
+
+    const largest = components.reduce((a, b) => (b.value > a.value ? b : a))
+    expect(reported, `${id} reports ${reported} input tokens but its own stream names ${largest.name}=${largest.value}`)
+      .toBeGreaterThanOrEqual(largest.value)
+  })
 }

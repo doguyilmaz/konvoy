@@ -211,3 +211,31 @@ test('an API that is reachable but refusing is upstream, not a crash', () => {
   expect(classifyError('ENOENT: no such file or directory')).toBe('unknown')
   expect(classifyError('TypeError: cannot read property of undefined')).toBe('unknown')
 })
+
+// claude reports input in three fields and only one of them is the uncached remainder. A live
+// minimal-harness turn on 2026-09-21 returned input_tokens 2, cache_creation 4,454, cache_read
+// 16,344 — reading input_tokens alone records 2 for a turn that sent 20,800. codex reports the
+// opposite convention (its input_tokens already contains cached_input_tokens, which is why its
+// wire format also carries a derived net_new_input_tokens), so an adapter that drops claude's
+// cache fields does not merely undercount: it puts two different units in one column that
+// src/pricing.ts prices and src/dashboard/page.ts sums across agents.
+test('input tokens count the whole context sent, not just the uncached remainder', () => {
+  const line = JSON.stringify({
+    type: 'result',
+    subtype: 'success',
+    result: 'ok',
+    total_cost_usd: 0.05,
+    usage: { input_tokens: 2, cache_creation_input_tokens: 4454, cache_read_input_tokens: 16344, output_tokens: 4 },
+  })
+  expect(claudeAdapter.parse(line)[0]).toEqual({ t: 'usage', inputTokens: 20800, outputTokens: 4, costUsd: 0.05 })
+})
+
+test('input tokens survive a result that reports no cache fields at all', () => {
+  const line = JSON.stringify({
+    type: 'result',
+    subtype: 'success',
+    result: 'ok',
+    usage: { input_tokens: 10, output_tokens: 20 },
+  })
+  expect(claudeAdapter.parse(line)[0]).toEqual({ t: 'usage', inputTokens: 10, outputTokens: 20, costUsd: undefined })
+})

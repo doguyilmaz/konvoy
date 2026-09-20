@@ -51,11 +51,19 @@ export const claudeAdapter: Adapter = {
     if (o.type === 'result') {
       const text = typeof o.result === 'string' ? o.result : ''
       if (o.is_error) return [{ t: 'error', message: text || 'unknown error', kind: classifyError(text) }]
-      const usage = o.usage as { input_tokens?: number; output_tokens?: number } | undefined
+      const usage = o.usage as
+        | { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number }
+        | undefined
+      // claude splits input across three fields and input_tokens holds only the uncached
+      // remainder, so it reads near zero on a cached turn. codex's input_tokens already
+      // contains its cached count; summing here is what puts both agents in one unit.
+      const input = usage
+        ? (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+        : undefined
       return [
         {
           t: 'usage',
-          inputTokens: usage?.input_tokens,
+          inputTokens: input,
           outputTokens: usage?.output_tokens,
           costUsd: typeof o.total_cost_usd === 'number' ? o.total_cost_usd : undefined,
         },
