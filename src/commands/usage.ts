@@ -2,6 +2,9 @@ import type { Database } from 'bun:sqlite'
 import { currentSession, getSessionBySlug, usageAcrossSessions, usageForSession } from '../store/queries'
 import { formatUsage } from '../format'
 
+// the SPEND column mixes dollars and credits, so every table that shows it carries this line
+const UNITS = "spend is in each agent's own unit; a dash means the CLI reported none"
+
 export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?: string }): number {
   if (opts.all) {
     const rows = usageAcrossSessions(db)
@@ -11,6 +14,7 @@ export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?:
     }
     console.log('all sessions')
     console.log(formatUsage(rows))
+    console.log(UNITS)
     return 0
   }
 
@@ -26,6 +30,6 @@ export function cmdUsage(db: Database, cwd: string, opts: { all: boolean; slug?:
   }
   console.log(`session ${session.slug}`)
   console.log(formatUsage(rows))
-  console.log('spend is in each agent\'s own unit; a dash means the CLI reported none')
+  console.log(UNITS)
   return 0
 }

@@ -1,5 +1,6 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
+import { cmdUsage } from '../src/commands/usage'
 import { createSession, recordTurn, setGateResult, usageForSession, usageAcrossSessions } from '../src/store/queries'
 import { formatUsage } from '../src/format'
 
@@ -99,4 +100,27 @@ test('a gate rate is shown only where a verdict exists', () => {
     { agent: 'codex', turns: 4, inputTokens: 1, outputTokens: 1, costUsd: 0, credits: 0, gatePassed: 0, gateKnown: 0 },
   ])
   expect(without).not.toContain('0/0')
+})
+
+test('both usage tables explain the mixed SPEND unit, not only the per-session one', () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'units', goal: 'g', cwd: '/repo', lead: 'claude' })
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'p', final: 'f', costUsd: 1, exitCode: 0 })
+
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let all: string[]
+  let one: string[]
+  try {
+    cmdUsage(db, '/repo', { all: true })
+    all = log.mock.calls.map((c) => String(c[0]))
+    log.mockClear()
+    cmdUsage(db, '/repo', { all: false })
+    one = log.mock.calls.map((c) => String(c[0]))
+  } finally {
+    log.mockRestore()
+  }
+
+  const note = (lines: string[]) => lines.some((l) => l.includes("each agent's own unit"))
+  expect(note(one)).toBe(true)
+  expect(note(all)).toBe(true)
 })
