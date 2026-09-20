@@ -29,6 +29,72 @@ konvoy version
 konvoy dashboard --port 4000  # local page with the same numbers as `usage --chart`
 ```
 
+## Sample output
+
+Captured by running konvoy against a scratch database, not copied from a real project.
+
+`konvoy usage --all --chart`:
+
+```text
+all sessions
+AGENT     TURNS  IN     OUT   SPEND     GATE
+claude    27     25560  5040  $6.18     -
+codex     17     14800  2850  $1.39     -
+kiro      6      4920   930   0.190 cr  -
+opencode  3      2400   450   -         -
+
+spend is in each agent's own unit; a dash means the CLI reported none
+
+turns per day
+Sun ·▪█
+Mon ·▩·
+Tue ·▩·
+Wed ·▫·
+Thu ·▩·
+Fri ▪█·
+Sat ▩█·
+
+share of turns
+claude    █████████░░░░░░░░░  51%
+codex     ██████░░░░░░░░░░░░  32%
+kiro      ██░░░░░░░░░░░░░░░░  11%
+opencode  █░░░░░░░░░░░░░░░░░  6%
+
+turns per day by agent
+claude    ▄▅▂▇▄▁▅█▇▅
+codex     ▂▂▄▁▅▄▂▄▅▄
+kiro      ▁▂▁▂▁▁▂▁▄▂
+opencode  ▁▁▂▁▁▁▁▂▁▂
+```
+
+A failover notice, when codex hits its weekly limit mid-chain:
+
+```text
+konvoy: codex is blocked (rate) — "You've hit your weekly limit · resets 7am" — claude is taking over
+```
+
+## How it works
+
+One konvoy session holds a binding per agent, and each binding holds that agent's own
+foreign session id — konvoy's id and the agent's id are never the same thing. Only claude
+accepts a caller-chosen session id up front; the other three assign their own and hand it
+back after the first turn, which konvoy stores in that agent's binding and resumes on every
+turn after.
+
+```mermaid
+flowchart LR
+  session["konvoy session<br/>(one slug)"]
+  session --> bClaude["binding: claude"]
+  session --> bCodex["binding: codex"]
+  session --> bKiro["binding: kiro"]
+  session --> bOpencode["binding: opencode"]
+
+  bClaude -->|"resume via session-id/resume flag<br/>← session_id"| claudeCli(["claude session"])
+  bCodex -->|"resume &lt;id&gt; subcommand<br/>← thread_id"| codexCli(["codex thread"])
+  bKiro -->|"resume-id flag<br/>← sessionId"| kiroCli(["kiro-cli session"])
+  bOpencode -->|"session flag (-s)<br/>← sessionID"| opencodeCli(["opencode session"])
+```
+
 ## Configure
 
 Global `~/.config/konvoy/config.jsonc`, per project `.konvoy/config.jsonc`. The project
@@ -73,6 +139,17 @@ moves the chain — the fault is in the work, and the next agent would just fail
 There is no failback: once konvoy moves, it stays moved. An empty chain (the default) turns
 the feature off.
 
+```mermaid
+flowchart TD
+  run["run current agent"] --> check{"error kind"}
+  check -->|"rate or auth"| move["move to next chain agent<br/>(no retry)"]
+  check -->|upstream| retry{"retries < upstreamRetries?"}
+  retry -->|"yes, with backoff"| run
+  retry -->|no| move
+  check -->|"none, crash, timeout,<br/>interrupted, or other"| stay["return result<br/>chain stops here"]
+  move --> run
+```
+
 Set `style: "brief"` to have an agent lead with the action, number multi-step work, and skip
 preamble and pleasantries — it shapes the answer you read, not what agents send each other:
 
@@ -97,3 +174,18 @@ override yet.
 
 Bun 1.4+, and whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy.
 Each authenticates itself; konvoy never handles credentials.
+
+## Development
+
+```bash
+bun test
+bun run typecheck
+bun run mutate         # mutation coverage of src/
+bun run verify:claims  # checks konvoy's own claims about the four CLIs against what --help says here
+```
+
+`verify:claims` is the standing form of a manual check: it re-reads each CLI's own `--help`
+and confirms things this README and the adapters assume — that each agent's update
+subcommand exists, that only claude accepts a caller-chosen session id, and that opencode's
+session flag continues a session rather than creating one. It never sends a prompt or spends
+quota, and it isn't part of `bun test` since it needs the CLIs installed to mean anything.
