@@ -47,6 +47,11 @@ test('thread.started yields the session id', () => {
   ])
 })
 
+test('control bytes in the thread id are stripped where it enters', () => {
+  const line = JSON.stringify({ type: 'thread.started', thread_id: 't\x1b]0;pwned\x07-9' })
+  expect(codexAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 't]0;pwned-9' }])
+})
+
 test('an agent message is text, never a terminal event', () => {
   const line = JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: 'OK' } })
   expect(codexAdapter.parse(line)).toEqual([{ t: 'text', text: 'OK' }])

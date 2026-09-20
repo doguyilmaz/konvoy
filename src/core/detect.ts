@@ -1,5 +1,6 @@
 import type { AgentId } from '../types'
 import { getAdapter } from '../adapters'
+import { stripControlChars } from '../adapters/types'
 import { home, join } from '../paths'
 
 export interface Detection {
@@ -92,14 +93,14 @@ function authDetail(stdout: string, exitCode: number): string {
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed) as { loggedIn?: unknown; authMethod?: unknown }
-      const via = typeof parsed.authMethod === 'string' ? ` via ${parsed.authMethod}` : ''
+      const via = typeof parsed.authMethod === 'string' ? ` via ${stripControlChars(parsed.authMethod)}` : ''
       if (parsed.loggedIn === true) return `logged in${via}`
       if (parsed.loggedIn === false) return 'not logged in'
     } catch {
       // not the shape we expected; the first line is still better than nothing
     }
   }
-  return trimmed.split('\n')[0] ?? ''
+  return stripControlChars(trimmed.split('\n')[0] ?? '')
 }
 
 export async function detectWith(

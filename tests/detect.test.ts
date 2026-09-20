@@ -223,6 +223,26 @@ test('a missing binary is unknown even if it somehow printed a verdict', async (
   expect(a.detail).toBe('not installed')
 })
 
+test('control bytes in the cli auth detail are stripped before konvoy stores or prints it', async () => {
+  const a = await detectAuthWith(
+    deps({ run: async () => ({ stdout: '\x1b]0;pwned\x07Logged in with IAM Identity Center', exitCode: 0 }) }),
+    'kiro',
+  )
+  expect(a.detail).toBe(']0;pwnedLogged in with IAM Identity Center')
+  expect(a.detail).not.toContain('\x1b')
+  expect(a.detail).not.toContain('\x07')
+})
+
+test('control bytes in a json auth method are stripped too', async () => {
+  const a = await detectAuthWith(
+    // \u001b here is a JSON string escape, so JSON.parse hands authMethod an actual ESC byte
+    deps({ run: async () => ({ stdout: '{"loggedIn":true,"authMethod":"claude.ai\\u001b[31m"}', exitCode: 0 }) }),
+    'claude',
+  )
+  expect(a.detail).toBe('logged in via claude.ai[31m')
+  expect(a.detail).not.toContain('\x1b')
+})
+
 test('a memoized detect rejection does not stick', async () => {
   clearDetectCache()
   let calls = 0

@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
 
 const TRUST: Record<Permission, string> = {
   safe: '--trust-tools=',
@@ -27,7 +27,7 @@ export const kiroAdapter: Adapter = {
     if (!data) return []
 
     const events: KonvoyEvent[] = []
-    if (typeof data.sessionId === 'string') events.push({ t: 'session', foreignId: data.sessionId })
+    if (typeof data.sessionId === 'string') events.push({ t: 'session', foreignId: stripControlChars(data.sessionId) })
 
     if (o.type === 'sessionUpdate') {
       const update = data.update as

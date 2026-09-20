@@ -36,10 +36,19 @@ const rolesObjectSchema = z
   })
   .strict()
 
+const MAX_TURN_TIMEOUT_SEC = 24 * 60 * 60
+
 const policyObjectSchema = z
   .object({
     maxDelegationDepth: z.number().int().positive().default(3),
-    turnTimeoutSec: z.number().int().positive().default(900),
+    // A project config sets this, so it is clamped rather than trusted outright — otherwise a
+    // hostile repo could make konvoy wait forever on every turn.
+    turnTimeoutSec: z
+      .number()
+      .int()
+      .positive()
+      .default(900)
+      .transform((v) => Math.min(v, MAX_TURN_TIMEOUT_SEC)),
     isolation: z.enum(['serial', 'parallel']).default('serial'),
   })
   .strict()

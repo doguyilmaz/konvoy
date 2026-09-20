@@ -21,6 +21,14 @@ export function safeJson(line: string): Record<string, unknown> | null {
   }
 }
 
+// foreignId, the model a CLI echoes back, and the auth detail string are konvoy's own metadata,
+// read from a CLI's stdout and later printed to the terminal or stored. Control bytes (OSC/SGR
+// escapes) have no legitimate use there, so they are stripped at the parse boundary rather than
+// wherever the value later gets printed.
+export function stripControlChars(value: string): string {
+  return value.replace(/[\x00-\x1f\x7f]/g, '')
+}
+
 // Extracted from the four installed binaries on 2026-09-20. Expiry is phrased around
 // "session" or "token" — "Cloud gateway session expired", "AWS session has expired",
 // "Login token is expired", "MCP OAuth access token is expired" — so requiring the literal

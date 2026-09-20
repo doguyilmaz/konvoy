@@ -80,6 +80,30 @@ test('the binding is written from the stream', async () => {
   expect(getBinding(db, s.id, 'claude')?.turns).toBe(1)
 })
 
+test('a foreign id carrying a terminal escape sequence is stored and printed without the escape bytes', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const hostile = 'sess\x1b]0;pwned\x07-1'
+  const adapter = fakeAdapter([
+    { type: 'system', subtype: 'init', session_id: hostile },
+    { type: 'result', subtype: 'success', result: 'ok' },
+  ])
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.foreignId).toBe('sess]0;pwned-1')
+  expect(r.foreignId).not.toContain('\x1b')
+  expect(r.foreignId).not.toContain('\x07')
+
+  const stored = getBinding(db, s.id, 'claude')?.foreignId ?? null
+  expect(stored).toBe('sess]0;pwned-1')
+
+  const { formatRoster } = await import('../src/format')
+  const printed = formatRoster([
+    { agent: 'claude', status: 'bound', model: '', effort: 'high', foreignId: stored, turns: 1, costUsd: 0, credits: 0 },
+  ])
+  expect(printed).not.toContain('\x1b')
+  expect(printed).not.toContain('\x07')
+})
+
 test('a stream with no terminal event synthesises the final message from its text', async () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })

@@ -11,6 +11,20 @@ export function distinctPaths(stdout: string): string[] {
   return [...new Set(stdout.trim().split('\n').filter(Boolean))]
 }
 
+// engine, policy.maxDelegationDepth and policy.isolation are in the schema and the spec, but
+// nothing reads them yet — the delegation work will. Comparing the parsed policy values against
+// their schema defaults is an approximation (a value set explicitly equal to the default reads
+// as unset), acceptable for an informational line with no behavioural effect.
+export function acceptedButUnusedKeys(cfg: Config): string[] {
+  const keys: string[] = []
+  if (cfg.policy.maxDelegationDepth !== 3) keys.push('policy.maxDelegationDepth')
+  if (cfg.policy.isolation !== 'serial') keys.push('policy.isolation')
+  for (const agent of agentIds) {
+    if (cfg.agents[agent]?.engine !== undefined) keys.push(`agents.${agent}.engine`)
+  }
+  return keys
+}
+
 export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number> {
   let problems = 0
   const models = new Map<string, string[]>()
@@ -78,6 +92,11 @@ export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number>
     if (users.length > 1) {
       console.log(`! ${users.join(' and ')} both run ${model} — they will not disagree with each other`)
     }
+  }
+
+  const unused = acceptedButUnusedKeys(cfg)
+  if (unused.length > 0) {
+    console.log(`i ${unused.join(', ')} — accepted but not yet used`)
   }
 
   console.log(problems === 0 ? '\nno problems found' : `\n${problems} problem(s) found`)

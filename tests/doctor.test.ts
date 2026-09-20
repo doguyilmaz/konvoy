@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test'
 import { configSchema, type Config } from '../src/config/schema'
-import { cmdDoctor, distinctPaths } from '../src/commands/doctor'
+import { acceptedButUnusedKeys, cmdDoctor, distinctPaths } from '../src/commands/doctor'
 import { clearDetectCache, type DetectDeps } from '../src/core/detect'
 
 function cfg(over: Record<string, unknown>): Config {
@@ -111,6 +111,19 @@ test('a logged-out agent that no role names is reported, not failed', async () =
   expect(lines.some((l) => l.startsWith('- opencode:'))).toBe(true)
   expect(lines.some((l) => l.startsWith('x opencode:'))).toBe(false)
   expect(code).toBe(0)
+})
+
+test('engine and delegation-policy keys the user set are named as accepted but unused', () => {
+  const cfg = configSchema.parse({
+    agents: { codex: { engine: 'v3' } },
+    policy: { isolation: 'parallel' },
+  })
+  expect(acceptedButUnusedKeys(cfg)).toEqual(['policy.isolation', 'agents.codex.engine'])
+})
+
+test('an untouched config names no accepted-but-unused keys', () => {
+  const cfg = configSchema.parse({})
+  expect(acceptedButUnusedKeys(cfg)).toEqual([])
 })
 
 test('a PATH directory listed twice is not reported as a shadowing binary', () => {

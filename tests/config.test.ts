@@ -3,10 +3,10 @@ import { loadConfig, resolveAgent, explain } from '../src/config/load'
 
 const tmp = (name: string) => `/tmp/konvoy-test-${name}-${Bun.nanoseconds()}`
 
-test('the harness profile defaults to minimal and is overridable per agent', async () => {
+test('the harness profile defaults to minimal and is overridable per agent from the global config', async () => {
   const dir = tmp('harness')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, JSON.stringify({ agents: { claude: { harness: 'inherit' } } }))
-  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { claude: { harness: 'inherit' } } }))
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
   expect(resolveAgent(cfg, 'claude').harness).toBe('inherit')
   expect(resolveAgent(cfg, 'codex').harness).toBe('minimal')
 })
@@ -69,19 +69,16 @@ test('an invalid key inside defaults is rejected with its path', async () => {
 
 test('JSONC with double-slash inside a string is preserved', async () => {
   const dir = tmp('urlstring')
-  await Bun.write(
-    `${dir}/.konvoy/config.jsonc`,
-    JSON.stringify({ agents: { codex: { bin: '/usr/local/bin//codex' } } }),
-  )
-  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { codex: { bin: '/usr/local/bin//codex' } } }))
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
   expect(cfg.agents.codex?.bin).toBe('/usr/local/bin//codex')
 })
 
 test('JSONC with trailing comma inside a string is preserved', async () => {
   const dir = tmp('commastring')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"agents":{"codex":{"model":"value,}"}}}')
+  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"pricing":{"asOf":"value,}"}}')
   const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
-  expect(cfg.agents.codex?.model).toBe('value,}')
+  expect(cfg.pricing.asOf).toBe('value,}')
 })
 
 test('__proto__ key is rejected as an unknown key', async () => {
@@ -113,7 +110,7 @@ test('JSONC: array with trailing comma and comment', async () => {
 
 test('JSONC: escaped quote in string with double-slash after', async () => {
   const dir = tmp('escapedquote')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"agents":{"codex":{"bin":"a\\"b//c"}}}')
-  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })
+  await Bun.write(`${dir}/global.jsonc`, '{"agents":{"codex":{"bin":"a\\"b//c"}}}')
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
   expect(cfg.agents.codex?.bin).toBe('a"b//c')
 })

@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
 
 const SANDBOX: Record<Permission, string[]> = {
   safe: ['-s', 'read-only'],
@@ -29,7 +29,7 @@ export const codexAdapter: Adapter = {
     if (!o) return []
 
     if (o.type === 'thread.started' && typeof o.thread_id === 'string') {
-      return [{ t: 'session', foreignId: o.thread_id }]
+      return [{ t: 'session', foreignId: stripControlChars(o.thread_id) }]
     }
 
     if (o.type === 'item.completed') {

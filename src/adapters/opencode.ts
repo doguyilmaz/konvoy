@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
 
 export const opencodeAdapter: Adapter = {
   id: 'opencode',
@@ -20,7 +20,7 @@ export const opencodeAdapter: Adapter = {
     const o = safeJson(line)
     if (!o) return []
     const events: KonvoyEvent[] = []
-    if (typeof o.sessionID === 'string') events.push({ t: 'session', foreignId: o.sessionID })
+    if (typeof o.sessionID === 'string') events.push({ t: 'session', foreignId: stripControlChars(o.sessionID) })
 
     const part = o.part as { text?: string; tool?: string; state?: { status?: string } } | undefined
     switch (o.type) {

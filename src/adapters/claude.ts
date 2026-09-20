@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, type Adapter } from './types'
+import { classifyError, safeJson, stripControlChars, type Adapter } from './types'
 
 const PERMISSION: Record<Permission, string> = {
   safe: 'manual',
@@ -31,7 +31,7 @@ export const claudeAdapter: Adapter = {
     if (!o) return []
 
     if (o.subtype === 'init' && typeof o.session_id === 'string') {
-      return [{ t: 'session', foreignId: o.session_id }]
+      return [{ t: 'session', foreignId: stripControlChars(o.session_id) }]
     }
 
     if (o.type === 'assistant') {
