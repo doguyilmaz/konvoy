@@ -143,6 +143,23 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   expect(classifyError("cannot resolve module '../pages/login'")).toBe('unknown')
   expect(classifyError('OPENAI_API_KEY environment variable is not set')).toBe('unknown')
   expect(classifyError('Invalid API key')).toBe('auth')
+
+  // Captured verbatim from the installed binaries on 2026-09-20. Expiry is phrased around
+  // "session" or "token", never the word "credentials", which is what the pattern required.
+  expect(classifyError('Cloud gateway session expired \u2014 run /login to reconnect.')).toBe('auth')
+  expect(classifyError('AWS session has expired. Reauthenticating...')).toBe('auth')
+  expect(classifyError('Login token is expired and cannot be refreshed')).toBe('auth')
+  expect(classifyError('MCP OAuth access token is expired and refresh failed')).toBe('auth')
+  expect(classifyError("Not signed in. Please run 'codex login' to sign in with ChatGPT.")).toBe('auth')
+  expect(classifyError('OAuth token refresh failed: ')).toBe('auth')
+  expect(classifyError('Unable to refresh token: No registered client was found')).toBe('auth')
+  expect(classifyError('oauth token revoked')).toBe('auth')
+
+  // a parser complaining about a token is not an auth failure
+  expect(classifyError('SyntaxError: Unexpected token, expected ";"')).toBe('unknown')
+  expect(classifyError('Invalid token in JSON at position 4')).toBe('unknown')
+  expect(classifyError("Unexpected token '<' — the config file is invalid")).toBe('unknown')
+  expect(classifyError('parse error at token 12: the trailing comma is invalid')).toBe('unknown')
   expect(classifyError('rate limit exceeded')).toBe('rate')
 
   // Captured verbatim from Claude Code on 2026-09-20 — the only real limit messages this
@@ -151,6 +168,14 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   expect(classifyError("You've hit your session limit \u00b7 resets 12:40am (Europe/Istanbul)")).toBe('rate')
   expect(classifyError('error type rate_limit')).toBe('rate')
   expect(classifyError('the upstream returned HTTP 429')).toBe('rate')
+
+  // kiro-cli emits no rate-limit prose at all, only AWS exception type names
+  expect(classifyError('ThrottlingException')).toBe('rate')
+  expect(classifyError('TooManyRequestsException')).toBe('rate')
+  // enum-ish spellings that carry no separator
+  expect(classifyError('rateLimitExceeded')).toBe('rate')
+  // codex's actual five-hour wording
+  expect(classifyError('Remaining usage on the 5-hour usage limit')).toBe('rate')
 
   // conjectured phrasings, kept because they cost nothing and may match another CLI
   expect(classifyError('You have reached your usage limit. Your limit resets at 7pm.')).toBe('rate')

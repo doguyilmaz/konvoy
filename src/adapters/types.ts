@@ -21,14 +21,22 @@ export function safeJson(line: string): Record<string, unknown> | null {
   }
 }
 
+// Extracted from the four installed binaries on 2026-09-20. Expiry is phrased around
+// "session" or "token" — "Cloud gateway session expired", "AWS session has expired",
+// "Login token is expired", "MCP OAuth access token is expired" — so requiring the literal
+// word "credentials" missed every real expiry. The noun must sit next to the state, or a
+// parser's "Unexpected token" and "Invalid token in JSON" read as auth failures.
 const AUTH =
-  /invalid api key|authentication failed|not authenticated|not logged in|unauthorized|\b401\b|please run \/?login|credentials? (?:are )?(?:invalid|missing|expired)/
+  /invalid api key|authentication failed|not authenticated|not (?:logged|signed) in|unauthorized|bad credentials|\b401\b|please run \/?login|(?:credential|token|session)s? (?:are |is |has |have )?(?:expired|revoked|invalid|missing)|token refresh failed|unable to refresh token/
 // `hit your <window> limit` and `rate_limit` are captured verbatim from Claude Code on
 // 2026-09-20: "You've hit your weekly limit · resets 7am" and "You've hit your session limit
 // · resets 12:40am", both carrying error type rate_limit / HTTP 429. The remaining
 // alternatives are conjecture from other vendors' wording and have never been observed here.
+// kiro-cli emits no rate-limit prose at all, only AWS exception type names, and those carry
+// no separators once lowercased — hence the optional separators below. codex's five-hour
+// window is worded "5-hour usage limit", which "usage limit" already covers.
 const RATE =
-  /hit your \w+ limit|rate[_ ]limit|quota exceeded|too many requests|usage limit|weekly limit|\d+[- ]hour limit|\b429\b/
+  /hit your \w+ limit|rate[_ ]?limit|quota exceeded|too ?many ?requests|usage limit|weekly limit|\d+[- ]hour (?:usage )?limit|throttl|\b429\b/
 
 export function classifyError(message: string): 'auth' | 'rate' | 'crash' | 'unknown' {
   const m = message.toLowerCase()
