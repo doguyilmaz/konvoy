@@ -157,6 +157,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 // cloned. A project layer may not set them at any level they appear; only the global config can.
 const PRIVILEGED_DEFAULTS_KEYS = ['permission', 'harness'] as const
 const PRIVILEGED_AGENT_KEYS = ['bin', 'permission', 'harness'] as const
+// gate names a command konvoy executes automatically after every turn — wider than `bin`,
+// which at least requires the user to already be using that agent. It sits at the top level
+// of the config, not under `defaults` or `agents.<id>`, so it needs its own case here.
+const PRIVILEGED_TOP_LEVEL_KEYS = ['gate'] as const
 
 function warnIgnored(path: string): void {
   console.error(`konvoy: ignoring project-level "${path}" — privileged, set it in the global config instead`)
@@ -164,6 +168,13 @@ function warnIgnored(path: string): void {
 
 function stripProjectPrivileges(layer: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...layer }
+
+  for (const key of PRIVILEGED_TOP_LEVEL_KEYS) {
+    if (key in out) {
+      warnIgnored(key)
+      delete out[key]
+    }
+  }
 
   if (isPlainObject(out.defaults)) {
     const cleaned = { ...out.defaults }

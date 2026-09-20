@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { openDb } from '../src/store/db'
-import { acquireLock, getBinding, lockOwner, upsertBinding } from '../src/store/queries'
+import { acquireLock, getBinding, lockOwner, upsertBinding, usageForSession } from '../src/store/queries'
 import { newSession, send, slugify, uniqueSlug } from '../src/core/session'
 import { configSchema } from '../src/config/schema'
 import { claudeAdapter } from '../src/adapters/claude'
@@ -47,6 +47,32 @@ test('send binds the agent on its first turn', async () => {
   const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(r.final).toBe('ok')
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('sess-1')
+})
+
+// The brief's gate.test.ts calls runGate directly, so it never proves send() actually wires
+// it up — a call site bug (wrong session, wrong turnId, or no call at all) would slip past it.
+test('send runs the configured gate after a successful turn', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  const adapter = scripted([
+    { type: 'system', subtype: 'init', session_id: 'sess-1' },
+    { type: 'result', subtype: 'success', result: 'ok' },
+  ])
+  const gated = configSchema.parse({ gate: { command: 'true' } })
+  await send({ db, cfg: gated, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const row = usageForSession(db, s.id)[0]!
+  expect(row.gateKnown).toBe(1)
+  expect(row.gatePassed).toBe(1)
+})
+
+test('send does not gate a turn that failed', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  const adapter = scripted([], 1)
+  const gated = configSchema.parse({ gate: { command: 'false' } })
+  await send({ db, cfg: gated, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const row = usageForSession(db, s.id)[0]!
+  expect(row.gateKnown).toBe(0)
 })
 
 test('a failed resume rebinds instead of failing the turn', async () => {

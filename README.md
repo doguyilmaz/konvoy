@@ -19,7 +19,7 @@ konvoy send codex "start with the token refresh path"
 konvoy ls
 konvoy resume                  # make a session current again and show its roster
 konvoy roster
-konvoy usage --all --chart
+konvoy usage --all --chart     # GATE reads as a dash until a `gate` command is configured
 konvoy status
 konvoy attach codex    # drops you into the real Codex TUI, same session
 konvoy doctor
@@ -79,6 +79,19 @@ preamble and pleasantries — it shapes the answer you read, not what agents sen
 ```jsonc
 { "defaults": { "style": "brief" }, "agents": { "kiro": { "style": null } } }
 ```
+
+Name a `gate` command — your test suite, a linter, whatever exits non-zero on bad work — and
+konvoy runs it after each turn that produced something, recording a pass or fail against that
+turn. A command that can't even be spawned records nothing, and a failed turn is never gated:
+
+```jsonc
+{ "gate": { "command": "bun test" } }
+```
+
+`gate` is privileged like `bin`, `permission` and `harness` — only the global config may set
+it, since a gate runs on every turn with no per-turn opt-in, unlike an agent binary the user
+chose to run. That also means one gate command serves every project; there's no per-project
+override yet.
 
 ## Requirements
 

@@ -281,6 +281,11 @@ export function setGateResult(db: Database, turnId: string, passed: boolean): vo
   db.query('UPDATE turn SET gate_passed = $passed WHERE id = $turnId').run({ turnId, passed: passed ? 1 : 0 })
 }
 
+export function turnExitCode(db: Database, turnId: string): number | null {
+  const row = db.query('SELECT exit_code FROM turn WHERE id = $turnId').get({ turnId }) as { exit_code: number } | null
+  return row ? row.exit_code : null
+}
+
 export function bumpBinding(
   db: Database,
   sessionId: string,

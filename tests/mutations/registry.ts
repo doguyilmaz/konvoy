@@ -500,4 +500,34 @@ export const mutations: Mutation[] = [
     to: 'const style = ownStyle ?? defaultStyle',
     tests: ['tests/style.test.ts'],
   },
+
+  // --- the gate (src/core/gate.ts, src/config/load.ts) ---
+  {
+    name: 'a command that cannot be spawned records a failing verdict instead of no verdict at all',
+    file: 'src/core/gate.ts',
+    from: '  } catch {\n    // could not spawn: a misconfiguration, not a verdict on the work, so nothing is recorded\n  }',
+    to: '  } catch {\n    setGateResult(db, turnId, false)\n  }',
+    tests: ['tests/gate.test.ts'],
+  },
+  {
+    name: 'the gate runs even when no command is configured',
+    file: 'src/core/gate.ts',
+    from: '  if (!command) return',
+    to: '  if (false) return',
+    tests: ['tests/gate.test.ts'],
+  },
+  {
+    name: 'the gate runs on a turn that failed, blaming the agent for a block it produced nothing for',
+    file: 'src/core/gate.ts',
+    from: '  if (turnExitCode(db, turnId) !== 0) return',
+    to: '  if (false) return',
+    tests: ['tests/gate.test.ts'],
+  },
+  {
+    name: 'a project layer can name the gate command, so a cloned repo runs arbitrary code unprompted',
+    file: 'src/config/load.ts',
+    from: "const PRIVILEGED_TOP_LEVEL_KEYS = ['gate'] as const",
+    to: 'const PRIVILEGED_TOP_LEVEL_KEYS = [] as const',
+    tests: ['tests/gate.test.ts'],
+  },
 ]

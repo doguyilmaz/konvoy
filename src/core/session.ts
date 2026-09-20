@@ -17,6 +17,7 @@ import {
   releaseLock,
 } from '../store/queries'
 import { runTurn, type TurnOptions, type TurnResult } from './turn'
+import { runGate } from './gate'
 import { sessionDir } from '../paths'
 
 // Captured from the real CLIs on 2026-09-19 by resuming an id that does not exist:
@@ -96,7 +97,12 @@ export async function send(
   }
 
   try {
-    return await withLock()
+    const result = await withLock()
+    // The turn just finished writing its own row — runGate reads that row itself to decide
+    // whether there is anything for it to judge, so it is always safe to call here.
+    const turnId = lastTurnId(deps.db, session.id)
+    if (turnId) await runGate(deps.db, deps.cfg, session, turnId)
+    return result
   } finally {
     if (!alreadyHeld) releaseLock(deps.db, session.id, lease)
   }

@@ -74,6 +74,9 @@ export const configSchema = z
     agents: z.partialRecord(agentIdSchema, agentConfigSchema).default({}),
     roles: rolesObjectSchema.prefault({}),
     policy: policyObjectSchema.prefault({}),
+    // The command konvoy runs after a turn to produce a pass/fail verdict on the work — a
+    // project layer may never set this; see stripProjectPrivileges in config/load.ts.
+    gate: z.object({ command: z.string().nullish() }).strict().prefault({}),
     failover: failoverObjectSchema.prefault({}),
     pricing: z
       .object({
