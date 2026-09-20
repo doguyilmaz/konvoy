@@ -834,4 +834,11 @@ export const mutations: Mutation[] = [
     to: "        env.to = value || null",
     tests: ["tests/prelude.test.ts"],
   },
+  {
+    name: "a foreign id of any shape is bound and later replayed onto a command line",
+    file: 'src/store/queries.ts',
+    from: "  const foreignId = input.foreignId !== null && !FOREIGN_ID.test(input.foreignId) ? null : input.foreignId",
+    to: "  const foreignId = input.foreignId",
+    tests: ["tests/store.test.ts"],
+  },
 ]

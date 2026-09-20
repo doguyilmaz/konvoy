@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { openDb } from '../src/store/db'
 import {
@@ -342,4 +342,28 @@ test('eight processes opening one fresh database at once all succeed and agree o
   await Bun.$`rm -rf ${dir}`.quiet()
   expect(outs).toEqual(Array(8).fill('OK'))
   expect(actual).toBe(expected)
+})
+
+// Three adapters replay a foreign id after a flag and codex after a bare positional; an id that
+// began with "-" would be offered to the CLI's flag parser. No CLI produces one today and a
+// model cannot forge a stream line, but the write path is the one place to say what shape an
+// id may have — every id konvoy has met: UUIDs, kiro's cli_<uuid>_<suffix>, opencode's ses_….
+test('a foreign id that is not an id shape is not bound, and the binding stays unbound', () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    for (const good of ['f28732a4-4805-4893-b448-a88ec47002cd', 'cli_800eb035-b675-4d9d-8f81-c6b661c12936_de1B0Hdt', 'ses_f3f4b6290ffeKaZ38ZuQQ4wnB7', '01a0c0d3-eeba-7a93-8999-d74b91dcd5df']) {
+      upsertBinding(db, { sessionId: s.id, agent: 'claude', foreignId: good, effort: 'high', permission: 'edit' })
+      const row = db.query('SELECT foreign_id FROM binding WHERE session_id = $s AND agent = $a').get({ s: s.id, a: 'claude' }) as { foreign_id: string }
+      expect(row.foreign_id).toBe(good)
+    }
+    upsertBinding(db, { sessionId: s.id, agent: 'kiro', foreignId: '--trust-all-tools', effort: 'high', permission: 'edit' })
+    const bad = db.query('SELECT foreign_id, status FROM binding WHERE session_id = $s AND agent = $a').get({ s: s.id, a: 'kiro' }) as { foreign_id: string | null; status: string }
+    expect(bad.foreign_id).toBeNull()
+    expect(bad.status).toBe('unbound')
+    expect(err.mock.calls.map((c) => String(c[0])).join('\n')).toContain('--trust-all-tools')
+  } finally {
+    err.mockRestore()
+  }
 })

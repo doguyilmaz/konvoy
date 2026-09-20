@@ -86,6 +86,11 @@ export function deleteSession(db: Database, id: string): void {
   })()
 }
 
+// Every foreign id konvoy has met: UUIDs, kiro's cli_<uuid>_<suffix>, opencode's ses_…. An id
+// is replayed onto a command line — after a flag by three adapters, as a bare positional by
+// codex — so anything else, a leading dash above all, is refused here at the one write path.
+const FOREIGN_ID = /^[A-Za-z0-9][\w.:-]*$/
+
 export function upsertBinding(
   db: Database,
   input: {
@@ -97,6 +102,12 @@ export function upsertBinding(
     model?: string | null
   },
 ): void {
+  const foreignId = input.foreignId !== null && !FOREIGN_ID.test(input.foreignId) ? null : input.foreignId
+  if (foreignId === null && input.foreignId !== null) {
+    console.error(
+      `konvoy: ignoring foreign session id ${JSON.stringify(input.foreignId.slice(0, 60))} for ${input.agent} — not a shape konvoy places on a command line`,
+    )
+  }
   db.query(
     `INSERT INTO binding (session_id, agent, foreign_id, model, effort, permission, status, last_seen)
      VALUES ($sessionId, $agent, $foreignId, $model, $effort, $permission, $status, $lastSeen)
@@ -111,11 +122,11 @@ export function upsertBinding(
   ).run({
     sessionId: input.sessionId,
     agent: input.agent,
-    foreignId: input.foreignId,
+    foreignId,
     model: input.model ?? null,
     effort: input.effort,
     permission: input.permission,
-    status: input.foreignId ? 'bound' : 'unbound',
+    status: foreignId ? 'bound' : 'unbound',
     lastSeen: now(),
   })
 }
