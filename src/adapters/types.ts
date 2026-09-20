@@ -23,8 +23,12 @@ export function safeJson(line: string): Record<string, unknown> | null {
 
 const AUTH =
   /invalid api key|authentication failed|not authenticated|not logged in|unauthorized|\b401\b|please run \/?login|credentials? (?:are )?(?:invalid|missing|expired)/
+// `hit your <window> limit` and `rate_limit` are captured verbatim from Claude Code on
+// 2026-09-20: "You've hit your weekly limit · resets 7am" and "You've hit your session limit
+// · resets 12:40am", both carrying error type rate_limit / HTTP 429. The remaining
+// alternatives are conjecture from other vendors' wording and have never been observed here.
 const RATE =
-  /rate limit|quota exceeded|too many requests|usage limit|weekly limit|\d+[- ]hour limit|\b429\b/
+  /hit your \w+ limit|rate[_ ]limit|quota exceeded|too many requests|usage limit|weekly limit|\d+[- ]hour limit|\b429\b/
 
 export function classifyError(message: string): 'auth' | 'rate' | 'crash' | 'unknown' {
   const m = message.toLowerCase()

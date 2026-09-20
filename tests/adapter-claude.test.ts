@@ -144,10 +144,17 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   expect(classifyError('OPENAI_API_KEY environment variable is not set')).toBe('unknown')
   expect(classifyError('Invalid API key')).toBe('auth')
   expect(classifyError('rate limit exceeded')).toBe('rate')
-  // the limit users actually hit is worded as a usage or weekly window, not a "rate limit"
+
+  // Captured verbatim from Claude Code on 2026-09-20 — the only real limit messages this
+  // project has ever observed. Everything else in RATE is conjecture from other vendors.
+  expect(classifyError("You've hit your weekly limit \u00b7 resets 7am (Europe/Istanbul)")).toBe('rate')
+  expect(classifyError("You've hit your session limit \u00b7 resets 12:40am (Europe/Istanbul)")).toBe('rate')
+  expect(classifyError('error type rate_limit')).toBe('rate')
+  expect(classifyError('the upstream returned HTTP 429')).toBe('rate')
+
+  // conjectured phrasings, kept because they cost nothing and may match another CLI
   expect(classifyError('You have reached your usage limit. Your limit resets at 7pm.')).toBe('rate')
   expect(classifyError('Weekly limit reached')).toBe('rate')
-  expect(classifyError('5-hour limit reached')).toBe('rate')
   // a crash that merely contains the word "limit" must not read as a rate limit — these pin the
   // regex's precision, not just its reach, and a bare /limit/ has to fail them
   expect(classifyError('SyntaxError: near "LIMIT": syntax error')).toBe('unknown')
