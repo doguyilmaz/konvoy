@@ -102,10 +102,10 @@ export const mutations: Mutation[] = [
   },
   {
     name: 'a child that traps SIGTERM hangs forever instead of being escalated to SIGKILL',
-    file: 'src/core/turn.ts',
+    file: 'src/core/children.ts',
     from: "if (proc.exitCode === null) proc.kill('SIGKILL')",
     to: "if (false) proc.kill('SIGKILL')",
-    tests: ['tests/turn.test.ts'],
+    tests: ['tests/turn.test.ts', 'tests/gate.test.ts'],
   },
   {
     name: 'no top-level try/catch: a malformed config or an unreadable database escapes main() as a raw stack trace',

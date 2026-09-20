@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { KonvoyEvent, TurnContext } from '../types'
 import type { Adapter } from '../adapters/types'
 import { bumpBinding, recordEvent, recordTurn, upsertBinding } from '../store/queries'
-import { onExit, track, untrack } from './children'
+import { onExit, track, untrack, DEFAULT_KILL_GRACE_MS, escalateKill } from './children'
 
 export interface TurnResult {
   final: string
@@ -31,7 +31,6 @@ export interface TurnOptions {
   parentTurnId?: string | null
 }
 
-const DEFAULT_KILL_GRACE_MS = 5000
 // how long a pipe may stay open after the child is gone before the read is cut off
 const DEFAULT_DRAIN_GRACE_MS = 500
 
@@ -98,14 +97,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   })
   track(proc)
 
-  // Bun's own `timeout` sends killSignal once and never follows up — a child that traps or
-  // ignores SIGTERM then hangs forever. This escalates to SIGKILL, which cannot be trapped,
-  // after the timeout has had one grace period to work.
-  const killGraceMs = opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS
-  const escalate = setTimeout(() => {
-    if (proc.exitCode === null) proc.kill('SIGKILL')
-  }, timeoutMs + killGraceMs)
-  escalate.unref?.()
+  const cancelEscalation = escalateKill(proc, timeoutMs + (opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS))
 
   // once the child has exited, whoever still holds its pipes is something it left behind;
   // it gets this long to flush, then both reads end
@@ -248,7 +240,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
       result.exitCode = proc.exitCode ?? (await proc.exited.catch(() => -1))
     }
   } finally {
-    clearTimeout(escalate)
+    cancelEscalation()
     releaseExitHandler()
     untrack(proc)
     finish()

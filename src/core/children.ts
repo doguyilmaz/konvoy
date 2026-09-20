@@ -47,3 +47,16 @@ export function untrack(child: Child): void {
 export function liveCount(): number {
   return live.size
 }
+
+// Bun's own `timeout` sends killSignal once and never follows up — a child that traps or
+// ignores SIGTERM then hangs forever. SIGKILL cannot be trapped; it goes out once the timeout
+// has had a grace period to work. Every bounded spawn (a turn, a gate) uses this one.
+export const DEFAULT_KILL_GRACE_MS = 2_000
+
+export function escalateKill(proc: { exitCode: number | null; kill(signal: 'SIGKILL'): void }, afterMs: number): () => void {
+  const timer = setTimeout(() => {
+    if (proc.exitCode === null) proc.kill('SIGKILL')
+  }, afterMs)
+  timer.unref?.()
+  return () => clearTimeout(timer)
+}

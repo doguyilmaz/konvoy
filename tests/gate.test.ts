@@ -68,3 +68,18 @@ test('a project layer cannot name the gate command, because konvoy runs it unpro
     err.mockRestore()
   }
 })
+
+// The same defect turn.ts was fixed for: Bun's `timeout` sends SIGTERM once and never follows
+// up, so a gate whose test runner traps SIGTERM held the session lock forever. Measured before
+// the fix at 3 s: still running. Both spawns now share one escalation.
+test('a gate command that traps SIGTERM is killed after the grace and recorded as a failure', async () => {
+  const { db, s, turnId } = seed()
+  const t0 = Date.now()
+  const done = runGate(db, configSchema.parse({ gate: { command: 'bash tests/fixtures/trap-term.sh' } }), s, turnId, { timeoutMs: 300, killGraceMs: 200 })
+  const outcome = await Promise.race([done.then(() => 'finished'), Bun.sleep(3000).then(() => 'still running after 3s')])
+  expect(outcome).toBe('finished')
+  expect(Date.now() - t0).toBeLessThan(3000)
+  const row = usageForSession(db, s.id)[0]!
+  expect(row.gateKnown).toBe(1)
+  expect(row.gatePassed).toBe(0)
+})
