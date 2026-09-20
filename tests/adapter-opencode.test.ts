@@ -100,3 +100,9 @@ test('the captured v2 success stream parses into session, text, usage and cost',
     costUsd: 0.00505602,
   })
 })
+
+// Same rule as the other adapters: no invented "unknown error" standing between turn.ts and
+// stderr when the stream's error carries no message.
+test('an error event without a message reports an empty message, not a placeholder', () => {
+  expect(opencodeAdapter.parse(JSON.stringify({ type: 'error', error: {} }))).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
+})

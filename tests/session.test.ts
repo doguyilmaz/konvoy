@@ -349,3 +349,47 @@ test('a kiro resume that cannot load the session rebinds instead of failing the 
   expect(r.final).toBe('recovered')
   expect(getBinding(db, s.id, 'kiro')?.foreignId).toBe('kiro-new')
 })
+
+// The real shape of a dead claude binding, captured 2026-09-21: exit 1, a single stdout line
+// `{"type":"result","subtype":"error_during_execution","is_error":true}` with no result text,
+// and "No conversation found with session ID: <id>" on stderr. The rebind test above fakes
+// that wording inside the stream's result field; the CLI does not put it there, so the adapter
+// invented "unknown error", turn.ts never looked at stderr, and STALE never matched.
+test('a claude resume whose id no longer exists rebinds — the wording arrives on stderr', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  upsertBinding(db, { sessionId: s.id, agent: 'claude', foreignId: 'gone', effort: 'high', permission: 'edit' })
+
+  let call = 0
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: (ctx) => {
+      call++
+      if (ctx.binding?.foreignId != null) {
+        return {
+          cmd: [
+            'bun',
+            'tests/fixtures/fake-agent.ts',
+            JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 'gone', total_cost_usd: 0 }),
+          ],
+          cwd: process.cwd(),
+          env: { ...(process.env as Record<string, string>), FAKE_AGENT_EXIT: '1', FAKE_AGENT_STDERR: 'No conversation found with session ID: gone' },
+        }
+      }
+      return {
+        cmd: [
+          'bun',
+          'tests/fixtures/fake-agent.ts',
+          JSON.stringify({ type: 'system', subtype: 'init', session_id: 'sess-new' }),
+          JSON.stringify({ type: 'result', subtype: 'success', result: 'recovered' }),
+        ],
+        cwd: process.cwd(),
+      }
+    },
+  }
+
+  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  expect(call).toBe(2)
+  expect(r.final).toBe('recovered')
+  expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('sess-new')
+})

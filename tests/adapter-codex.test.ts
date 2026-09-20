@@ -74,14 +74,27 @@ test('turn.completed yields usage', () => {
   expect(codexAdapter.parse(line)).toEqual([{ t: 'usage', inputTokens: 18173, outputTokens: 5 }])
 })
 
-test('the captured fixture parses into session, text and usage', async () => {
+test('the captured fixture parses into session, tool call, text, notice and usage', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/codex.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => codexAdapter.parse(l))
-  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0ba11-6f0b-7c13-bef4-224bd38f77a0' })
-  expect(events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')).toBe('OK')
+  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0c0d3-eeba-7a93-8999-d74b91dcd5df' })
+  expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'command_execution', status: 'ok' }])
+  expect(events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')).toBe('I’ll read package.json now.OK')
+  // codex reports its skills-context-budget notice as an item of type "error" on a turn that
+  // then completes normally; it must stay unclassified (kind unknown) so turn.ts can clear it —
+  // a notice whose wording matched RATE or AUTH would otherwise trip failover on a healthy turn
+  expect(events.filter((e) => e.t === 'error').map((e) => (e as { kind: string }).kind)).toEqual(['unknown'])
   expect(events.some((e) => e.t === 'usage')).toBe(true)
 })
 
 test('attach resumes the thread interactively', () => {
   expect(codexAdapter.attach(bound('thread-9')).cmd).toEqual(['codex', 'resume', 'thread-9'])
+})
+
+// An error event with no words must say nothing rather than invent "unknown error" or
+// "turn failed": turn.ts reads stderr only when the stream's error is empty, so a placeholder
+// hides the CLI's real reason (see the claude dead-session case in tests/session.test.ts).
+test('an error item or a failed turn without a message reports an empty message, not a placeholder', () => {
+  expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error' } }))).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
+  expect(codexAdapter.parse(JSON.stringify({ type: 'turn.failed', error: {} }))).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
 })

@@ -38,7 +38,7 @@ export const codexAdapter: Adapter = {
       if (item.type === 'agent_message') return item.text ? [{ t: 'text', text: item.text }] : []
       if (item.type === 'reasoning') return item.text ? [{ t: 'thinking', text: item.text }] : []
       if (item.type === 'error') {
-        const message = item.message ?? 'unknown error'
+        const message = item.message ?? ''
         return [{ t: 'error', message, kind: classifyError(message) }]
       }
       return [{ t: 'tool', name: item.type, status: 'ok' }]
@@ -52,7 +52,7 @@ export const codexAdapter: Adapter = {
 
     if (o.type === 'turn.failed') {
       const error = o.error as { message?: string } | undefined
-      const message = error?.message ?? 'turn failed'
+      const message = error?.message ?? ''
       return [{ t: 'error', message, kind: classifyError(message) }]
     }
 

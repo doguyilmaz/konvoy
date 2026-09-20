@@ -62,7 +62,7 @@ export const kiroAdapter: Adapter = {
       if (data.status === 'success') {
         events.push({ t: 'done', final: typeof data.finalText === 'string' ? data.finalText : '' })
       } else {
-        const message = typeof data.stopReason === 'string' ? data.stopReason : 'run failed'
+        const message = typeof data.stopReason === 'string' ? data.stopReason : ''
         events.push({ t: 'error', message, kind: classifyError(message) })
       }
     }

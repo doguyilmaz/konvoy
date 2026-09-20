@@ -1,6 +1,18 @@
 import { expect, test } from 'bun:test'
 import { agentIds, getAdapter } from '../src/adapters'
+import type { AgentId } from '../src/types'
 import provenance from './fixtures/streams/provenance.json'
+
+// Kinds an adapter can emit for which no captured stream exists, each with the reason. Listed
+// here, in the open, so a reader judges the gap instead of trusting a silent skip.
+const UNCAPTURED: Partial<Record<AgentId, Record<string, string>>> = {
+  codex: { thinking: 'display-only; codex emits reasoning items only for some models and prompts' },
+  kiro: {
+    thinking: 'display-only; not deterministic to trigger',
+    error: 'kiro fails outside the stream (stderr, exit 1) — no runFinished failure has been captured',
+  },
+  opencode: { thinking: 'display-only; not deterministic to trigger' },
+}
 
 // This project's most expensive lesson: three of the four adapters were written from guesses
 // about wire formats, all three were wrong, and the tests stayed green because they tested the
@@ -44,6 +56,28 @@ for (const id of agentIds) {
     const usage = lines.flatMap((line) => adapter.parse(line)).filter((e) => e.t === 'usage')
     expect(usage.length, `src/adapters/${id}.ts parses usage but ${id}.jsonl never produces one — capture a turn that does`)
       .toBeGreaterThan(0)
+  })
+
+  // Every event kind an adapter can emit must be produced by a captured stream — its main
+  // fixture or its `-error` one. Today's opencode usage bug and the unreached `tool` branches
+  // in three adapters were one defect: a branch written from the wire-format guess and a fixture
+  // from a turn too simple to reach it. A unit test cannot see this, because it feeds the branch
+  // the guess. This reads the adapter's own source for what it can emit and demands a capture.
+  test(`${id}: every event kind its adapter can emit is reached by a captured stream`, async () => {
+    const source = await Bun.file(`src/adapters/${id}.ts`).text()
+    const canEmit = new Set([...source.matchAll(/t: '([a-z]+)'/g)].map((m) => m[1]!))
+    const adapter = getAdapter(id)
+    const reached = new Set<string>()
+    // every capture this adapter owns: `<id>.jsonl` and any `<id>-<what>.jsonl`
+    const own = new RegExp(`^${id}(-[a-z0-9-]+)?\\.jsonl$`)
+    for await (const name of new Bun.Glob('*.jsonl').scan({ cwd: 'tests/fixtures/streams' })) {
+      if (!own.test(name)) continue
+      const lines = (await Bun.file(`tests/fixtures/streams/${name}`).text()).trim().split('\n')
+      for (const line of lines) for (const e of adapter.parse(line)) reached.add(e.t)
+    }
+    const excused = UNCAPTURED[id] ?? {}
+    const missing = [...canEmit].filter((k) => !reached.has(k) && !(k in excused)).sort()
+    expect(missing, `${id} can emit ${missing.join(', ')} but no captured stream reaches it — capture a turn that does, or excuse it in UNCAPTURED with the reason`).toEqual([])
   })
 
   // The adapters agree on the field names and disagree on what they mean: claude's

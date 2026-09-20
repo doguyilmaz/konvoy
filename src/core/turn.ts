@@ -206,7 +206,9 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
       result.foreignId = await adapter.resolveForeignId(ctx, startedAt)
     }
 
-    if (result.exitCode !== 0 && !result.error) {
+    // an error event that carries no words (claude's is_error result on a dead session id)
+    // must not stand in for stderr, which is where that CLI puts the reason
+    if (result.exitCode !== 0 && !result.error?.message.trim()) {
       const stderr = await stderrText
       const timedOut = Date.now() - startedAt >= timeoutMs
       result.error = {
@@ -219,6 +221,11 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     // agent is now blocked. auth and rate never mean "just informational" — the agent cannot
     // work until something changes — so they survive even a turn that answered and exited 0.
     // crash and unknown keep the old behaviour: discarded once there was any output at all.
+    // an error that stayed wordless through the stream and stderr — say so, rather than show
+    // the user an empty quote
+    if (result.error && !result.error.message.trim()) {
+      result.error.message = `${adapter.id} exited ${result.exitCode} and reported an error without a message`
+    }
     const failed = result.exitCode !== 0 || (result.error !== null && result.final.trim() === '')
     const blocking = result.error?.kind === 'auth' || result.error?.kind === 'rate'
     if (!failed && !blocking) result.error = null

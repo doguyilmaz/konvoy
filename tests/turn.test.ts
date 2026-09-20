@@ -353,3 +353,17 @@ test('every event is streamed to the callback', async () => {
   expect(seen).toContain('text')
   expect(seen).toContain('done')
 })
+
+// Adapters no longer invent text for an error that carries none, so turn.ts reads stderr on a
+// non-zero exit. The remaining case: exit 0, no output, an error event with no words — nothing
+// anywhere says what went wrong. The user must still get a sentence, not an empty quote.
+test('an error with no words that survives stream and stderr is given a stated message', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([{ type: 'result', subtype: 'error_during_execution', is_error: true }])
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.exitCode).toBe(0)
+  expect(r.final).toBe('')
+  expect(r.error?.kind).toBe('unknown')
+  expect(r.error?.message).toMatch(/claude exited 0 and reported an error without a message/)
+})

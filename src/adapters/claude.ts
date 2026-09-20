@@ -50,7 +50,9 @@ export const claudeAdapter: Adapter = {
 
     if (o.type === 'result') {
       const text = typeof o.result === 'string' ? o.result : ''
-      if (o.is_error) return [{ t: 'error', message: text || 'unknown error', kind: classifyError(text) }]
+      // a result can be is_error with no text at all — claude puts the reason on stderr then, and
+      // an invented placeholder here would stand in the way of turn.ts reading it
+      if (o.is_error) return [{ t: 'error', message: text, kind: classifyError(text) }]
       const usage = o.usage as
         | { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number }
         | undefined

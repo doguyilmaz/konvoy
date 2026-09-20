@@ -1,6 +1,8 @@
 {
-  "claude": { "cliVersion": "2.1.278", "capturedAt": "2026-09-19" },
-  "codex": { "cliVersion": "0.155.1", "capturedAt": "2026-09-19" },
-  "kiro": { "cliVersion": "2.22.1", "capturedAt": "2026-09-19" },
+  "claude": { "cliVersion": "2.1.278", "capturedAt": "2026-09-21", "note": "one tool-using turn (Read); memory_paths.auto in the init line redacted from the user's home to /Users/example — a field konvoy never reads" },
+  "claude-thinking": { "cliVersion": "2.1.278", "capturedAt": "2026-09-19", "note": "the original trivial turn, kept because it carries a thinking block the tool-using capture does not; same home-path redaction as claude" },
+  "claude-error": { "cliVersion": "2.1.278", "capturedAt": "2026-09-21", "note": "resume of a nonexistent id: exit 1, is_error with no result text; the wording is on stderr" },
+  "codex": { "cliVersion": "0.155.1", "capturedAt": "2026-09-21", "note": "one tool-using turn (command_execution); carries codex's skills-budget notice as an error item on a successful turn" },
+  "kiro": { "cliVersion": "2.22.1", "capturedAt": "2026-09-21", "note": "one tool-using turn (fs_read), v2 engine" },
   "opencode": { "cliVersion": "2.0.10", "capturedAt": "2026-09-21" }
 }

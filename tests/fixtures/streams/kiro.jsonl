@@ -1,6 +1,13 @@
 {"type":"runStarted","data":{"payloadSchema":"acp","acpProtocolVersion":1,"engine":"v2"}}
-{"type":"metadata","data":{"sessionId":"4bf0ad64-fb09-4b5e-802e-b95909a00455","contextUsagePercentage":4.834499835968018}}
-{"type":"sessionUpdate","data":{"sessionId":"4bf0ad64-fb09-4b5e-802e-b95909a00455","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OK"}}}}
-{"type":"metadata","data":{"sessionId":"4bf0ad64-fb09-4b5e-802e-b95909a00455","contextUsagePercentage":2.10290002822876}}
-{"type":"metadata","data":{"sessionId":"4bf0ad64-fb09-4b5e-802e-b95909a00455","contextUsagePercentage":2.10290002822876,"meteringUsage":[{"value":0.0666898487562189,"unit":"credit","unitPlural":"credits"}],"turnDurationMs":1515}}
-{"type":"runFinished","data":{"sessionId":"4bf0ad64-fb09-4b5e-802e-b95909a00455","status":"success","stopReason":"end_turn","finalText":"OK","finalTextTruncated":false}}
+{"type":"metadata","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","contextUsagePercentage":4.834499835968018}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"I'll read the package.json"}}}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" file"}}}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"."}}}}
+{"type":"metadata","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","contextUsagePercentage":2.119800090789795}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"tool_call","toolCallId":"toolu_bdrk_014qDH6kgvSfqgoAwEGrMS7K","title":"Reading package.json:1","kind":"read","locations":[{"path":"/tmp/tmp.Br7zB9ZQxl/package.json"}],"rawInput":{"__tool_use_purpose":"Read package.json as requested by the user.","operations":[{"mode":"Line","path":"/tmp/tmp.Br7zB9ZQxl/package.json"}]},"_meta":{"kiro":{"toolName":"read"}}}}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"tool_call_update","toolCallId":"toolu_bdrk_014qDH6kgvSfqgoAwEGrMS7K","kind":"read","status":"completed","title":"Reading package.json:1","locations":[{"path":"/tmp/tmp.Br7zB9ZQxl/package.json"}],"rawInput":{"__tool_use_purpose":"Read package.json as requested by the user.","operations":[{"mode":"Line","path":"/tmp/tmp.Br7zB9ZQxl/package.json"}]},"rawOutput":{"items":[{"Text":"{\"name\":\"demo\",\"version\":\"1.0.0\"}"}]}}}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"O"}}}}
+{"type":"sessionUpdate","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"K"}}}}
+{"type":"metadata","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","contextUsagePercentage":2.122499942779541}}
+{"type":"metadata","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","contextUsagePercentage":2.122499942779541,"meteringUsage":[{"value":0.0853610416252073,"unit":"credit","unitPlural":"credits"},{"value":0.03858951708126036,"unit":"credit","unitPlural":"credits"}],"turnDurationMs":5679}}
+{"type":"runFinished","data":{"sessionId":"be869d81-e85b-463b-a084-52c6b852a523","status":"success","stopReason":"end_turn","finalText":"I'll read the package.json file.OK","finalTextTruncated":false}}

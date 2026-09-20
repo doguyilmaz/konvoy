@@ -110,10 +110,13 @@ test('hook chatter carries a session id but must not be mistaken for the init ev
   expect(claudeAdapter.parse(line)).toEqual([])
 })
 
-test('the captured fixture parses into session, text and completion', async () => {
+test('the captured fixture parses into session, tool call, text and completion', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/claude.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => claudeAdapter.parse(l))
   expect(events.filter((e) => e.t === 'session')).toHaveLength(1)
+  // a real Read call — the fixture this replaced came from a turn that called nothing, so the
+  // tool branch had a unit test written from the guess and no capture behind it
+  expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'Read', status: 'start' }])
   expect(events.find((e) => e.t === 'done')).toEqual({ t: 'done', final: 'OK' })
 })
 
@@ -238,4 +241,13 @@ test('input tokens survive a result that reports no cache fields at all', () => 
     usage: { input_tokens: 10, output_tokens: 20 },
   })
   expect(claudeAdapter.parse(line)[0]).toEqual({ t: 'usage', inputTokens: 10, outputTokens: 20, costUsd: undefined })
+})
+
+// Captured 2026-09-21 by resuming a session id that does not exist: claude exits 1, prints
+// "No conversation found with session ID: <id>" on stderr, and its only stdout line is a
+// result with is_error and no result text. Inventing "unknown error" here is what kept the
+// real wording out of reach — turn.ts consults stderr only when the stream produced no error.
+test('an error result with no text reports an empty message rather than inventing one', () => {
+  const line = JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 'gone', total_cost_usd: 0 })
+  expect(claudeAdapter.parse(line)).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
 })

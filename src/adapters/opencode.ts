@@ -49,7 +49,7 @@ export const opencodeAdapter: Adapter = {
       }
       case 'error': {
         const error = o.error as { message?: string; data?: { message?: string } } | undefined
-        const message = error?.data?.message ?? error?.message ?? 'unknown error'
+        const message = error?.data?.message ?? error?.message ?? ''
         events.push({ t: 'error', message, kind: classifyError(message) })
         break
       }
