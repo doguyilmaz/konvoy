@@ -1,3 +1,6 @@
+import { agentIds, getAdapter } from '../src/adapters'
+import type { AgentId, Binding, TurnContext } from '../src/types'
+
 // bun run verify:claims — checks the claims konvoy's own docs make about the four agent
 // CLIs against what --help actually says on this machine. This is the standing form of a
 // manual check that already caught one stale belief (a `doctor` claim no command ever
@@ -143,6 +146,66 @@ const checks: Check[] = [
     },
   ),
 ]
+
+// Every flag an adapter actually places on a command line, checked against that CLI's own
+// --help. The captured fixtures prove each flag worked on the day of capture; this proves it
+// still parses today. The list is built from the adapters' real argv across every permission,
+// harness and binding state — not kept by hand — so a flag added to an adapter is checked here
+// without anyone remembering to add it.
+const AGENT_KEY: Record<AgentId, keyof typeof BIN_CANDIDATES> = { claude: 'claude', codex: 'codex', kiro: 'kiro-cli', opencode: 'opencode' }
+const TURN_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['exec', '--help'], kiro: ['chat', '--help'], opencode: ['run', '--help'] }
+const ATTACH_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['resume', '--help'], kiro: ['chat', '--help'], opencode: ['--help'] }
+
+function argvFlags(cmd: string[]): string[] {
+  return cmd.map((tok) => tok.split('=')[0]!).filter((tok) => /^--?[a-z][a-z-]*$/.test(tok) && tok !== '--')
+}
+
+function adapterFlags(id: AgentId): { turn: Set<string>; attach: Set<string> } {
+  const adapter = getAdapter(id)
+  const sessionId = '00000000-0000-4000-8000-000000000000'
+  const bound: Binding = {
+    sessionId, agent: id, foreignId: 'x', model: null, effort: 'high', permission: 'edit',
+    status: 'bound', turns: 1, costUsd: 0, credits: 0, lastSeen: null,
+  }
+  const turn = new Set<string>()
+  for (const permission of ['safe', 'edit', 'yolo'] as const) {
+    for (const harness of ['minimal', 'inherit'] as const) {
+      for (const binding of [null, bound]) {
+        const ctx = {
+          sessionId, slug: 's', cwd: '/tmp', sessionDir: '/tmp/.konvoy/s', prompt: 'p',
+          binding, effort: 'high', permission, harness, model: 'm',
+        } as unknown as TurnContext
+        for (const flag of argvFlags(adapter.turn(ctx).cmd)) turn.add(flag)
+      }
+    }
+  }
+  return { turn, attach: new Set(argvFlags(adapter.attach(bound).cmd)) }
+}
+
+function mentions(help: string, flag: string): boolean {
+  const escaped = flag.replace(/[-]/g, '\\-')
+  return new RegExp(`(?:^|[\\s,\\[/])${escaped}(?=$|[\\s,=<\\[\\]])`, 'm').test(help)
+}
+
+function flagCheck(id: AgentId, kind: 'turn' | 'attach'): Check {
+  return {
+    label: `${id} ${kind}() flags all appear in its --help`,
+    run: async () => {
+      const bin = await resolveBin(BIN_CANDIDATES[AGENT_KEY[id]])
+      if (!bin) return { ok: false, detail: `${id} not found on this machine — cannot verify` }
+      const helpArgs = kind === 'turn' ? TURN_HELP[id] : ATTACH_HELP[id]
+      const result = await run([bin, ...helpArgs])
+      if (!result) return { ok: false, detail: `${bin} ${helpArgs.join(' ')} failed to spawn` }
+      const flags = [...adapterFlags(id)[kind]].sort()
+      const missing = flags.filter((flag) => !mentions(result.output, flag))
+      return missing.length === 0
+        ? { ok: true, detail: `${flags.length} flags found in \`${[bin.split('/').pop(), ...helpArgs].join(' ')}\`: ${flags.join(' ')}` }
+        : { ok: false, detail: `not in \`${[bin.split('/').pop(), ...helpArgs].join(' ')}\`: ${missing.join(' ')}` }
+    },
+  }
+}
+
+for (const id of agentIds) checks.push(flagCheck(id, 'turn'), flagCheck(id, 'attach'))
 
 let staleCount = 0
 console.log("verify:claims — checking konvoy's documented CLI claims against what's installed here\n")
