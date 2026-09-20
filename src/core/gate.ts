@@ -20,7 +20,7 @@ export async function runGate(
   // A turn with nothing for the gate to judge — running it now would blame the block on the work.
   if (turnExitCode(db, turnId) !== 0) return
 
-  const cmd = command.split(/\s+/).filter(Boolean)
+  const cmd = splitCommand(command)
 
   try {
     const proc = Bun.spawn(cmd, {
@@ -40,4 +40,34 @@ export async function runGate(
   } catch {
     // could not spawn: a misconfiguration, not a verdict on the work, so nothing is recorded
   }
+}
+
+// Whitespace outside quotes separates arguments; a quoted run is one argument, quotes removed.
+// No shell is involved — the gate is the user's own command, but it still deserves its quotes.
+export function splitCommand(command: string): string[] {
+  const out: string[] = []
+  let current = ''
+  let quote: string | null = null
+  let quoted = false
+  for (const ch of command) {
+    if (quote) {
+      if (ch === quote) quote = null
+      else current += ch
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      quoted = true
+      continue
+    }
+    if (/\s/.test(ch)) {
+      if (current || quoted) out.push(current)
+      current = ''
+      quoted = false
+      continue
+    }
+    current += ch
+  }
+  if (current || quoted) out.push(current)
+  return out
 }

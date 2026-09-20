@@ -2,7 +2,7 @@ import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { createSession, recordTurn, usageForSession } from '../src/store/queries'
 import { configSchema } from '../src/config/schema'
-import { runGate } from '../src/core/gate'
+import { runGate, splitCommand } from '../src/core/gate'
 import { loadConfig } from '../src/config/load'
 
 const seed = () => {
@@ -82,4 +82,12 @@ test('a gate command that traps SIGTERM is killed after the grace and recorded a
   const row = usageForSession(db, s.id)[0]!
   expect(row.gateKnown).toBe(1)
   expect(row.gatePassed).toBe(0)
+})
+
+// `bun test --grep "auth flow"` is one command with one quoted argument; splitting on whitespace
+// alone handed the runner two half-arguments.
+test('a gate command is split on whitespace outside quotes', () => {
+  expect(splitCommand(`bun test --grep "auth flow" -t 'x y'`)).toEqual(['bun', 'test', '--grep', 'auth flow', '-t', 'x y'])
+  expect(splitCommand('  bun   test ')).toEqual(['bun', 'test'])
+  expect(splitCommand(`echo ""`)).toEqual(['echo', ''])
 })

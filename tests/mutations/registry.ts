@@ -841,4 +841,11 @@ export const mutations: Mutation[] = [
     to: "  const foreignId = input.foreignId",
     tests: ["tests/store.test.ts"],
   },
+  {
+    name: "a quoted gate argument is split into halves",
+    file: 'src/core/gate.ts',
+    from: "    if (ch === '\"' || ch === \"'\") {",
+    to: "    if (false) {",
+    tests: ["tests/gate.test.ts"],
+  },
 ]
