@@ -39,16 +39,49 @@ test('an answer with no envelope parses to null, not to an empty envelope', () =
   expect(parseEnvelope('no envelope here')).toBe(null)
 })
 
-test('a cooperative prelude carries the sender own words', () => {
+// The version of this test that stood before named no recipient and asserted the cooperative
+// rendering anyway — pinning the defect: buildPrelude treated any block as a handoff while
+// followHandoff required `to:`, so an envelope that handed off to nobody erased the agent's
+// answer from the next prelude and suppressed the disclaimer. A handoff has a recipient.
+test('a cooperative prelude carries the sender own words when the envelope names a recipient', () => {
   const { db, s } = seed()
   recordTurn(db, {
     sessionId: s.id, agent: 'codex', prompt: 'start with token refresh', exitCode: 0, costUsd: 0,
-    final: '<<<konvoy\ntask: check the retry loop\nopen:\n- the device clock drifts\n>>>',
+    final: 'Moved refresh into AuthClient.\n\n<<<konvoy\nto: reviewer\ntask: check the retry loop\nopen:\n- the device clock drifts\n>>>',
   })
   const out = buildPrelude(db, s, 'FACTS', { recent: 3 })
   expect(out).toContain('check the retry loop')
   expect(out).toContain('the device clock drifts')
   expect(out).not.toContain('previous agent')
+})
+
+test('a block naming no recipient is not a handoff: the answer stays and the gap is stated', () => {
+  const { db, s } = seed()
+  recordTurn(db, {
+    sessionId: s.id, agent: 'codex', prompt: 'start with token refresh', exitCode: 0, costUsd: 0,
+    final: 'I refactored auth and all 40 tests pass.\n\n<<<konvoy\ntask: review the auth refactor\n>>>',
+  })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3 })
+  expect(out).toContain('I refactored auth and all 40 tests pass.')
+  expect(out).toContain('previous agent')
+})
+
+// The delegation instruction shows the format with "<agent id or role>" as the recipient, and
+// an agent explaining what it is not doing quotes it back. A recipient is an identifier — an
+// agent id or a role name — so the quoted placeholder names nobody and hands nothing over.
+test('a recipient that is not an identifier is no recipient: a quoted instruction is not a handoff', () => {
+  const quoted = 'I am not handing off. The format would be:\n<<<konvoy\nto: <agent id or role>\ntask: <imperative, one line>\n>>>\nBut this turn is complete on its own.'
+  expect(parseEnvelope(quoted)?.to).toBeNull()
+  const real = 'Done.\n\n<<<konvoy\nto: reviewer\ntask: check it\n>>>\nLet me know if that is not what you meant.'
+  expect(parseEnvelope(real)?.to).toBe('reviewer')
+  expect(parseEnvelope('<<<konvoy\nto: QA_lead-2\ntask: t\n>>>')?.to).toBe('QA_lead-2')
+})
+
+test('a prelude asked for zero recent turns does not throw, and still says what it left out', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'p', exitCode: 0, costUsd: 0, final: 'f' })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 0 })
+  expect(out).toContain('1 earlier turn not shown')
 })
 
 test('a derived prelude says what it does not know', () => {

@@ -820,4 +820,18 @@ export const mutations: Mutation[] = [
     to: "  const projectCwd = cwd",
     tests: ["tests/cli.test.ts"],
   },
+  {
+    name: "a block naming no recipient renders as a handoff and erases the agent’s answer from the prelude",
+    file: 'src/core/prelude.ts',
+    from: "  } else if (envelope?.to) {",
+    to: "  } else if (envelope) {",
+    tests: ["tests/prelude.test.ts"],
+  },
+  {
+    name: "a quoted delegation instruction hands work off to \"<agent id or role>\"",
+    file: 'src/core/prelude.ts',
+    from: "        env.to = RECIPIENT.test(value) ? value : null",
+    to: "        env.to = value || null",
+    tests: ["tests/prelude.test.ts"],
+  },
 ]

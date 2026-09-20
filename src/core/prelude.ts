@@ -11,6 +11,7 @@ export interface Envelope {
 // Sentinels rather than JSON: a model wraps JSON in prose or fences, and a missing field
 // should degrade to empty rather than fail a parse.
 const ENVELOPE_RE = /<<<konvoy\n([\s\S]*?)>>>/
+const RECIPIENT = /^[a-z][a-z0-9_-]*$/i
 
 export function parseEnvelope(final: string): Envelope | null {
   const match = ENVELOPE_RE.exec(final)
@@ -38,7 +39,10 @@ export function parseEnvelope(final: string): Envelope | null {
     const value = kv[2]!.trim()
     switch (key) {
       case 'to':
-        env.to = value || null
+        // a recipient is an agent id or a role name — a bare identifier. The delegation
+        // instruction quotes the format with "<agent id or role>" in this slot, and an agent
+        // explaining what it is not doing repeats it; that names nobody and is no handoff.
+        env.to = RECIPIENT.test(value) ? value : null
         list = null
         break
       case 'task':
@@ -91,13 +95,17 @@ export function buildPrelude(db: Database, session: Session, facts: string, opts
   const oldestFirst = [...rows].reverse()
   const dropped = total - rows.length
 
-  const last = oldestFirst[oldestFirst.length - 1]!
-  const envelope = parseEnvelope(last.final)
+  const last = oldestFirst[oldestFirst.length - 1]
+  const envelope = last ? parseEnvelope(last.final) : null
 
   const turnBlocks: string[] = []
   for (let i = 0; i < oldestFirst.length - 1; i++) turnBlocks.push(renderPair(oldestFirst[i]!))
 
-  if (envelope) {
+  // the same test followHandoff applies: a block with no recipient handed nothing to anyone,
+  // so the answer it sits in is what the next agent must see
+  if (!last) {
+    // recent: 0 — only the goal, the facts and the count of what was left out
+  } else if (envelope?.to) {
     turnBlocks.push(renderEnvelope(last.agent, envelope))
   } else {
     turnBlocks.push(renderPair(last))
