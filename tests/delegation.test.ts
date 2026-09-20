@@ -131,3 +131,27 @@ test('the delegated turn is linked to the turn that handed it over', async () =>
   expect(rows[1]!.agent).toBe('claude')
   expect(rows[1]!.parent_turn_id).toBe(rows[0]!.id)
 })
+
+test('a recipient the user disabled is reported, and the original answer stands', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
+  const h = harness({ codex: handsOff('reviewer', 'check it') })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[] = []
+  let final = ''
+  try {
+    // the role resolves to claude, but claude is turned off in this config
+    const r = await send(
+      { db, cfg: cfg({ agents: { claude: { enabled: false } } }), adapterFor: h.adapterFor },
+      s, 'codex', 'do the thing',
+    )
+    lines = err.mock.calls.map((c) => String(c[0]))
+    final = r.final
+  } finally {
+    err.mockRestore()
+  }
+  expect(h.calls).toEqual(['codex'])
+  expect(final).toContain('done.')
+  // silence here would leave the user believing a review happened
+  expect(lines.join('\n')).toContain('claude')
+})

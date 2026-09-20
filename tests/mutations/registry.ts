@@ -590,4 +590,11 @@ export const mutations: Mutation[] = [
     to: '      }),\n      null,\n    )\n  }',
     tests: ['tests/delegation.test.ts'],
   },
+  {
+    name: 'a recipient that is disabled or missing is handed work anyway, or dropped in silence',
+    file: 'src/core/session.ts',
+    from: 'if (!recipientSettings.enabled || !recipientDetection.installed) {',
+    to: 'if (false) {',
+    tests: ['tests/delegation.test.ts'],
+  },
 ]
