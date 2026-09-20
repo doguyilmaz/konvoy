@@ -124,3 +124,16 @@ test('a failed run without a stop reason reports an empty message, not a placeho
   const line = JSON.stringify({ type: 'runFinished', data: { sessionId: 's', status: 'failed' } })
   expect(kiroAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 's' }, { t: 'error', message: '', kind: 'unknown' }])
 })
+
+// kiro streams the answer in chunks and then repeats it in runFinished.finalText — with a
+// finalTextTruncated flag, which means it truncates. The streamed text konvoy already holds in
+// full must win whenever finalText is missing or flagged; only an untruncated finalText is
+// authoritative.
+test('a truncated or absent finalText yields no done event, so the streamed answer stands', () => {
+  const truncated = JSON.stringify({ type: 'runFinished', data: { sessionId: 's', status: 'success', finalText: 'long a', finalTextTruncated: true } })
+  expect(kiroAdapter.parse(truncated).filter((e) => e.t === 'done')).toEqual([])
+  const absent = JSON.stringify({ type: 'runFinished', data: { sessionId: 's', status: 'success' } })
+  expect(kiroAdapter.parse(absent).filter((e) => e.t === 'done')).toEqual([])
+  const whole = JSON.stringify({ type: 'runFinished', data: { sessionId: 's', status: 'success', finalText: 'long answer', finalTextTruncated: false } })
+  expect(kiroAdapter.parse(whole).filter((e) => e.t === 'done')).toEqual([{ t: 'done', final: 'long answer' }])
+})

@@ -375,3 +375,24 @@ test('an adapter env extends the process environment instead of replacing it', a
   expect(r.final).toBe('ran')
   expect(r.exitCode).toBe(0)
 })
+
+test('a kiro turn whose finalText is truncated keeps the full streamed answer', async () => {
+  const { kiroAdapter } = await import('../src/adapters/kiro')
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'kiro' })
+  const adapter: Adapter = {
+    ...kiroAdapter,
+    turn: () => ({
+      cmd: [
+        'bun', 'tests/fixtures/fake-agent.ts',
+        JSON.stringify({ type: 'metadata', data: { sessionId: 'k-1' } }),
+        JSON.stringify({ type: 'sessionUpdate', data: { sessionId: 'k-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'long ans' } } } }),
+        JSON.stringify({ type: 'sessionUpdate', data: { sessionId: 'k-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'wer' } } } }),
+        JSON.stringify({ type: 'runFinished', data: { sessionId: 'k-1', status: 'success', finalText: 'long a', finalTextTruncated: true } }),
+      ],
+    }),
+  }
+  const r = await runTurn({ db, adapter }, ctx(s.id))
+  expect(r.final).toBe('long answer')
+  expect(r.error).toBeNull()
+})
