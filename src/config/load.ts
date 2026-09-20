@@ -262,18 +262,31 @@ export async function loadConfig(opts: { cwd: string; globalPath?: string }): Pr
   const merged = stripInvalidModels(merge(globalLayer, projectLayer))
   const parsed = configSchema.safeParse(merged)
   if (!parsed.success) {
-    const issue = parsed.error.issues[0]
-    let pathStr = issue?.path.join('.')
-    if (issue?.code === 'unrecognized_keys' && (issue as any).keys && (issue as any).keys.length > 0) {
-      const keyPath = [...issue.path, (issue as any).keys[0]].join('.')
-      pathStr = keyPath
+    const where = describeIssue(parsed.error.issues[0])
+    // the project layer is the lower-trust one: a repository's mistake is reported and the layer
+    // set aside, so konvoy still runs in that directory; the user's own file stays strict
+    const globalOnly = configSchema.safeParse(stripInvalidModels(merge(globalLayer, {})))
+    if (globalOnly.success) {
+      console.error(`konvoy: ignoring project-level config at ${projectConfigPath(opts.cwd)} — invalid at ${where}`)
+      return finishConfig(globalOnly.data)
     }
-    throw new Error(`invalid konvoy config at ${pathStr}: ${issue?.message}`)
+    throw new Error(`invalid konvoy config at ${where}`)
   }
-  for (const agentCfg of Object.values(parsed.data.agents)) {
+  return finishConfig(parsed.data)
+}
+
+function describeIssue(issue: { path: PropertyKey[]; code: string; message: string; keys?: unknown } | undefined): string {
+  let pathStr = issue?.path.map(String).join('.')
+  const keys = issue?.code === 'unrecognized_keys' ? (issue.keys as string[] | undefined) : undefined
+  if (keys && keys.length > 0) pathStr = [...(issue?.path ?? []).map(String), keys[0]].join('.')
+  return `${pathStr}: ${issue?.message}`
+}
+
+function finishConfig(data: Config): Config {
+  for (const agentCfg of Object.values(data.agents)) {
     if (agentCfg?.bin) agentCfg.bin = expandHome(agentCfg.bin)
   }
-  return parsed.data
+  return data
 }
 
 export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {

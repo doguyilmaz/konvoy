@@ -42,10 +42,13 @@ test('a per-agent value beats the defaults block', async () => {
   expect(explain(cfg, 'kiro', 'effort').source).toBe('defaults')
 })
 
+// These four assert the schema's strictness through the global layer — the user's own file, where
+// a mistake stays fatal. The same inputs in a project file are reported and set aside instead
+// (config-security.test.ts), because a cloned repository's mistake must not stop konvoy.
 test('an unknown key is rejected with its path', async () => {
   const dir = tmp('bad')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, JSON.stringify({ agents: { codex: { efort: 'max' } } }))
-  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/agents\.codex\.efort/)
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { codex: { efort: 'max' } } }))
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })).rejects.toThrow(/agents\.codex\.efort/)
 })
 
 test('comments and trailing commas are tolerated', async () => {
@@ -57,14 +60,14 @@ test('comments and trailing commas are tolerated', async () => {
 
 test('an invalid enum value in defaults is rejected', async () => {
   const dir = tmp('badenum')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, JSON.stringify({ defaults: { effort: 'turbo' } }))
-  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/defaults\.effort/)
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ defaults: { effort: 'turbo' } }))
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })).rejects.toThrow(/defaults\.effort/)
 })
 
 test('an invalid key inside defaults is rejected with its path', async () => {
   const dir = tmp('baddefault')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, JSON.stringify({ defaults: { efrot: 'high' } }))
-  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/defaults\.efrot/)
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ defaults: { efrot: 'high' } }))
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })).rejects.toThrow(/defaults\.efrot/)
 })
 
 test('JSONC with double-slash inside a string is preserved', async () => {
@@ -83,8 +86,8 @@ test('JSONC with trailing comma inside a string is preserved', async () => {
 
 test('__proto__ key is rejected as an unknown key', async () => {
   const dir = tmp('proto')
-  await Bun.write(`${dir}/.konvoy/config.jsonc`, '{"__proto__": {"polluted": true}}')
-  expect(loadConfig({ cwd: dir, globalPath: `${dir}/missing.jsonc` })).rejects.toThrow(/__proto__/)
+  await Bun.write(`${dir}/global.jsonc`, '{"__proto__": {"polluted": true}}')
+  expect(loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })).rejects.toThrow(/__proto__/)
 })
 
 test('JSONC: trailing comma followed by line comment', async () => {

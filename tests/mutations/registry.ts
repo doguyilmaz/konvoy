@@ -848,4 +848,11 @@ export const mutations: Mutation[] = [
     to: "    if (false) {",
     tests: ["tests/gate.test.ts"],
   },
+  {
+    name: "a repository's invalid project config stops konvoy in that directory instead of being set aside",
+    file: 'src/config/load.ts',
+    from: "    if (globalOnly.success) {",
+    to: "    if (false) {",
+    tests: ["tests/config-security.test.ts"],
+  },
 ]

@@ -140,3 +140,29 @@ test('a provider/model value survives for opencode; a leading dash and a variant
     await Bun.$`rm -rf ${dir}`.quiet()
   }
 })
+
+// Privileged project keys were dropped with a warning while an unrecognized or mistyped project
+// key was fatal for every command in that directory — a stranger's repository could stop konvoy
+// there. The project layer is the lower-trust one: its mistakes are reported and the layer is
+// set aside; the user's own global file stays strict.
+test('an invalid project config is reported and ignored, while an invalid global config still stops konvoy', async () => {
+  const dir = (await Bun.$`mktemp -d`.text()).trim()
+  await Bun.$`mkdir -p ${dir}/proj/.konvoy`.quiet()
+  await Bun.write(`${dir}/glob.jsonc`, '{ "defaults": { "effort": "low" } }')
+  await Bun.write(`${dir}/proj/.konvoy/config.jsonc`, '{ "defaults": { "bin": "./x" }, "agents": { "codex": { "model": "gpt-6-astra" } } }')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const cfg = await loadConfig({ cwd: `${dir}/proj`, globalPath: `${dir}/glob.jsonc` })
+    expect(resolveAgent(cfg, 'codex').effort).toBe('low')
+    expect(resolveAgent(cfg, 'codex').model).toBeUndefined()
+    const said = err.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(said).toContain('ignoring project-level config')
+    expect(said).toContain('defaults.bin')
+
+    await Bun.write(`${dir}/glob.jsonc`, '{ "defaults": { "nope": 1 } }')
+    await expect(loadConfig({ cwd: `${dir}/proj`, globalPath: `${dir}/glob.jsonc` })).rejects.toThrow(/invalid konvoy config at defaults.nope/)
+  } finally {
+    err.mockRestore()
+    await Bun.$`rm -rf ${dir}`.quiet()
+  }
+})
