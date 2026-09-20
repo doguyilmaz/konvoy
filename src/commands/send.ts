@@ -4,6 +4,7 @@ import type { AgentId } from '../types'
 import { agentIds } from '../adapters'
 import { currentSession, getSessionBySlug } from '../store/queries'
 import { send } from '../core/session'
+import { oneLine, safeText } from '../adapters/types'
 import type { TurnResult } from '../core/turn'
 
 export async function cmdSend(
@@ -28,7 +29,7 @@ export async function cmdSend(
   try {
     result = await send({ db, cfg }, session, agent as AgentId, prompt, {
       onEvent: (e) => {
-        if (e.t === 'tool') console.error(`  · ${e.name}`)
+        if (e.t === 'tool') console.error(`  · ${oneLine(e.name, 120)}`)
       },
     })
   } catch (error) {
@@ -56,15 +57,15 @@ export function decideOutcome(agent: AgentId, result: TurnResult): SendOutcome {
   if (result.error) {
     const blocked = result.error.kind === 'auth' || result.error.kind === 'rate'
     if (blocked && result.final.trim() !== '') {
-      const stderrLines = [`${agent} is blocked (${result.error.kind}): ${result.error.message}`]
+      const stderrLines = [`${agent} is blocked (${result.error.kind}): ${oneLine(result.error.message)}`]
       if (result.error.kind === 'auth') stderrLines.push(loginHint(agent))
-      return { code: 0, stdout: result.final, stderrLines }
+      return { code: 0, stdout: safeText(result.final), stderrLines }
     }
-    const stderrLines = [`${agent} failed (${result.error.kind}): ${result.error.message}`]
+    const stderrLines = [`${agent} failed (${result.error.kind}): ${oneLine(result.error.message)}`]
     if (result.error.kind === 'auth') stderrLines.push(loginHint(agent))
     return { code: 1, stdout: null, stderrLines }
   }
-  return { code: 0, stdout: result.final, stderrLines: [] }
+  return { code: 0, stdout: safeText(result.final), stderrLines: [] }
 }
 
 export function loginHint(agent: AgentId): string {

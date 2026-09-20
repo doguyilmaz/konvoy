@@ -216,3 +216,21 @@ test('end to end: delegation reaches the command line, runs the recipient, and l
   expect(rows[1]!.agent).toBe('claude')
   expect(rows[1]!.parent_turn_id).toBe(rows[0]!.id)
 })
+
+// The handoff notice quotes the sender's own task text. parseEnvelope passes control bytes
+// through untouched, so this is the one place a model's escape sequence would reach the
+// terminal inside a line konvoy signed with its own name.
+test('the handoff notice is one clean line even when the task carries an escape sequence', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
+  const h = harness({ codex: handsOff('reviewer', 'check\u001b[2K the retry') })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[] = []
+  try {
+    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'go')
+    lines = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+  expect(lines.find((l) => l.includes('handed off to claude'))).toBe('konvoy: codex handed off to claude — "check the retry"')
+})

@@ -53,8 +53,25 @@ export function safeJson(line: string): Record<string, unknown> | null {
 // read from a CLI's stdout and later printed to the terminal or stored. Control bytes (OSC/SGR
 // escapes) have no legitimate use there, so they are stripped at the parse boundary rather than
 // wherever the value later gets printed.
+// CSI (ESC [ … final), OSC (ESC ] … BEL or ST) and two-byte ESC sequences. Their parameters
+// are printable, so dropping only the ESC byte would leave "[2K" behind in an id or a notice.
+const ANSI = /\x1b\[[0-?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g
+
 export function stripControlChars(value: string): string {
-  return value.replace(/[\x00-\x1f\x7f]/g, '')
+  return value.replace(ANSI, '').replace(/[\x00-\x1f\x7f]/g, '')
+}
+
+// For a notice or a table cell: one line, no control bytes, capped — an agent's own words or a
+// CLI's stderr can run to kilobytes and can carry escapes that rewrite what konvoy printed.
+export function oneLine(value: string, max = 200): string {
+  const flat = stripControlChars(value.replace(/\r?\n/g, ' ')).replace(/ {2,}/g, ' ').trim()
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat
+}
+
+// For an agent's final text: keep newlines and tabs, drop every other control byte — CR
+// included, which would let a line overwrite the one before it.
+export function safeText(value: string): string {
+  return value.replace(ANSI, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
 }
 
 // Extracted from the four installed binaries on 2026-09-20. Expiry is phrased around

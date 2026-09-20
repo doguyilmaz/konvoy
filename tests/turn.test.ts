@@ -89,12 +89,13 @@ test('a foreign id carrying a terminal escape sequence is stored and printed wit
     { type: 'result', subtype: 'success', result: 'ok' },
   ])
   const r = await runTurn({ db, adapter }, ctx(s.id))
-  expect(r.foreignId).toBe('sess]0;pwned-1')
+  // the whole OSC sequence goes, not only its ESC and BEL — "]0;pwned" is the payload, not the id
+  expect(r.foreignId).toBe('sess-1')
   expect(r.foreignId).not.toContain('\x1b')
   expect(r.foreignId).not.toContain('\x07')
 
   const stored = getBinding(db, s.id, 'claude')?.foreignId ?? null
-  expect(stored).toBe('sess]0;pwned-1')
+  expect(stored).toBe('sess-1')
 
   const { formatRoster } = await import('../src/format')
   const printed = formatRoster([

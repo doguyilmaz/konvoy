@@ -63,7 +63,7 @@ test('a plain error.message is still understood', () => {
 
 test('control bytes in the session id are stripped where it enters', () => {
   const line = JSON.stringify({ type: 'text', sessionID: 'ses\x1b]0;pwned\x07_x', part: { text: 'hi' } })
-  expect(opencodeAdapter.parse(line)[0]).toEqual({ t: 'session', foreignId: 'ses]0;pwned_x' })
+  expect(opencodeAdapter.parse(line)[0]).toEqual({ t: 'session', foreignId: 'ses_x' })
 })
 
 test('text parts are extracted', () => {

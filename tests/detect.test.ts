@@ -246,7 +246,7 @@ test('control bytes in the cli auth detail are stripped before konvoy stores or 
     deps({ run: async () => ({ stdout: '\x1b]0;pwned\x07Logged in with IAM Identity Center', exitCode: 0 }) }),
     'kiro',
   )
-  expect(a.detail).toBe(']0;pwnedLogged in with IAM Identity Center')
+  expect(a.detail).toBe('Logged in with IAM Identity Center')
   expect(a.detail).not.toContain('\x1b')
   expect(a.detail).not.toContain('\x07')
 })
@@ -257,7 +257,7 @@ test('control bytes in a json auth method are stripped too', async () => {
     deps({ run: async () => ({ stdout: '{"loggedIn":true,"authMethod":"claude.ai\\u001b[31m"}', exitCode: 0 }) }),
     'claude',
   )
-  expect(a.detail).toBe('logged in via claude.ai[31m')
+  expect(a.detail).toBe('logged in via claude.ai')
   expect(a.detail).not.toContain('\x1b')
 })
 

@@ -42,7 +42,7 @@ test('the session id is read from the envelope, not the top level', () => {
 
 test('control bytes in the session id are stripped where it enters', () => {
   const line = JSON.stringify({ type: 'metadata', data: { sessionId: 'sess\x1b]0;pwned\x07_abc' } })
-  expect(kiroAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 'sess]0;pwned_abc' }])
+  expect(kiroAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 'sess_abc' }])
 })
 
 test('a message chunk yields text', () => {

@@ -68,7 +68,7 @@ test('the init line yields the session id', () => {
 
 test('control bytes in the session id are stripped where it enters, not where it is printed', () => {
   const line = JSON.stringify({ type: 'system', subtype: 'init', session_id: 'sess\x1b]0;pwned\x07-1' })
-  expect(claudeAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 'sess]0;pwned-1' }])
+  expect(claudeAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 'sess-1' }])
 })
 
 test('assistant text is extracted and tool blocks are reported', () => {

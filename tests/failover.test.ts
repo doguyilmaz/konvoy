@@ -193,3 +193,25 @@ test('a chain member the user never set up is skipped out loud, not silently', a
   expect(skipped).toBeDefined()
   expect(skipped!.toLowerCase()).toMatch(/skip|disabled|not installed/)
 })
+
+// The takeover notice quotes the blocked agent's own message — on a non-zero exit that is raw
+// stderr — so it is the one line in a failover where a CLI's escape sequence would reach the
+// terminal under konvoy's name.
+test('the takeover notice is one clean line even when the limit message carries an escape sequence', async () => {
+  const { db, s } = seed()
+  const calls: AgentId[] = []
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[] = []
+  try {
+    await send(
+      { db, cfg: cfg(), adapterFor: scripted({ codex: fails("You've hit your weekly limit\u001b[2K · resets 7am") }, calls) },
+      s, 'codex', 'hello',
+    )
+    lines = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+  expect(lines.find((l) => l.includes('taking over'))).toBe(
+    'konvoy: codex is blocked (rate) — "You\'ve hit your weekly limit · resets 7am" — claude is taking over',
+  )
+})

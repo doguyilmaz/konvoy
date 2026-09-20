@@ -66,3 +66,18 @@ test('send against an uninstalled agent prints the friendly line, not a raw spaw
     err.mockRestore()
   }
 })
+
+// The two strings decideOutcome hands to the terminal come from the agent (final) and from the
+// CLI or the agent (error.message, up to 64 KiB of stderr on a non-zero exit). Neither is
+// printed raw: notices are one capped line, output keeps its newlines and nothing else.
+test('what reaches the terminal carries no control bytes: notices one capped line, output keeps newlines', () => {
+  const blocked = decideOutcome(
+    'claude',
+    result({ final: 'a\u001b[2Jb\nc', error: { message: 'hit your session limit\u001b[2K\nsecond line', kind: 'rate' } }),
+  )
+  expect(blocked.stdout).toBe('ab\nc')
+  expect(blocked.stderrLines[0]).toBe('claude is blocked (rate): hit your session limit second line')
+
+  const failed = decideOutcome('claude', result({ final: '', error: { message: 'x'.repeat(300), kind: 'crash' } }))
+  expect(failed.stderrLines[0]).toHaveLength('claude failed (crash): '.length + 201)
+})

@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite'
+import { oneLine } from '../adapters/types'
 import type { AgentId, Session, TurnContext } from '../types'
 import type { Config } from '../config/schema'
 import type { Adapter } from '../adapters/types'
@@ -139,7 +140,7 @@ export async function send(
     const recipient = resolveRecipient(deps.cfg, envelope.to)
     if (!recipient) {
       console.error(
-        `konvoy: ${ranAsAgent} handed off to "${envelope.to}" — no such agent or role, ${ranAsAgent}'s turn stands`,
+        `konvoy: ${ranAsAgent} handed off to "${oneLine(envelope.to, 80)}" — no such agent or role, ${ranAsAgent}'s turn stands`,
       )
       return null
     }
@@ -158,7 +159,7 @@ export async function send(
       return null
     }
 
-    console.error(`konvoy: ${ranAsAgent} handed off to ${recipient} — "${envelope.task}"`)
+    console.error(`konvoy: ${ranAsAgent} handed off to ${recipient} — "${oneLine(envelope.task)}"`)
 
     const recipientEffort = clampEffort(recipientSettings.effort, recipientDetection.efforts)
     // Built fresh, after the handing-off turn was recorded: the prelude built at the top of
@@ -270,7 +271,7 @@ export async function send(
       // said "moving to claude" and then ran kiro when claude turned out to be unusable.
       if (blocked) {
         console.error(
-          `konvoy: ${blocked.agent} is blocked (${blocked.kind}) — "${blocked.message}" — ${current} is taking over`,
+          `konvoy: ${blocked.agent} is blocked (${blocked.kind}) — "${oneLine(blocked.message)}" — ${current} is taking over`,
         )
         blocked = null
       }
