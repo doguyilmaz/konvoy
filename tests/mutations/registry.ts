@@ -482,15 +482,15 @@ export const mutations: Mutation[] = [
   {
     name: 'the brief instruction is prepended ahead of the prompt instead of appended after it',
     file: 'src/adapters/types.ts',
-    from: "  return ctx.style === 'brief' ? `${base}\\n\\n${BRIEF_INSTRUCTION}` : base",
-    to: "  return ctx.style === 'brief' ? `${BRIEF_INSTRUCTION}\\n\\n${base}` : base",
+    from: "  const styled = ctx.style === 'brief' ? `${base}\\n\\n${BRIEF_INSTRUCTION}` : base",
+    to: "  const styled = ctx.style === 'brief' ? `${BRIEF_INSTRUCTION}\\n\\n${base}` : base",
     tests: ['tests/style.test.ts'],
   },
   {
     name: 'the brief instruction is appended even when style is unset, decorating every prompt',
     file: 'src/adapters/types.ts',
-    from: "  return ctx.style === 'brief' ? `${base}\\n\\n${BRIEF_INSTRUCTION}` : base",
-    to: '  return `${base}\\n\\n${BRIEF_INSTRUCTION}`',
+    from: "  const styled = ctx.style === 'brief' ? `${base}\\n\\n${BRIEF_INSTRUCTION}` : base",
+    to: '  const styled = `${base}\\n\\n${BRIEF_INSTRUCTION}`',
     tests: ['tests/style.test.ts'],
   },
   {
