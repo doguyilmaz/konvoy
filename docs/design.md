@@ -707,6 +707,8 @@ agent beats the lead — rather than pretending that more agents is always bette
 
 ## 23. Parley: opt-in deliberation between agents
 
+> **Status (2026-09-21): not implemented.** This section is design; nothing in `src/` runs parley. Tracked in §33.
+
 A **parley** is a bounded, rule-governed exchange between agents that disagree. It is the
 multi-model analogue of extended thinking: instead of buying more tokens inside one model,
 you buy more turns across several. The comparison is exact enough to be the mental model.
@@ -818,6 +820,8 @@ per-CLI work, nothing that can behave differently across the four harnesses.
 
 ## 24. Work allocation without negotiation (the `party` formation)
 
+> **Status (2026-09-21): not implemented.** This section is design; nothing in `src/` runs the party formation. Tracked in §33.
+
 Letting agents negotiate who does what costs turns and risks both duplication and gaps. konvoy
 combines three sources of knowledge instead, with zero negotiation rounds:
 
@@ -831,6 +835,8 @@ combines three sources of knowledge instead, with zero negotiation rounds:
 One planning turn, no bargaining, and the lead's guesses corrected by the user's own data.
 
 ## 25. Formations
+
+> **Status (2026-09-21): not implemented.** This section is design; nothing in `src/` runs formations. Tracked in §33.
 
 `parley` (section 23) is a tool an agent calls mid-turn: reactive, triggered by a conflict.
 That is the right shape for "the reviewer disputes my finding". It is the wrong shape for
