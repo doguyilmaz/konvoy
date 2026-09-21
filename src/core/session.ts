@@ -71,6 +71,8 @@ export interface SendDeps {
   db: Database
   cfg: Config
   adapterFor?: (agent: AgentId) => Adapter
+  /** base wait between upstream retries; tests that only care about the walk pass 0 */
+  upstreamBackoffMs?: number
 }
 
 // A chain names an order, not a set: konvoy starts at the requested agent and follows the
@@ -81,7 +83,8 @@ function chainFrom(chain: readonly AgentId[], agent: AgentId): AgentId[] {
   return idx === -1 ? [agent] : chain.slice(idx)
 }
 
-const UPSTREAM_BACKOFF_MS = 50
+// a hammered upstream is the last thing to hammer again: a second, times the attempt
+const UPSTREAM_BACKOFF_MS = 1000
 
 export async function send(
   deps: SendDeps,
@@ -306,7 +309,7 @@ export async function send(
         // agent — with backoff, since a hammered upstream is the last thing to hammer again.
         if (r.error?.kind === 'upstream' && retries < upstreamRetries) {
           retries++
-          await Bun.sleep(UPSTREAM_BACKOFF_MS * retries)
+          await Bun.sleep((deps.upstreamBackoffMs ?? UPSTREAM_BACKOFF_MS) * retries)
           continue
         }
         break

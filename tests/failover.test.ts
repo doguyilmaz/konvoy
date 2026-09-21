@@ -70,7 +70,7 @@ test('an upstream failure is retried on the same agent before the chain moves', 
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
     await send(
-      { db, cfg: cfg({ failover: { chain: ['codex', 'claude'], upstreamRetries: 2 } }),
+      { db, cfg: cfg({ failover: { chain: ['codex', 'claude'], upstreamRetries: 2 } }), upstreamBackoffMs: 0,
         adapterFor: scripted({ codex: fails('503 Service Unavailable') }, calls) },
       s, 'codex', 'hello',
     )
@@ -214,4 +214,24 @@ test('the takeover notice is one clean line even when the limit message carries 
   expect(lines.find((l) => l.includes('taking over'))).toBe(
     'konvoy: codex is blocked (rate) — "You\'ve hit your weekly limit · resets 7am" — claude is taking over',
   )
+})
+
+// The comment above the constant read "a hammered upstream is the last thing to hammer again";
+// the constant was 50 ms, so two retries spanned 150 ms. The default now waits a second times
+// the attempt; tests that only care about the walk inject zero.
+test('an upstream retry waits a real interval by default', async () => {
+  const { db, s } = seed()
+  const calls: AgentId[] = []
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  const t0 = Date.now()
+  try {
+    await send(
+      { db, cfg: cfg({ failover: { chain: ['codex', 'claude'], upstreamRetries: 1 } }), adapterFor: scripted({ codex: fails('503 Service Unavailable') }, calls) },
+      s, 'codex', 'hello',
+    )
+  } finally {
+    err.mockRestore()
+  }
+  expect(calls).toEqual(['codex', 'codex', 'claude'])
+  expect(Date.now() - t0).toBeGreaterThanOrEqual(900)
 })

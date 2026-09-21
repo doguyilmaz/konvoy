@@ -883,4 +883,11 @@ export const mutations: Mutation[] = [
     to: "  return true",
     tests: ["tests/attach.test.ts"],
   },
+  {
+    name: "the upstream backoff is 50 ms, so retries hammer a refusing API within a fraction of a second",
+    file: 'src/core/session.ts',
+    from: "const UPSTREAM_BACKOFF_MS = 1000",
+    to: "const UPSTREAM_BACKOFF_MS = 50",
+    tests: ["tests/failover.test.ts"],
+  },
 ]
