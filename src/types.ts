@@ -15,7 +15,7 @@ export type KonvoyEvent =
     }
   | { t: 'done'; final: string }
 
-export type BindingStatus = 'unbound' | 'bound'
+export type BindingStatus = 'unbound' | 'bound' | 'auth_required'
 
 export interface Binding {
   sessionId: string

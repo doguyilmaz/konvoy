@@ -100,6 +100,8 @@ export function upsertBinding(
     effort: string
     permission: Permission
     model?: string | null
+    /** set by a turn that failed on auth — the roster then says which agent needs a login */
+    status?: 'auth_required'
   },
 ): void {
   const foreignId = input.foreignId !== null && !FOREIGN_ID.test(input.foreignId) ? null : input.foreignId
@@ -116,7 +118,8 @@ export function upsertBinding(
        model = COALESCE(excluded.model, binding.model),
        effort = excluded.effort,
        permission = excluded.permission,
-       status = CASE WHEN COALESCE(excluded.foreign_id, binding.foreign_id) IS NOT NULL
+       status = CASE WHEN excluded.status = 'auth_required' THEN 'auth_required'
+                     WHEN COALESCE(excluded.foreign_id, binding.foreign_id) IS NOT NULL
                      THEN 'bound' ELSE 'unbound' END,
        last_seen = excluded.last_seen`,
   ).run({
@@ -126,7 +129,7 @@ export function upsertBinding(
     model: input.model ?? null,
     effort: input.effort,
     permission: input.permission,
-    status: foreignId ? 'bound' : 'unbound',
+    status: input.status ?? (foreignId ? 'bound' : 'unbound'),
     lastSeen: now(),
   })
 }

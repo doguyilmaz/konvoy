@@ -869,4 +869,11 @@ export const mutations: Mutation[] = [
     to: "",
     tests: ["tests/session.test.ts"],
   },
+  {
+    name: "an auth failure leaves the binding bound, so the roster cannot say which agent needs a login",
+    file: 'src/core/turn.ts',
+    from: "      status: result.error?.kind === 'auth' ? 'auth_required' : undefined,",
+    to: "      status: undefined,",
+    tests: ["tests/turn.test.ts"],
+  },
 ]

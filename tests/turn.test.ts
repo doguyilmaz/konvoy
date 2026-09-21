@@ -414,3 +414,15 @@ test('a descendant holding stdout after the agent exits does not extend the turn
   expect(r.exitCode).toBe(0)
   expect(r.error).toBeNull()
 })
+
+// Spec §15: "auth errors detected from the stream; binding marked auth_required". The status
+// column only ever read bound or unbound, so the roster could not say which agent needs a
+// login. A later successful turn clears it back to bound.
+test('an auth failure marks the binding auth_required, and the next successful turn clears it', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  await runTurn({ db, adapter: fakeAdapter([{ type: 'system', subtype: 'init', session_id: 'sess-a' }, { type: 'result', is_error: true, result: 'Invalid API key' }]) }, ctx(s.id))
+  expect(getBinding(db, s.id, 'claude')?.status).toBe('auth_required')
+  await runTurn({ db, adapter: fakeAdapter([{ type: 'result', subtype: 'success', result: 'back' }]) }, ctx(s.id))
+  expect(getBinding(db, s.id, 'claude')?.status).toBe('bound')
+})

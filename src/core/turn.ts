@@ -175,6 +175,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
       effort: ctx.effort,
       permission: ctx.permission,
       model: ctx.model ?? null,
+      status: result.error?.kind === 'auth' ? 'auth_required' : undefined,
     })
     bumpBinding(db, ctx.sessionId, adapter.id, result.costUsd, result.credits)
   }
