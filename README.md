@@ -169,7 +169,7 @@ Name a `failover` chain and konvoy follows it when an agent can't work, instead 
 { "failover": { "chain": ["codex", "claude", "kiro"], "upstreamRetries": 3 } }
 ```
 
-A rate limit or an auth failure moves to the next agent in the chain at once. An upstream
+A rate limit or an auth failure moves to the next agent in the chain at once. An agent that failed on auth shows as `auth_required` in the roster until one of its turns succeeds. An upstream
 error (a reachable-but-refusing API) retries the same agent with backoff up to
 `upstreamRetries` times before moving on. A crash, a timeout, or an interrupted turn never
 moves the chain — the fault is in the work, and the next agent would just fail the same way.
