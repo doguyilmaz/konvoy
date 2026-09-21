@@ -7,7 +7,7 @@ import type { AgentId } from '../src/types'
 import { newSession, send } from '../src/core/session'
 
 const ok = (text: string) => [
-  JSON.stringify({ type: 'system', subtype: 'init', session_id: `sess-${text}` }),
+  JSON.stringify({ type: 'system', subtype: 'init', session_id: 'sess-fake' }),
   JSON.stringify({ type: 'result', subtype: 'success', result: text }),
 ]
 const handsOff = (to: string, task: string) =>
@@ -109,7 +109,8 @@ test('an envelope naming nothing recognisable is reported and the turn stands', 
     err.mockRestore()
   }
   expect(h.calls).toEqual(['codex'])
-  expect(lines.join('\n')).toContain('nobody')
+  // the notice itself, not any stderr line that happens to quote the envelope
+  expect(lines.some((l) => l.includes('handed off to "nobody"') && l.includes('no such agent or role'))).toBe(true)
 })
 
 test('with delegation off an envelope is left alone', async () => {
