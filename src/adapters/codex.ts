@@ -40,7 +40,7 @@ export const codexAdapter: Adapter = {
       if (item.type === 'reasoning') return item.text ? [{ t: 'thinking', text: item.text }] : []
       if (item.type === 'error') {
         const message = item.message ?? ''
-        return [{ t: 'error', message, kind: classifyError(message) }]
+        return [{ t: 'error', message, kind: classifyError(message), source: 'item' }]
       }
       return [{ t: 'tool', name: item.type, status: 'ok' }]
     }
@@ -54,7 +54,7 @@ export const codexAdapter: Adapter = {
     if (o.type === 'turn.failed') {
       const error = o.error as { message?: string } | undefined
       const message = error?.message ?? ''
-      return [{ t: 'error', message, kind: classifyError(message) }]
+      return [{ t: 'error', message, kind: classifyError(message), source: 'turn' }]
     }
 
     return []

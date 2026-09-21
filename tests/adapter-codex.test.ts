@@ -66,7 +66,7 @@ test('an agent message is text, never a terminal event', () => {
 test('an item error is reported without claiming the turn failed', () => {
   const line = JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'Skill descriptions were shortened' } })
   expect(codexAdapter.parse(line)).toEqual([
-    { t: 'error', message: 'Skill descriptions were shortened', kind: 'unknown' },
+    { t: 'error', message: 'Skill descriptions were shortened', kind: 'unknown', source: 'item' },
   ])
 })
 
@@ -101,6 +101,15 @@ test('attach resumes the thread interactively', () => {
 // "turn failed": turn.ts reads stderr only when the stream's error is empty, so a placeholder
 // hides the CLI's real reason (see the claude dead-session case in tests/session.test.ts).
 test('an error item or a failed turn without a message reports an empty message, not a placeholder', () => {
-  expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error' } }))).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
-  expect(codexAdapter.parse(JSON.stringify({ type: 'turn.failed', error: {} }))).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
+  expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error' } }))).toEqual([{ t: 'error', message: '', kind: 'unknown', source: 'item' }])
+  expect(codexAdapter.parse(JSON.stringify({ type: 'turn.failed', error: {} }))).toEqual([{ t: 'error', message: '', kind: 'unknown', source: 'turn' }])
+})
+
+// Whether a real codex rate limit arrives as an item-level error or as turn.failed decides how
+// the two must be told apart; no capture shows it yet. The parsed event now carries which wire
+// event it came from, and konvoy persists every event — so the next real limit answers it from
+// the event log, with nothing asked of the user.
+test('an error event says whether it came from an item or from turn.failed', () => {
+  expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'notice' } }))[0]).toMatchObject({ t: 'error', source: 'item' })
+  expect(codexAdapter.parse(JSON.stringify({ type: 'turn.failed', error: { message: 'boom' } }))[0]).toMatchObject({ t: 'error', source: 'turn' })
 })

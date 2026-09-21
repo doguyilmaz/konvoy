@@ -12,6 +12,8 @@ export type KonvoyEvent =
       t: 'error'
       message: string
       kind: 'auth' | 'rate' | 'upstream' | 'crash' | 'timeout' | 'interrupted' | 'unknown'
+      /** which wire event carried it, when a CLI has more than one — codex: item vs turn.failed */
+      source?: string
     }
   | { t: 'done'; final: string }
 
