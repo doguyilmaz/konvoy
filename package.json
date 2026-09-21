@@ -7,7 +7,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "build": "bun build ./src/cli.ts --compile --outfile dist/konvoy",
+    "build": "bun build ./src/cli.ts --compile --format=esm --minify --sourcemap --bytecode --no-compile-autoload-dotenv --no-compile-autoload-bunfig --outfile dist/konvoy",
     "typecheck": "bunx tsc --noEmit",
     "mutate": "bun run tests/mutations/run.ts",
     "verify:claims": "bun run scripts/verify-claims.ts",
