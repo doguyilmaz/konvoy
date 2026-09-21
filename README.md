@@ -22,6 +22,7 @@ konvoy roster
 konvoy usage --all --chart     # GATE reads as a dash until a `gate` command is configured
 konvoy status
 konvoy attach codex    # drops you into the real Codex TUI, same session
+konvoy attach kiro --id cli_8a1…   # adopt a session you started in kiro's own TUI; the next turn resumes it
 konvoy doctor
 konvoy update --all    # konvoy itself, plus every agent CLI
 konvoy rm stale-slug --yes

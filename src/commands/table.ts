@@ -27,7 +27,7 @@ export const commandTable = [
   {
     name: 'attach',
     aliases: [],
-    usage: 'attach <agent>',
+    usage: 'attach <agent> [--id <session-id>]',
     summary: "open that agent's own interface, same session",
   },
   {

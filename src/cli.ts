@@ -63,10 +63,12 @@ const handlers: Record<CommandName, Handler> = {
   attach: (ctx, rest) => {
     const [agent] = rest
     if (!agent) {
-      console.error('usage: konvoy attach <agent>')
+      console.error('usage: konvoy attach <agent> [--id <session-id>]')
       return 2
     }
-    return cmdAttach(ctx.db, ctx.cwd, agent, ctx.slug, resolveAgent(ctx.cfg, agent as AgentId).bin)
+    const settings = resolveAgent(ctx.cfg, agent as AgentId)
+    const id = typeof ctx.args.flags.id === 'string' ? ctx.args.flags.id : undefined
+    return cmdAttach(ctx.db, ctx.cwd, agent, { slug: ctx.slug, bin: settings.bin, id, effort: settings.effort, permission: settings.permission })
   },
   doctor: (ctx) => cmdDoctor(ctx.cfg),
   update: (ctx) => cmdUpdate(ctx.cfg, { all: ctx.args.flags.all === true }),

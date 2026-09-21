@@ -876,4 +876,11 @@ export const mutations: Mutation[] = [
     to: "      status: undefined,",
     tests: ["tests/turn.test.ts"],
   },
+  {
+    name: "adopting a foreign session reports success whether or not the binding holds the id",
+    file: 'src/commands/attach.ts',
+    from: "  return getBinding(db, session.id, agent)?.foreignId === foreignId",
+    to: "  return true",
+    tests: ["tests/attach.test.ts"],
+  },
 ]
