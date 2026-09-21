@@ -254,7 +254,7 @@ export function recordEvent(db: Database, turnId: string, seq: number, type: str
   })
 }
 
-export function isAlive(pid: number): boolean {
+function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true
