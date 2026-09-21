@@ -87,17 +87,17 @@ test('the captured v2 success stream parses into session, text, usage and cost',
   const events = lines.flatMap((l) => opencodeAdapter.parse(l))
   expect(events.filter((e) => e.t === 'session')[0]).toEqual({
     t: 'session',
-    foreignId: 'ses_f3f4b6290ffeKaZ38ZuQQ4wnB7',
+    foreignId: 'ses_f3d905791ffecnY1rPhgZKHUWz',
   })
   expect(events.find((e) => e.t === 'text')).toEqual({ t: 'text', text: 'OK' })
-  // input 16,412 + cache.read 270 + cache.write 0 — opencode's `input` is the uncached
+  // re-captured against 2.0.11: input + cache.read + cache.write = 16596 — opencode's `input` is the uncached
   // remainder, as its own `total` arithmetic shows (input+output+cache = total). Whether its
   // `reasoning` count sits inside `output` is not established, so output is left untouched.
   expect(events.find((e) => e.t === 'usage')).toEqual({
     t: 'usage',
-    inputTokens: 16682,
-    outputTokens: 80,
-    costUsd: 0.00505602,
+    inputTokens: 16596,
+    outputTokens: 39,
+    costUsd: 0.004976808,
   })
 })
 
