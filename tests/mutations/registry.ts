@@ -890,4 +890,11 @@ export const mutations: Mutation[] = [
     to: "const UPSTREAM_BACKOFF_MS = 50",
     tests: ["tests/failover.test.ts"],
   },
+  {
+    name: "a binary that cannot start leaves the turn row at its INSERT placeholder",
+    file: 'src/core/turn.ts',
+    from: "    finish()\n    return result\n  }\n  track(proc)",
+    to: "    return result\n  }\n  track(proc)",
+    tests: ["tests/turn.test.ts"],
+  },
 ]

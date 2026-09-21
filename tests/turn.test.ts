@@ -426,3 +426,24 @@ test('an auth failure marks the binding auth_required, and the next successful t
   await runTurn({ db, adapter: fakeAdapter([{ type: 'result', subtype: 'success', result: 'back' }]) }, ctx(s.id))
   expect(getBinding(db, s.id, 'claude')?.status).toBe('bound')
 })
+
+// Detection pre-empts a missing binary, but a binary that exists and cannot start (no execute
+// bit, a bad interpreter) threw out of Bun.spawn before the turn row was written, so the
+// failure left no trace. The row is recorded first now; the failed start is its ending.
+test('a binary that exists but cannot start still leaves a turn row with the error', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const file = (await Bun.$`mktemp`.text()).trim()
+  await Bun.write(file, '#!/bin/sh\necho never\n')
+  await Bun.$`chmod 644 ${file}`.quiet()
+  try {
+    const r = await runTurn({ db, adapter: fakeAdapter([], { turn: () => ({ cmd: [file] }) }) }, ctx(s.id))
+    expect(r.exitCode).toBe(127)
+    expect(r.error?.kind).toBe('crash')
+    const row = db.query('SELECT exit_code, error FROM turn WHERE session_id = $s').get({ s: s.id }) as { exit_code: number; error: string | null }
+    expect(row.exit_code).toBe(127)
+    expect(row.error).toContain('could not start')
+  } finally {
+    await Bun.$`rm -f ${file}`.quiet()
+  }
+})

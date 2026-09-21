@@ -85,25 +85,6 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     }
   }
 
-  const spawnedAt = Date.now()
-  const proc = Bun.spawn(plan.cmd, {
-    cwd: plan.cwd ?? ctx.cwd,
-    env: { ...(process.env as Record<string, string>), ...(plan.env ?? {}), ...(ctx.lease ? { KONVOY_LEASE: ctx.lease } : {}) },
-    stdin: plan.stdin ? new Response(plan.stdin) : 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-    timeout: timeoutMs,
-    killSignal: 'SIGTERM',
-  })
-  track(proc)
-
-  const cancelEscalation = escalateKill(proc, timeoutMs + (opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS))
-
-  // once the child has exited, whoever still holds its pipes is something it left behind;
-  // it gets this long to flush, then both reads end
-  const afterExit = proc.exited.then(() => Bun.sleep(opts.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS))
-  const stderrText = drain(proc.stderr as ReadableStream<Uint8Array>, 64 * 1024, afterExit)
-
   const turnId = recordTurn(db, {
     sessionId: ctx.sessionId,
     agent: adapter.id,
@@ -114,38 +95,6 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     kind: ctx.kind ?? null,
     parentTurnId: opts.parentTurnId ?? null,
   })
-
-  // exit_code -1 means konvoy itself died before it could record the turn. Every ordinary
-  // ending, including an interruption, replaces it — so a surviving -1 is a real signal, not
-  // a default. Failure is decided by the error field, not by the exit code alone: an interrupted turn
-  // carries 130 or 143 and a message, and a codex turn can exit 0 with an informational error.
-
-  const emit = (event: KonvoyEvent): void => {
-    result.events.push(event)
-    recordEvent(db, turnId, seq++, event.t, event)
-    opts.onEvent?.(event)
-    switch (event.t) {
-      case 'session':
-        result.foreignId = event.foreignId
-        break
-      case 'text':
-        accumulated += event.text
-        break
-      case 'usage':
-        result.credits += event.credits ?? 0
-        result.costUsd += event.costUsd ?? 0
-        result.inputTokens += event.inputTokens ?? 0
-        result.outputTokens += event.outputTokens ?? 0
-        break
-      case 'error':
-        result.error = { message: event.message, kind: event.kind }
-        break
-      case 'done':
-        sawDone = true
-        result.final = event.final
-        break
-    }
-  }
 
   let finished = false
   const finish = (): void => {
@@ -179,6 +128,69 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     })
     bumpBinding(db, ctx.sessionId, adapter.id, result.costUsd, result.credits)
   }
+
+  const spawnedAt = Date.now()
+  let proc: ReturnType<typeof Bun.spawn>
+  try {
+    proc = Bun.spawn(plan.cmd, {
+    cwd: plan.cwd ?? ctx.cwd,
+    env: { ...(process.env as Record<string, string>), ...(plan.env ?? {}), ...(ctx.lease ? { KONVOY_LEASE: ctx.lease } : {}) },
+    stdin: plan.stdin ? new Response(plan.stdin) : 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: timeoutMs,
+    killSignal: 'SIGTERM',
+  })
+  } catch (error) {
+    // the binary exists but cannot start — no execute bit, a bad interpreter: detection cannot
+    // see it, and the turn row recorded above is what keeps the failure from leaving no trace
+    result.exitCode = 127
+    result.error = { message: `could not start ${plan.cmd[0]}: ${error instanceof Error ? error.message : String(error)}`, kind: 'crash' }
+    finish()
+    return result
+  }
+  track(proc)
+
+  const cancelEscalation = escalateKill(proc, timeoutMs + (opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS))
+
+  // once the child has exited, whoever still holds its pipes is something it left behind;
+  // it gets this long to flush, then both reads end
+  const afterExit = proc.exited.then(() => Bun.sleep(opts.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS))
+  const stderrText = drain(proc.stderr as ReadableStream<Uint8Array>, 64 * 1024, afterExit)
+
+
+  // exit_code -1 means konvoy itself died before it could record the turn. Every ordinary
+  // ending, including an interruption, replaces it — so a surviving -1 is a real signal, not
+  // a default. Failure is decided by the error field, not by the exit code alone: an interrupted turn
+  // carries 130 or 143 and a message, and a codex turn can exit 0 with an informational error.
+
+  const emit = (event: KonvoyEvent): void => {
+    result.events.push(event)
+    recordEvent(db, turnId, seq++, event.t, event)
+    opts.onEvent?.(event)
+    switch (event.t) {
+      case 'session':
+        result.foreignId = event.foreignId
+        break
+      case 'text':
+        accumulated += event.text
+        break
+      case 'usage':
+        result.credits += event.credits ?? 0
+        result.costUsd += event.costUsd ?? 0
+        result.inputTokens += event.inputTokens ?? 0
+        result.outputTokens += event.outputTokens ?? 0
+        break
+      case 'error':
+        result.error = { message: event.message, kind: event.kind }
+        break
+      case 'done':
+        sawDone = true
+        result.final = event.final
+        break
+    }
+  }
+
 
   // every path below must reach finish(): an onEvent callback that throws, a parser crash a
   // wrapper missed, or a signal — otherwise the turn row stays at its INSERT placeholder and
