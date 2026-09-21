@@ -862,4 +862,11 @@ export const mutations: Mutation[] = [
     to: "    cmd.push('--', withPrelude(ctx))",
     tests: ["tests/adapter-codex.test.ts"],
   },
+  {
+    name: "a dead session is rebound in silence, so the user believes the old context continued",
+    file: 'src/core/session.ts',
+    from: "    console.error(`konvoy: ${current} could not load session ${oneLine(resumedId ?? '', 60)} — starting a new one`)\n",
+    to: "",
+    tests: ["tests/session.test.ts"],
+  },
 ]

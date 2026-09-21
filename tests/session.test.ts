@@ -344,7 +344,18 @@ test('a kiro resume that cannot load the session rebinds instead of failing the 
     },
   }
 
-  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'kiro', 'hello')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let r
+  let said = ''
+  try {
+    r = await send({ db, cfg, adapterFor: () => adapter }, s, 'kiro', 'hello')
+    said = err.mock.calls.map((c) => String(c[0])).join('\n')
+  } finally {
+    err.mockRestore()
+  }
+  // a rebind the user is not told about looks like continuity and is not — the id they may have
+  // adopted by hand, or watched konvoy bind, was dropped
+  expect(said).toContain('kiro could not load session gone — starting a new one')
   expect(call).toBe(2)
   expect(r.final).toBe('recovered')
   expect(getBinding(db, s.id, 'kiro')?.foreignId).toBe('kiro-new')

@@ -198,7 +198,8 @@ export async function send(
     ctxBuild: () => TurnContext,
     parentTurnId: string | null,
   ): Promise<TurnResult> {
-    const wasResuming = getBinding(deps.db, session.id, current)?.foreignId != null
+    const resumedId = getBinding(deps.db, session.id, current)?.foreignId ?? null
+    const wasResuming = resumedId != null
     const first = await runTurn(
       { db: deps.db, adapter: currentAdapter },
       { ...ctxBuild(), lease },
@@ -216,6 +217,8 @@ export async function send(
     const stale = first.error != null && recoverable && STALE.test(first.error.message) && producedNothing
     if (!stale || !wasResuming) return first
 
+    // said out loud: a silent rebind looks like continuity and is not
+    console.error(`konvoy: ${current} could not load session ${oneLine(resumedId ?? '', 60)} — starting a new one`)
     clearForeignId(deps.db, session.id, current)
     return runTurn(
       { db: deps.db, adapter: currentAdapter },
