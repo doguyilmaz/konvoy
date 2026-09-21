@@ -48,6 +48,7 @@ export type AgentOutcome =
       status: 'ok'
       foreignId: string
       tokens: number
+      credits: number
       resumed: boolean
       version: string | null
       versionDrift: string | null
@@ -120,6 +121,7 @@ export async function runSmoke(deps: SmokeDeps): Promise<AgentOutcome[]> {
         status: 'ok',
         foreignId: first.foreignId!,
         tokens: first.inputTokens + first.outputTokens + second.inputTokens + second.outputTokens,
+        credits: first.credits + second.credits,
         resumed: true,
         version: detection.version,
         versionDrift: versionDrift(agent, detection.version),
@@ -136,7 +138,9 @@ function formatOutcome(o: AgentOutcome): string {
   const label = o.agent.padEnd(8)
   if (o.status === 'ok') {
     const versionTag = o.version ? ` (v${o.version})` : ''
-    const line = `[ok    ] ${label} ${o.foreignId} · ${o.tokens} tokens · resume carried context${versionTag}`
+    // kiro bills in credits and reports no tokens; opencode reports usage only on tool-using steps
+    const usage = o.tokens > 0 ? `${o.tokens} tokens` : o.credits > 0 ? `${o.credits.toFixed(3)} credits` : `usage not reported`
+    const line = `[ok    ] ${label} ${o.foreignId} · ${usage} · resume carried context${versionTag}`
     return o.versionDrift ? `${line}\n         note: ${o.versionDrift}` : line
   }
   if (o.status === 'skipped') return `[skip  ] ${label} ${o.reason}`
