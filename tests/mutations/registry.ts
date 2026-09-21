@@ -855,4 +855,11 @@ export const mutations: Mutation[] = [
     to: "    if (false) {",
     tests: ["tests/config-security.test.ts"],
   },
+  {
+    name: "a bound codex turn never resumes its thread",
+    file: 'src/adapters/codex.ts',
+    from: "    if (ctx.binding?.foreignId) cmd.push('resume', ctx.binding.foreignId)\n    cmd.push('--', withPrelude(ctx))",
+    to: "    cmd.push('--', withPrelude(ctx))",
+    tests: ["tests/adapter-codex.test.ts"],
+  },
 ]

@@ -13,13 +13,14 @@ export const codexAdapter: Adapter = {
   supportsPresetSessionId: false,
 
   turn(ctx: TurnContext): SpawnPlan {
-    const cmd = [ctx.bin ?? 'codex', 'exec']
-    if (ctx.binding?.foreignId) cmd.push('resume', ctx.binding.foreignId)
-    cmd.push('--json', '--skip-git-repo-check')
+    const cmd = [ctx.bin ?? 'codex', 'exec', '--json', '--skip-git-repo-check']
     if ((ctx.harness ?? 'minimal') === 'minimal') cmd.push('--ignore-user-config')
     if (ctx.model) cmd.push('-m', ctx.model)
     cmd.push('-c', `model_reasoning_effort=${ctx.effort}`)
     cmd.push(...SANDBOX[ctx.permission])
+    // `resume` is a subcommand of `exec` with its own small flag set; the flags above belong to
+    // `exec` and are only parsed when they come first
+    if (ctx.binding?.foreignId) cmd.push('resume', ctx.binding.foreignId)
     cmd.push('--', withPrelude(ctx))
     return { cmd, cwd: ctx.cwd }
   },

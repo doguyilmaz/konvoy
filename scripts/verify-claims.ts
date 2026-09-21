@@ -230,6 +230,27 @@ function authCheck(id: AgentId): Check {
 
 for (const id of agentIds) checks.push(authCheck(id))
 
+// `codex exec resume` parses only its own flags; an exec flag placed after `resume` is rejected
+// at run time. Found by a live resumed turn on 2026-09-21 after the flag check above passed —
+// it read the flags against `codex exec --help`, the wrong surface for the bound variant.
+checks.push({
+  label: 'codex: no flag follows resume unless codex exec resume --help lists it',
+  run: async () => {
+    const bin = await resolveBin(BIN_CANDIDATES.codex)
+    if (!bin) return { ok: false, detail: 'codex not found on this machine — cannot verify' }
+    const help = await run([bin, 'exec', 'resume', '--help'])
+    if (!help) return { ok: false, detail: 'codex exec resume --help failed to spawn' }
+    const bound: Binding = { sessionId: 's', agent: 'codex', foreignId: 'x', model: null, effort: 'high', permission: 'edit', status: 'bound', turns: 1, costUsd: 0, credits: 0, lastSeen: null }
+    const cmd = getAdapter('codex').turn({ sessionId: 's', slug: 's', cwd: '/tmp', sessionDir: '/tmp/.konvoy/s', prompt: 'p', binding: bound, effort: 'high', permission: 'edit', model: 'm' } as unknown as TurnContext).cmd
+    const at = cmd.indexOf('resume')
+    const tail = at === -1 ? [] : cmd.slice(at + 1, cmd.indexOf('--', at))
+    const stray = argvFlags(tail).filter((flag) => !mentions(help.output, flag))
+    return stray.length === 0
+      ? { ok: true, detail: at === -1 ? 'bound variant carries no resume' : `after resume: ${tail.length ? tail.join(' ') : '(only the id)'}` }
+      : { ok: false, detail: `exec flags after resume, rejected by codex: ${stray.join(' ')}` }
+  },
+})
+
 let staleCount = 0
 console.log("verify:claims — checking konvoy's documented CLI claims against what's installed here\n")
 for (const check of checks) {

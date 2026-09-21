@@ -20,10 +20,16 @@ test('a first turn runs codex exec with json output and an isolated config', () 
   expect(cmd).not.toContain('resume')
 })
 
-test('a later turn resumes the thread by id', () => {
+// `codex exec resume` is its own subcommand with its own flag set: --json, -s, -m and the rest
+// belong to `exec` and must precede it. The version of this test that stood before pinned
+// `codex exec resume <id> --json …`, which codex rejects with "unexpected argument" — every
+// resumed codex turn had failed live while the suite was green.
+test('a later turn resumes the thread by id, with resume after every exec-level flag', () => {
   const cmd = codexAdapter.turn(ctx({ binding: bound('thread-9') })).cmd
-  expect(cmd.slice(0, 3)).toEqual(['codex', 'exec', 'resume'])
-  expect(cmd).toContain('thread-9')
+  expect(cmd.slice(0, 2)).toEqual(['codex', 'exec'])
+  expect(cmd).toContain('--json')
+  const at = cmd.indexOf('resume')
+  expect(cmd.slice(at, at + 3)).toEqual(['resume', 'thread-9', '--'])
 })
 
 test('effort travels as a config override, not a flag', () => {
