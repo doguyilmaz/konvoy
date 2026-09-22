@@ -1,4 +1,4 @@
-// bun run scripts/tap-cask.ts <version> <checksums.txt> — print Casks/konvoy.rb for the tap,
+// bun run scripts/tap-cask.ts <version> <checksums.txt> - print Casks/konvoy.rb for the tap,
 // in the shape the tap's other casks already have (GoReleaser's homebrew_casks output).
 import { TARGETS, assetName } from './release'
 

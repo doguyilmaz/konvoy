@@ -20,7 +20,7 @@ const cfg = (over: Record<string, unknown> = {}) =>
 function harness(script: Partial<Record<AgentId, string[]>>) {
   const calls: AgentId[] = []
   const seen: Record<string, string> = {}
-  // The real adapter's own turn() builds the actual argv a CLI would receive — capturing its
+  // The real adapter's own turn() builds the actual argv a CLI would receive - capturing its
   // cmd here (rather than re-deriving withPrelude by hand) is what makes a check against it
   // prove the instruction reaches an actual command line, not just this harness's idea of one.
   const cmds: Record<string, string[]> = {}
@@ -62,7 +62,7 @@ test('the recipient receives the sender own words, not a derived summary', async
   }
   expect(h.seen.claude).toContain('check the refresh path')
   expect(h.seen.claude).toContain('the device clock drifts')
-  // the cooperative path must not claim the intent is missing — the sender stated it
+  // the cooperative path must not claim the intent is missing - the sender stated it
   expect(h.seen.claude!.toLowerCase()).not.toContain('was not recorded')
 })
 
@@ -165,13 +165,13 @@ test('a recipient the user disabled is reported, and the original answer stands'
 
 // The one test the task asks for: every earlier test in this file checks a single piece of
 // the path in isolation. None of them look at the sending agent's own command line, so none
-// would fail if `ctx.delegation` were only threaded to the recipient and never to codex —
+// would fail if `ctx.delegation` were only threaded to the recipient and never to codex -
 // exactly the shape of the four capabilities (sparkline, estimateUsd, the prelude,
 // parseEnvelope) that were built, unit-tested, and never reachable from a real run. This one
 // drives send() once and checks the whole path in that single run: the instruction reached
 // codex's real command line, the named recipient actually ran, its prelude carried codex's
 // own task/open/decisions rather than a derived summary, and the two turns are linked in the
-// store — any one missing means the feature is not connected.
+// store - any one missing means the feature is not connected.
 test('end to end: delegation reaches the command line, runs the recipient, and links the turns', async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
@@ -195,7 +195,7 @@ test('end to end: delegation reaches the command line, runs the recipient, and l
   }
 
   // codex was asked for an envelope: the instruction reached its real command line, built by
-  // the same claudeAdapter.turn() a live run would use — not a hand-built ctx.
+  // the same claudeAdapter.turn() a live run would use - not a hand-built ctx.
   expect(h.cmds.codex!.join(' ')).toContain('<<<konvoy')
 
   // it emitted one, and the named recipient (the reviewer role, resolved to claude) ran
@@ -203,7 +203,7 @@ test('end to end: delegation reaches the command line, runs the recipient, and l
   expect(lines.join('\n')).toContain('codex handed off to claude')
 
   // the recipient's prelude carried codex's own task, its open question and its stated
-  // decision — not a summary konvoy invented — and never claims the intent went unrecorded
+  // decision - not a summary konvoy invented - and never claims the intent went unrecorded
   const recipientCmd = h.cmds.claude!.join(' ')
   expect(recipientCmd).toContain('check the refresh path')
   expect(recipientCmd).toContain('the device clock drifts')
@@ -234,5 +234,5 @@ test('the handoff notice is one clean line even when the task carries an escape 
   } finally {
     err.mockRestore()
   }
-  expect(lines.find((l) => l.includes('handed off to claude'))).toBe('konvoy: codex handed off to claude — "check the retry"')
+  expect(lines.find((l) => l.includes('handed off to claude'))).toBe('konvoy: codex handed off to claude - "check the retry"')
 })

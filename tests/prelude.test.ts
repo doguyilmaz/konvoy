@@ -40,7 +40,7 @@ test('an answer with no envelope parses to null, not to an empty envelope', () =
 })
 
 // The version of this test that stood before named no recipient and asserted the cooperative
-// rendering anyway — pinning the defect: buildPrelude treated any block as a handoff while
+// rendering anyway - pinning the defect: buildPrelude treated any block as a handoff while
 // followHandoff required `to:`, so an envelope that handed off to nobody erased the agent's
 // answer from the next prelude and suppressed the disclaimer. A handoff has a recipient.
 test('a cooperative prelude carries the sender own words when the envelope names a recipient', () => {
@@ -67,8 +67,8 @@ test('a block naming no recipient is not a handoff: the answer stays and the gap
 })
 
 // The delegation instruction shows the format with "<agent id or role>" as the recipient, and
-// an agent explaining what it is not doing quotes it back. A recipient is an identifier — an
-// agent id or a role name — so the quoted placeholder names nobody and hands nothing over.
+// an agent explaining what it is not doing quotes it back. A recipient is an identifier - an
+// agent id or a role name - so the quoted placeholder names nobody and hands nothing over.
 test('a recipient that is not an identifier is no recipient: a quoted instruction is not a handoff', () => {
   const quoted = 'I am not handing off. The format would be:\n<<<konvoy\nto: <agent id or role>\ntask: <imperative, one line>\n>>>\nBut this turn is complete on its own.'
   expect(parseEnvelope(quoted)?.to).toBeNull()

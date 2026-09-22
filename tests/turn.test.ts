@@ -89,7 +89,7 @@ test('a foreign id carrying a terminal escape sequence is stored and printed wit
     { type: 'result', subtype: 'success', result: 'ok' },
   ])
   const r = await runTurn({ db, adapter }, ctx(s.id))
-  // the whole OSC sequence goes, not only its ESC and BEL — "]0;pwned" is the payload, not the id
+  // the whole OSC sequence goes, not only its ESC and BEL - "]0;pwned" is the payload, not the id
   expect(r.foreignId).toBe('sess-1')
   expect(r.foreignId).not.toContain('\x1b')
   expect(r.foreignId).not.toContain('\x07')
@@ -346,7 +346,7 @@ test('every event is streamed to the callback', async () => {
 })
 
 // Adapters no longer invent text for an error that carries none, so turn.ts reads stderr on a
-// non-zero exit. The remaining case: exit 0, no output, an error event with no words — nothing
+// non-zero exit. The remaining case: exit 0, no output, an error event with no words - nothing
 // anywhere says what went wrong. The user must still get a sentence, not an empty quote.
 test('an error with no words that survives stream and stderr is given a stated message', async () => {
   const db = openDb(':memory:')
@@ -398,7 +398,7 @@ test('a kiro turn whose finalText is truncated keeps the full streamed answer', 
 })
 
 // Measured before the fix: the agent exited at ~50 ms, the grandchild held the pipe for 3 s,
-// and runTurn returned after the grandchild — 4,071 ms against a 1.2 s budget — reporting
+// and runTurn returned after the grandchild - 4,071 ms against a 1.2 s budget - reporting
 // exit 0 and no error, with the session lock held the whole time. The SIGKILL escalation was
 // guarded on the child still being alive; the drain loop ended only when every holder of the
 // pipe closed it. The turn must end on konvoy's clock: once the child is gone, a short grace,

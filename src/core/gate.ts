@@ -4,7 +4,7 @@ import type { Session } from '../types'
 import { setGateResult, turnExitCode } from '../store/queries'
 import { DEFAULT_KILL_GRACE_MS, escalateKill } from './children'
 
-// A quality check the user chose to run — konvoy has no model of its own, so it never
+// A quality check the user chose to run - konvoy has no model of its own, so it never
 // grades the work itself. Bounded so a hung suite can't block konvoy forever.
 const GATE_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -17,7 +17,7 @@ export async function runGate(
 ): Promise<void> {
   const command = cfg.gate.command
   if (!command) return
-  // A turn with nothing for the gate to judge — running it now would blame the block on the work.
+  // A turn with nothing for the gate to judge - running it now would blame the block on the work.
   if (turnExitCode(db, turnId) !== 0) return
 
   const cmd = splitCommand(command)
@@ -43,7 +43,7 @@ export async function runGate(
 }
 
 // Whitespace outside quotes separates arguments; a quoted run is one argument, quotes removed.
-// No shell is involved — the gate is the user's own command, but it still deserves its quotes.
+// No shell is involved - the gate is the user's own command, but it still deserves its quotes.
 export function splitCommand(command: string): string[] {
   const out: string[] = []
   let current = ''

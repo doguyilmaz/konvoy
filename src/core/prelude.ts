@@ -39,7 +39,7 @@ export function parseEnvelope(final: string): Envelope | null {
     const value = kv[2]!.trim()
     switch (key) {
       case 'to':
-        // a recipient is an agent id or a role name — a bare identifier. The delegation
+        // a recipient is an agent id or a role name - a bare identifier. The delegation
         // instruction quotes the format with "<agent id or role>" in this slot, and an agent
         // explaining what it is not doing repeats it; that names nobody and is no handoff.
         env.to = RECIPIENT.test(value) ? value : null
@@ -104,7 +104,7 @@ export function buildPrelude(db: Database, session: Session, facts: string, opts
   // the same test followHandoff applies: a block with no recipient handed nothing to anyone,
   // so the answer it sits in is what the next agent must see
   if (!last) {
-    // recent: 0 — only the goal, the facts and the count of what was left out
+    // recent: 0 - only the goal, the facts and the count of what was left out
   } else if (envelope?.to) {
     turnBlocks.push(renderEnvelope(last.agent, envelope))
   } else {
@@ -112,7 +112,7 @@ export function buildPrelude(db: Database, session: Session, facts: string, opts
     // The cooperative case (section 21) has a sender who can still speak; failover does not.
     // A receiver that believes its context is complete proceeds on half the picture, so the
     // gap is stated plainly instead of silently filled with a prompt-and-answer transcript.
-    turnBlocks.push("the previous agent's intent was not recorded here — only what was asked and answered is known.")
+    turnBlocks.push("the previous agent's intent was not recorded here - only what was asked and answered is known.")
   }
 
   if (dropped > 0) turnBlocks.push(`(${dropped} earlier turn${dropped === 1 ? '' : 's'} not shown)`)

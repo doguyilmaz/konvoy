@@ -46,7 +46,7 @@ test('an empty session renders without a section rather than an empty one', () =
 })
 
 test('a field containing the delimiter is quoted, so a row cannot shift', () => {
-  // 48% of this repo's own commit subjects contain a comma — this is the common case
+  // 48% of this repo's own commit subjects contain a comma - this is the common case
   const out = formatFacts({
     commits: [{ sha: 'a1b2c3d', subject: 'feat: single-binary build, update command and readme' }],
     files: [{ path: 'src/a,b.ts', added: 1, removed: 2 }],
@@ -71,7 +71,7 @@ test('an ordinary field is not quoted, because quotes nobody needs are tokens no
 })
 
 // The turns half of the prelude is capped at three and says why (§29); the facts half was not
-// capped at all — every commit since the session began and every changed file, prepended to
+// capped at all - every commit since the session began and every changed file, prepended to
 // every prompt for every agent. Thirty rows per section, and a count of what was left out.
 test('a facts section shows at most thirty rows and says how many more there were', async () => {
   const db = openFactsDb(':memory:')

@@ -1,4 +1,4 @@
-# konvoy — design
+# konvoy - design
 
 **Status:** the design as approved on 2026-09-19. Where it and the code differ, the README and the code are authoritative; §23–25 (parley, party, formations) are roadmap and not implemented.
 **Date:** 2026-09-19
@@ -6,7 +6,7 @@
 
 ## 1. Problem
 
-Four agentic coding CLIs are in daily use — Claude Code, Codex, Kiro CLI, opencode — and
+Four agentic coding CLIs are in daily use - Claude Code, Codex, Kiro CLI, opencode - and
 switching between them is manual. Each keeps its own sessions, its own context, its own
 model and effort settings. Work started in one cannot continue in another without
 re-explaining everything. There is no way to make them cooperate on a single task.
@@ -42,21 +42,21 @@ kiro-cli 2.22.1, opencode 1.17.18). Everything below is evidence-backed, not ass
 | | claude | codex | kiro | opencode |
 |---|---|---|---|---|
 | headless turn | `claude -p` | `codex exec` | `kiro-cli chat --no-interactive` | `opencode run` |
-| **we choose session id** | **yes** — `--session-id <uuid>` | no | no (`sess_<uuid>`) | no (`ses_...`; supplied `id` silently ignored) |
+| **we choose session id** | **yes** - `--session-id <uuid>` | no | no (`sess_<uuid>`) | no (`ses_...`; supplied `id` silently ignored) |
 | resume | `--resume <id>`, `--fork-session` | `codex exec resume <id>` | `--resume-id <id>` | `-s <id>`, `--fork` |
 | event stream | `--output-format stream-json` (and `--input-format stream-json`, bidirectional) | `--json` (JSONL) | `--output-format stream-json` (ACP events) | `--format json` |
 | **where the id appears** | we already know it | `session_meta.payload.id` | `sessionId` on every event | `sessionID` on every line |
 | final message | `result` event | `task_complete.last_agent_message`, or `-o <file>` | last `agent_message_chunk` | last `text` event |
-| **structured final answer** | — | **`--output-schema <file>`** (works on `resume` too) | — | — |
+| **structured final answer** | - | **`--output-schema <file>`** (works on `resume` too) | - | - |
 | model | `--model` | `-m` | `--model` | `-m provider/model` |
 | effort | `--effort low\|medium\|high\|xhigh\|max` | `-c model_reasoning_effort=…` | `--effort …` | `--variant …` |
 | effort vocabulary | fixed | **per model** (`models_cache.json`) | **per model** (server-supplied) | **per model** (derived from provider caps) |
 | MCP injection (no global edit) | `--mcp-config <json>` + `--strict-mcp-config` | `-c mcp_servers.konvoy.command=…` | per-agent `mcpServers` in agent JSON | `OPENCODE_CONFIG=<our file>` |
 | prelude surface | `--append-system-prompt`, `--agents <json>` | prompt prefix / profile / `AGENTS.md` | agent JSON `prompt: "file:///…"` (live file!) | config `instructions: []` + agent `prompt` |
-| rename / title | — | auto only (TUI-side rename exists) | `/title` slash command | **`title` on create and `PATCH /session/{id}`** |
-| isolation | worktree via harness | **`--worktree`** | — | `/experimental/worktree/*` |
+| rename / title | - | auto only (TUI-side rename exists) | `/title` slash command | **`title` on create and `PATCH /session/{id}`** |
+| isolation | worktree via harness | **`--worktree`** | - | `/experimental/worktree/*` |
 | persistent protocol (v2) | bidirectional stream-json | `app-server` JSON-RPC (stdio/unix/ws) | `kiro-cli acp` (full ACP: `session/new\|prompt\|resume\|fork\|steer\|cancel`) | `opencode acp`, `opencode serve` (HTTP + SSE) |
-| interrupt a running turn | — | app-server | **`session/steer`, `session/cancel`** | `POST /session/{id}/abort` |
+| interrupt a running turn | - | app-server | **`session/steer`, `session/cancel`** | `POST /session/{id}/abort` |
 
 Consequences that shape the design:
 
@@ -64,7 +64,7 @@ Consequences that shape the design:
   impossible. **The binding table is the single source of truth**; native titles are set
   where supported (`konvoy:<slug>`) purely as a human convenience.
 - Three of four re-emit the session id on every event, so binding is "read the first line
-  and store it" — no handshake protocol is needed.
+  and store it" - no handshake protocol is needed.
 - Effort vocabularies are model-dependent everywhere except Claude. A fixed mapping table
   would be wrong; konvoy clamps to the target's supported set and reports the clamp.
 - Kiro's agent JSON accepts `prompt: "file:///abs/path.md"`. The prelude is *referenced*,
@@ -72,22 +72,22 @@ Consequences that shape the design:
 
 ## 5. Concepts
 
-**Session** — a named unit of work bound to a directory. Holds the goal, the bindings, the
+**Session** - a named unit of work bound to a directory. Holds the goal, the bindings, the
 ledger, the policy, and the turn history.
 
-**Binding** — one row per agent: foreign session id, model, effort, permission profile,
+**Binding** - one row per agent: foreign session id, model, effort, permission profile,
 worktree, status, turn count, cost. Created lazily on an agent's first turn.
 
-**Ledger** — append-only shared memory, `.konvoy/<slug>/LEDGER.md`. Every line is stamped
+**Ledger** - append-only shared memory, `.konvoy/<slug>/LEDGER.md`. Every line is stamped
 with author and kind (`decision`, `finding`, `artifact`, `question`, `handoff`). Append-only
 means four concurrent writers never need a merge.
 
-**Brief** — `.konvoy/<slug>/CONTEXT.md`. The stable part: goal, constraints, conventions,
+**Brief** - `.konvoy/<slug>/CONTEXT.md`. The stable part: goal, constraints, conventions,
 roster. Regenerated by konvoy whenever session config changes; agents reference it by path.
 
-**Roster** — who is in the convoy right now, with effective model, effort and state.
+**Roster** - who is in the convoy right now, with effective model, effort and state.
 
-**Role** — an optional label (`lead`, `implementer`, `reviewer`, `researcher`) mapped to an
+**Role** - an optional label (`lead`, `implementer`, `reviewer`, `researcher`) mapped to an
 agent. Roles are hints for delegation, not enforcement. The lead is the agent `konvoy run` addresses by default; with none configured it is the first enabled agent.
 
 ## 6. CLI surface
@@ -190,11 +190,11 @@ konvoy writes two files per session and injects a **prelude** that tells each ag
 what the session is, who else is in it, where the ledger is, and how to use the konvoy
 tools. Injection uses each CLI's native surface so it costs nothing per turn:
 
-- **claude** — `--append-system-prompt` with the prelude, `--add-dir` for the session dir.
-- **codex** — prelude prepended on the first turn only; the session carries it afterwards.
-- **kiro** — a generated agent `~/.kiro/agents/konvoy-<slug>.json` with
+- **claude** - `--append-system-prompt` with the prelude, `--add-dir` for the session dir.
+- **codex** - prelude prepended on the first turn only; the session carries it afterwards.
+- **kiro** - a generated agent `~/.kiro/agents/konvoy-<slug>.json` with
   `prompt: "file:///…/CONTEXT.md"`, `includeMcpJson: false`, and konvoy's MCP server inline.
-- **opencode** — a generated config passed via `OPENCODE_CONFIG`, with `instructions`
+- **opencode** - a generated config passed via `OPENCODE_CONFIG`, with `instructions`
   pointing at the brief and `mcp.konvoy` declared.
 
 Generated files live under `.konvoy/<slug>/gen/` and are rewritten on every config change.
@@ -207,7 +207,7 @@ konvoy runs an MCP stdio server, injected into every agent as `konvoy`:
 | tool | behaviour |
 |---|---|
 | `konvoy_delegate(to, task, schema?)` | runs the target to completion, returns its final answer; `schema` requests a structured return (native on codex via `--output-schema`, prompt-enforced elsewhere). Blocking. |
-| `konvoy_handoff(to, summary)` | records the handoff, ends the caller's turn, konvoy continues with the target. Non-blocking — the right tool for long work. |
+| `konvoy_handoff(to, summary)` | records the handoff, ends the caller's turn, konvoy continues with the target. Non-blocking - the right tool for long work. |
 | `konvoy_ask(to, question)` | one cheap read-only turn against the target. |
 | `konvoy_broadcast(question)` | asks every other bound agent in parallel, returns all answers. |
 | `konvoy_ledger_append(kind, text)` / `konvoy_ledger_read(since?)` | shared memory. |
@@ -245,8 +245,8 @@ second opinion in name only, so `konvoy status` prints the *effective* model per
 
 Layered, most specific wins:
 
-1. `~/.config/konvoy/config.jsonc` — global defaults
-2. `<project>/.konvoy/config.jsonc` — project overrides, committed with the repo
+1. `~/.config/konvoy/config.jsonc` - global defaults
+2. `<project>/.konvoy/config.jsonc` - project overrides, committed with the repo
 3. session overrides in the database (`konvoy config set --session …`)
 4. command-line flags
 
@@ -277,7 +277,7 @@ becomes drift.
 
 `agents.<id>.effort` overrides `defaults.effort`; anything unset inherits. `subagentEffort`
 maps to codex's own `[agents] default_subagent_reasoning_effort`, which governs the layer of
-subagents *below* codex — the only CLI that exposes that dial today.
+subagents *below* codex - the only CLI that exposes that dial today.
 
 Validation is all-or-nothing: an unknown or malformed key is rejected with its full path,
 and a config that fails to validate is never half-applied.
@@ -315,8 +315,8 @@ The ledger stays a Markdown file, not a table: agents read it directly, and a hu
 | failure | behaviour |
 |---|---|
 | CLI not installed | marked unavailable in roster; delegation to it returns a clear error; doctor prints the install command |
-| an agent is absent, logged out or expired | the session continues with whoever is present — see "Availability is not a verdict" below |
-| CLI present but not on konvoy's PATH | a spawned process inherits konvoy's environment, not the user's interactive shell, so a CLI reachable in their terminal can be invisible to konvoy — observed on this machine, where `~/.opencode/bin` is added by `.zshrc` and was absent from a long-running process's PATH. `agents.<id>.bin` names the binary explicitly, and `doctor` prints the resolved path for each agent rather than assuming a lookup succeeded |
+| an agent is absent, logged out or expired | the session continues with whoever is present - see "Availability is not a verdict" below |
+| CLI present but not on konvoy's PATH | a spawned process inherits konvoy's environment, not the user's interactive shell, so a CLI reachable in their terminal can be invisible to konvoy - observed on this machine, where `~/.opencode/bin` is added by `.zshrc` and was absent from a long-running process's PATH. `agents.<id>.bin` names the binary explicitly, and `doctor` prints the resolved path for each agent rather than assuming a lookup succeeded |
 | not authenticated | auth errors detected from the stream; binding marked `auth_required`; konvoy prints that CLI's own login command and continues with the rest |
 | version drift | capabilities are re-detected per version; a missing flag degrades that feature (e.g. no `--effort`) and is reported, never fatal |
 | stale/invalid foreign session | rebind with a fresh session, note the break in the ledger, keep the old id in history |
@@ -335,7 +335,7 @@ the built-in PTY option for `--tmux`), `Bun.file`/`Bun.write`, `Bun.$`, `bun:tes
 `bun build --compile` for a single binary. No `node:*` imports; small local helpers cover
 what would otherwise pull them in.
 
-One runtime dependency: **zod** — it validates layered config *and* generates the JSON
+One runtime dependency: **zod** - it validates layered config *and* generates the JSON
 Schemas the MCP tool definitions require, so it earns its place twice.
 
 ## 17. Testing
@@ -354,14 +354,14 @@ rather than assumed. Each run below is a single turn whose entire task was to re
 
 **Context sent** below means every token the CLI put in front of the model:
 `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. Reading any one of
-those alone is not the turn's context, and mixing them across agents is not a comparison —
+those alone is not the turn's context, and mixing them across agents is not a comparison -
 see the correction at the end of this section.
 
 | | context sent | cost of one trivial turn |
 |---|---|---|
-| claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events — **53,336 tokens** | $0.5335 (cold cache) |
-| claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks — **20,800 tokens** | $0.0528 (warm cache) |
-| codex, `--ignore-user-config` | **18,173 tokens** (6,656 of them cached) | — |
+| claude, user's full setup | 112 tools, 13 MCP servers, 9 hook events - **53,336 tokens** | $0.5335 (cold cache) |
+| claude, minimal harness | 29 tools, 0 MCP servers, 0 hooks - **20,800 tokens** | $0.0528 (warm cache) |
+| codex, `--ignore-user-config` | **18,173 tokens** (6,656 of them cached) | - |
 | opencode, `run --format json` | **16,682 tokens** (270 of them cached) | $0.0051 |
 | kiro, v2 engine | no token counts; reports **4.83% of its context window** | 0.0667 credits |
 
@@ -372,12 +372,12 @@ is the expected result once both are measured the same way.
 
 The cost column is not a clean ratio. Cache writes bill at 1.25× the input rate and cache
 reads at 0.1×, so a cold turn and a warm one are priced an order of magnitude apart for the
-same context — the inherit run above was cold and the minimal run warm. Context is the
+same context - the inherit run above was cold and the minimal run warm. Context is the
 comparable quantity; cost follows it only once cache warmth matches.
 
 **Correction (2026-09-21).** The first version of this table read 42,098 against 5,456 and
 claimed 7.7×. Both figures were `cache_creation_input_tokens` alone, and the minimal run's
-16,344 cache-*read* tokens were context that had been sent and went uncounted — so a cold
+16,344 cache-*read* tokens were context that had been sent and went uncounted - so a cold
 run's write was being compared against a warm run's write. The same mistake was in the code:
 `src/adapters/claude.ts` recorded `input_tokens` alone, which is claude's *uncached
 remainder* and reads as 2 on a cached turn, while `src/adapters/codex.ts` recorded codex's
@@ -388,7 +388,7 @@ agents. Fixed, with the invariant pinned in `tests/provider-contract.test.ts`.
 opencode turned out to share claude's convention and to have the same defect, plus one more:
 it reports the turn's `cost` on the same part and konvoy read neither, so every opencode turn
 recorded zero tokens and zero dollars. That branch had a unit test and a captured fixture and
-was still never reached — the fixture came from a turn that called no tools, and opencode only
+was still never reached - the fixture came from a turn that called no tools, and opencode only
 emits `step_finish` once a step does tool work. Its test therefore asserted that no usage
 event appeared, which was true of that capture and wrong about the CLI.
 
@@ -396,7 +396,7 @@ event appeared, which was true of that capture and wrong about the CLI.
 all, so konvoy records nothing for it. Its own `opencode.db` holds the tokens and cost
 regardless; reading them would couple konvoy to opencode's internal schema, which is not worth
 it today. Four agents' minimal floors now measure 20,800 (claude), 18,173 (codex) and 16,682
-(opencode) tokens, with kiro reporting only a percentage — the agreement across three
+(opencode) tokens, with kiro reporting only a percentage - the agreement across three
 independent CLIs is the check that the unit is defined right.
 
 **Decision: `harness` is a first-class setting, defaulting to `minimal`.**
@@ -405,8 +405,8 @@ independent CLIs is the check that the unit is defined right.
 |---|---|---|
 | claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
 | codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
-| kiro | **not implemented** — runs with the user's own agent and MCP configuration | same |
-| opencode | **not implemented** — runs with its own config discovery | same |
+| kiro | **not implemented** - runs with the user's own agent and MCP configuration | same |
+| opencode | **not implemented** - runs with its own config discovery | same |
 
 Only claude and codex honor `harness` today (`src/adapters/claude.ts`, `src/adapters/codex.ts`);
 the kiro and opencode rows above described intended behavior that was never built, corrected
@@ -417,7 +417,7 @@ generated agent profile, opencode through `OPENCODE_CONFIG`.
 and its own MCP server, so what is stripped is duplication, not capability. `inherit` exists
 for sessions that genuinely need the user's skills and hooks, at the measured price.
 
-Note that `claude --bare` looks like the obvious lever and is not usable here: it accepts
+`claude --bare` looks like the obvious lever and is not usable here: it accepts
 only `ANTHROPIC_API_KEY` or an `apiKeyHelper` and never reads OAuth or the keychain, so a
 subscription login cannot authenticate under it. The flag combination above achieves the same
 reduction while leaving authentication alone.
@@ -426,7 +426,7 @@ reduction while leaving authentication alone.
 
 konvoy's purpose is moving text between agents, which means one agent's output becomes
 another agent's input. Any agent that reads a hostile file, page or repository can therefore
-try to steer the whole convoy, and the ledger — shared, writable by all — is the widest path
+try to steer the whole convoy, and the ledger - shared, writable by all - is the widest path
 for it.
 
 - **Agent-produced text is data, never instruction.** Every delegated task and every ledger
@@ -467,7 +467,7 @@ means a nested turn asking for a lock its own parent already holds.
 Every delegation and handoff is a message from one agent into another's context window,
 paid for at that agent's per-turn floor (section 18 measured it at roughly 20,800 tokens
 minimal). A 2,000-token handoff is therefore about a tenth of the turn's context before any
-work begins — and unlike the floor, it is paid again at every hop and grows with the session
+work begins - and unlike the floor, it is paid again at every hop and grows with the session
 if it carries payloads rather than pointers. A floor is fixed; a handoff compounds. The
 protocol below is shaped by that asymmetry and by one principle.
 
@@ -480,10 +480,10 @@ travels as a reference; only what it cannot reconstruct travels as text.
 | the receiver needs | how it arrives |
 |---|---|
 | the goal and constraints | pushed once into the session brief, free on every later turn |
-| what changed on disk | commit shas and a `git diff --stat`, computed by konvoy — never pasted content |
+| what changed on disk | commit shas and a `git diff --stat`, computed by konvoy - never pasted content |
 | where to look | `file:line` pointers |
-| **why it was done that way** | **text — this is the payload** |
-| **what the sender could not settle** | **text — the most valuable part of a handoff** |
+| **why it was done that way** | **text - this is the payload** |
+| **what the sender could not settle** | **text - the most valuable part of a handoff** |
 | the sender's full transcript | never; it is tens of thousands of tokens of tool calls the receiver does not need |
 
 ### Who writes the summary
@@ -491,7 +491,7 @@ travels as a reference; only what it cannot reconstruct travels as text.
 konvoy has no model of its own, so it cannot summarise. It does not need to: the sending
 agent already holds the context and can produce a handoff for a hundred output tokens, where
 konvoy would pay an entire extra model call for a worse result. The sender writes intent;
-**konvoy supplies the machine facts itself** — changed files, commit range, turn cost — from
+**konvoy supplies the machine facts itself** - changed files, commit range, turn cost - from
 git and its own store, so those can be neither forgotten nor misreported.
 
 ### The envelope
@@ -543,8 +543,8 @@ visible: konvoy appends the note path, never silently drops text.
 
 ### Push versus pull
 
-The brief is **pushed** — small, stable, injected once through each CLI's native config.
-The ledger is **pulled** — it grows without bound, so it is never injected; agents read it
+The brief is **pushed** - small, stable, injected once through each CLI's native config.
+The ledger is **pulled** - it grows without bound, so it is never injected; agents read it
 through `konvoy_ledger_read(since?)`, which defaults to entries since that agent's last turn
 rather than the whole file. Pushing the ledger would multiply its size by four agents and
 again by every turn.
@@ -560,12 +560,12 @@ delegation with the validation error, not silently accepted.
 
 An agent may address a **role** (`reviewer`) or an **agent** (`kiro`). Roles are preferred
 and resolve through `config.roles`, because the sender wants a reviewer, not a particular
-binary — and the roster can change between sessions.
+binary - and the roster can change between sessions.
 
 ### Trust and idempotency
 
 Every inbound payload is wrapped in the two-line envelope from section 19 naming its author
-and stating that it is a proposal, not authority — fixed and short, because it is paid on
+and stating that it is a proposal, not authority - fixed and short, because it is paid on
 every call. Each delegation carries a call id; a repeated id inside one turn returns the
 first result instead of running the target twice, so a sender's retry after a timeout cannot
 duplicate work.
@@ -576,23 +576,23 @@ The convoy only justifies itself if it beats the best single agent on quality **
 less than the sum of its parts. That is not automatic. It holds under four conditions, and
 where they fail a convoy is simply N times the price:
 
-1. **Decomposability** — the task splits into parts where different agents have a
+1. **Decomposability** - the task splits into parts where different agents have a
    comparative advantage. A monolithic task gains nothing from being shared.
-2. **Verification asymmetry** — checking is cheaper than producing. Verification prompts are
+2. **Verification asymmetry** - checking is cheaper than producing. Verification prompts are
    short and their answers are short, so a verifying turn typically costs a fraction of a
    producing one.
-3. **Error independence** — the agents must fail *differently*. Two agents on the same base
+3. **Error independence** - the agents must fail *differently*. Two agents on the same base
    model go blind in the same places, so the second one adds cost and no information. This is
    why `konvoy doctor` warns on duplicate effective models: model diversity is the
    precondition for the whole thesis, not a nicety.
-4. **Cheap arbitration** — deciding who is right must cost less than doing the work twice.
+4. **Cheap arbitration** - deciding who is right must cost less than doing the work twice.
 
 ### The five mechanisms
 
 **Cheap-first escalation.** Send the work to the cheapest capable agent, run the objective
 gate, and escalate only on failure, carrying the failure with it. Expected cost is
 `c_cheap + p_fail × c_expensive`, which beats going straight to the expensive agent whenever
-`p_fail` is low. The failed cheap attempt is not waste — it is reconnaissance the expensive
+`p_fail` is low. The failed cheap attempt is not waste - it is reconnaissance the expensive
 agent starts from.
 
 **Routing by measured comparative advantage, not by belief.** konvoy already records tokens,
@@ -603,7 +603,7 @@ history. Routing policy consumes that table, with a small exploration budget so 
 does not lock in a bad choice permanently.
 
 **Verification asymmetry, exploited explicitly.** The verifier is a *different model*, run at
-low effort under the read-only permission profile, asked a narrow question — "does this diff
+low effort under the read-only permission profile, asked a narrow question - "does this diff
 satisfy X, and if not, name a failing input". Narrow question, short answer, small cost.
 
 **Parallel attempts only where the gate is objective.** For a high-variance task with a real
@@ -618,8 +618,8 @@ multiplicative.
 ### Two hard rules
 
 **Vary the suffix, never the prefix.** Prompt caching charges 1.25× to write a prefix and
-0.1× to read it. A stable prefix — same system prompt, same tool list, same brief, for the
-whole session — is therefore roughly a tenfold discount on the largest part of every turn.
+0.1× to read it. A stable prefix - same system prompt, same tool list, same brief, for the
+whole session - is therefore roughly a tenfold discount on the largest part of every turn.
 Injecting anything that changes per turn (most temptingly, the ledger) into the prefix
 destroys that. This is the real reason the ledger is pull-only; tidiness is the lesser half
 of the argument.
@@ -632,7 +632,7 @@ without producing an artifact.
 ### What is measured
 
 The `turn` table carries `kind`, `input_tokens`, `output_tokens`, `cost_usd`, `credits` and
-`gate_passed` — the last recorded separately from `exit_code`, because an agent can exit 0
+`gate_passed` - the last recorded separately from `exit_code`, because an agent can exit 0
 and still leave the tests red. Those columns exist from the first migration precisely so the
 routing table can be built from real history rather than retrofitted.
 
@@ -649,14 +649,14 @@ all. So:
   shows `-`, never a zero.
 - **No synthetic normalisation by default.** A built-in price table per model would go stale
   and misreport silently. A user who wants one number supplies their own `pricing` block in
-  config — their numbers, their responsibility.
+  config - their numbers, their responsibility.
 - **Totals are bookkeeping; cost per success is the decision.** Spend divided by gate-passed
   turns is what distinguishes "expensive and usually right" from "cheap and usually wrong",
   and it is the only form in which these numbers change what you do next.
 
 `konvoy usage` reports the session: per agent, its turns, tokens, its own-unit cost, and its
-gate-pass rate. `konvoy stats` reports the routing table across sessions — `kind × agent →
-success rate, median cost` — and belongs with the gate in Plan B, since without it every
+gate-pass rate. `konvoy stats` reports the routing table across sessions - `kind × agent →
+success rate, median cost` - and belongs with the gate in Plan B, since without it every
 `gate_passed` is null.
 
 Attribution matters most inside a formation, where the multiplication is invisible: a `race`
@@ -673,20 +673,20 @@ wants:
 | state | meaning | how konvoy treats it |
 |---|---|---|
 | `ready` | installed, authenticated | usable |
-| `disabled` | turned off in config | a choice — listed in the roster, never warned about |
+| `disabled` | turned off in config | a choice - listed in the roster, never warned about |
 | `missing` | the binary is not on konvoy's path | informational, unless a role depends on it |
 | `needs-login` | installed, but its own status command says otherwise | informational, and konvoy prints **the CLI's own sentence**, not a paraphrase |
 
 **Severity is relative to the session's roster, not to the set of four.** A user who works
 with two agents has not misconfigured anything. `konvoy doctor` therefore exits non-zero only
-when an agent the session actually depends on — the lead, or one named in `roles` — is not
+when an agent the session actually depends on - the lead, or one named in `roles` - is not
 `ready`. Everything else is reported and the exit code stays zero.
 
 Three consequences:
 
 - **A session never fails because an agent is absent.** It runs with whoever is present and
   says once, at the start, who is riding along. Only a directly addressed agent being
-  unavailable is an error — `konvoy send codex` with codex missing exits 2 and names the fix —
+  unavailable is an error - `konvoy send codex` with codex missing exits 2 and names the fix -
   and only an empty roster stops the session.
 - **Expiry is reported in the CLI's own words.** Each status command explains itself better
   than konvoy could, so `AuthState.detail` carries its first line and konvoy prints it
@@ -702,8 +702,8 @@ returns a clear error to the calling agent instead of aborting the convoy.
 
 For a vague design question with no objective gate, for a task too small to decompose, or for
 a roster whose agents share one base model, a single agent is cheaper and no worse. konvoy
-should say so — `doctor` warns about the model overlap, and `stats` will show a kind where no
-agent beats the lead — rather than pretending that more agents is always better.
+should say so - `doctor` warns about the model overlap, and `stats` will show a kind where no
+agent beats the lead - rather than pretending that more agents is always better.
 
 ## 23. Parley: opt-in deliberation between agents
 
@@ -721,7 +721,7 @@ you buy more turns across several. The comparison is exact enough to be the ment
 | off unless asked for | off unless asked for |
 
 **Parley is disabled by default.** One round costs one turn startup per participant, so a
-three-round parley between two agents costs six — more than letting the strongest agent
+three-round parley between two agents costs six - more than letting the strongest agent
 decide alone. Worse, its failure mode is invisible: two agents that already agree will take
 turns confirming each other, producing a plausible transcript and no information. A failure
 mode that looks like success must be opt-in.
@@ -744,8 +744,8 @@ generic caution:
 1. **The price.** "Each round is one turn per participant. At this roster and effort that is
    about $X and ~Y tokens per round, capped at 2 rounds and 15% of the remaining session
    budget."
-2. **The precondition.** If two participants resolve to the same effective model — the
-   overlap `konvoy doctor` already detects — konvoy says so: a parley between one brain
+2. **The precondition.** If two participants resolve to the same effective model - the
+   overlap `konvoy doctor` already detects - konvoy says so: a parley between one brain
    wearing two harnesses is theatre. Error independence is the precondition for the whole
    mechanism.
 3. **The cheaper answer first.** If the project has an objective gate, konvoy says so and
@@ -756,7 +756,7 @@ generic caution:
 
 Only on a **conflict**: a reviewer's finding the producer disputes, two conflicting verdicts
 from a `broadcast`, an objective gate that failed twice with different diagnoses, or an
-explicit `konvoy_parley` call. An information gap is not a conflict — that is `ask`, one
+explicit `konvoy_parley` call. An information gap is not a conflict - that is `ask`, one
 read-only round. The fat-handoff discipline of section 21 removes most information gaps
 before they can become exchanges.
 
@@ -771,7 +771,7 @@ ends stop performing. A parley without a pre-declared rule is an infinite-loop g
 
 | rule | resolution |
 |---|---|
-| `gate` | run the objective gate on both proposals; the one that passes wins — preferred wherever a gate exists, because it is cheap and not a matter of opinion |
+| `gate` | run the objective gate on both proposals; the one that passes wins - preferred wherever a gate exists, because it is cheap and not a matter of opinion |
 | `lead` | the session lead decides (default) |
 | `cost` | the cheaper proposal wins |
 | `human` | parked for the user |
@@ -783,7 +783,7 @@ konvoy has no model of its own, so every control below is computable without one
 1. **Structural slot.** Every round must declare `agree | disagree | need-info` about the
    fixed question. A round that does not address it **does not count as a round**, and the
    agent is told so. Drift becomes structurally visible rather than a matter of judgement.
-2. **New-pointer rule.** A productive round cites something — a file, a line, a test result,
+2. **New-pointer rule.** A productive round cites something - a file, a line, a test result,
    a command output. Zero new pointers and no new claim is noise, and `pointers[]` from
    section 21 already carries the evidence.
 3. **Novelty check.** High lexical overlap with the previous round ("agreed, that makes
@@ -811,7 +811,7 @@ interface Parley {
 ```
 
 One ledger entry. The exchange itself stays in the database and never re-enters any agent's
-context — a transcript that leaked forward would make every later turn pay for the argument.
+context - a transcript that leaked forward would make every later turn pay for the argument.
 `konvoy parley log` reads these back, so the feature can be judged the way everything else
 here is judged: by whether its recorded verdicts were worth what they cost.
 
@@ -830,7 +830,7 @@ combines three sources of knowledge instead, with zero negotiation rounds:
 2. **The routing table corrects the owners.** The lead is guessing; `konvoy stats` is
    measuring. Where the two disagree, measured history wins, with the override recorded.
 3. **A claim table gives each subtask exactly one owner**, and overlapping edits are
-   prevented by the session lock — or, under `--parallel`, by per-agent worktrees.
+   prevented by the session lock - or, under `--parallel`, by per-agent worktrees.
 
 One planning turn, no bargaining, and the lead's guesses corrected by the user's own data.
 
@@ -841,14 +841,14 @@ One planning turn, no bargaining, and the lead's guesses corrected by the user's
 `parley` (section 23) is a tool an agent calls mid-turn: reactive, triggered by a conflict.
 That is the right shape for "the reviewer disputes my finding". It is the wrong shape for
 "design this refactor together", where deliberation is the point of the whole session rather
-than an interruption to it — expressing that with repeated tool calls would be chatty and
+than an interruption to it - expressing that with repeated tool calls would be chatty and
 expensive.
 
 The missing layer is the **formation**: the shape a session travels in. A convoy has one.
 
 | formation | agents | each works on | resolved by | reach for it when |
 |---|---|---|---|---|
-| `solo` | one | — | the turn ending | the task is small, or one agent is plainly best for it |
+| `solo` | one | - | the turn ending | the task is small, or one agent is plainly best for it |
 | `party` | parallel | a **different** subtask | konvoy merging the pieces | the work splits into pieces that do not need each other |
 | `relay` | sequential | the **same** artifact, in a different role | the chain reaching its end | each stage wants a different strength, in a fixed order |
 | `race` | parallel | the **same** task | the objective gate | the outcome is uncertain and a test can settle it |
@@ -857,7 +857,7 @@ The missing layer is the **formation**: the shape a session travels in. A convoy
 The "each works on" column is what makes this a taxonomy rather than a list: the four ways to
 work together are to split the work, to stage it, to duplicate it, or to argue about it.
 
-`solo` and `party` are the natural pair — alone, or with the team — and `party` is the one
+`solo` and `party` are the natural pair - alone, or with the team - and `party` is the one
 most work actually wants. Its mechanism is section 24. The name matters: a party is a group
 whose members have **different** capabilities pursuing one objective, which is exactly the
 comparative-advantage routing of section 22, where a squad is people with the same role and a
@@ -871,12 +871,12 @@ startups for one result and buys a success rate of `1-(1-q)^N`. `parley` pays tw
 per round and buys a decision, which is why it is off by default.
 
 **`loop` is not a fifth formation; it is a combinator over them.** `loop(relay)` means plan,
-implement, review, fix, repeat until the gate is green or the budget is spent — which is
+implement, review, fix, repeat until the gate is green or the budget is spent - which is
 exactly how this project itself was built.
 
 ### The constraint this places on Plan B
 
-Formations are deliberately **not** built in Plan A or Plan B — they rest on the gate and on
+Formations are deliberately **not** built in Plan A or Plan B - they rest on the gate and on
 delegation, and building them before those exist would be building on air. But they impose one
 requirement on Plan B, which is the reason this section is written now rather than later:
 
@@ -906,7 +906,7 @@ feature rather than a debug aid.
 ### Reported and estimated are different columns
 
 Measured on 2026-09-19: claude reports US dollars, kiro reports credits, codex reports tokens
-only, opencode v2 reported nothing. A single total would be a fabrication — but refusing to
+only, opencode v2 reported nothing. A single total would be a fabrication - but refusing to
 normalise is also wrong, because section 22's cost-per-success cannot rank agents without a
 common unit, and a Haiku token is not comparable to an Opus token. Both columns exist:
 
@@ -924,7 +924,7 @@ common unit, and a Haiku token is not comparable to an Opus token. Both columns 
 ```
 
 Rates are the user's numbers and the user's responsibility. konvoy ships none, because a
-built-in table would go stale silently — the failure this whole design keeps refusing. The
+built-in table would go stale silently - the failure this whole design keeps refusing. The
 estimate is computed at read time from the stored tokens and model, never frozen into a row,
 so correcting a rate corrects the history.
 
@@ -936,12 +936,12 @@ change between turns and per-model analysis is the point.
 Three renderings, all pure functions over the store, all drawn with block characters and no
 dependency:
 
-- **An activity heatmap** — weeks across, days down, density by turns per day. The same shape
+- **An activity heatmap** - weeks across, days down, density by turns per day. The same shape
   as a contribution graph, and it answers "when do I actually work, and with whom" at a
   glance.
-- **A sparkline per agent** — spend or turns over the last N days, one line each, so a
+- **A sparkline per agent** - spend or turns over the last N days, one line each, so a
   change in habit is visible without reading numbers.
-- **Share bars** — proportion of turns, tokens or spend per agent, per model, or per kind.
+- **Share bars** - proportion of turns, tokens or spend per agent, per model, or per kind.
 
 `konvoy usage` prints the table; `konvoy usage --chart` adds these. They are separated because
 the table is what you read in a script and the charts are what you read with your eyes.
@@ -949,7 +949,7 @@ the table is what you read in a script and the charts are what you read with you
 ### In a browser
 
 `konvoy dashboard` starts `Bun.serve` on a local port and opens one self-contained page: no
-build step, no npm dependency, no chart library — inline SVG drawn from the same SQLite file,
+build step, no npm dependency, no chart library - inline SVG drawn from the same SQLite file,
 opened read-only. It is ephemeral by default and dies with the command.
 
 It earns its place only where a terminal cannot compete: the **delegation tree** for a
@@ -957,14 +957,14 @@ session, showing which turn caused which and what each branch cost, and the **fo
 view**, showing that a race spent three agents for one accepted answer. Those are shapes, not
 numbers, and a table renders them badly.
 
-Scope is deliberately small — one page, one port, no authentication because it binds to
+Scope is deliberately small - one page, one port, no authentication because it binds to
 localhost, no live socket, refresh to update. A dashboard that grows a build step becomes the
 thing being maintained instead of the orchestrator.
 
 ## 27. Upstream failures and context pressure
 
 A single-agent tool must fail when its provider does. konvoy has four, so the correct response
-to "claude is rate-limited for three hours" is not to stop — it is to carry on with the others
+to "claude is rate-limited for three hours" is not to stop - it is to carry on with the others
 and say so. That is what the convoy is for, and it only works if failures are classified
 rather than lumped together.
 
@@ -977,7 +977,7 @@ rather than lumped together.
 | **quota window exhausted** (the five-hour or weekly cap) | a reset timestamp hours away | **bench the agent until then** and route around it |
 | auth expired mid-session | the CLI's own message | bench and print the exact login command |
 | model overloaded | capacity wording | retry, and suggest a different model if it repeats |
-| the agent itself failed | anything else | it is a turn outcome, not an outage — record and move on |
+| the agent itself failed | anything else | it is a turn outcome, not an outage - record and move on |
 
 **Retry only a turn that produced nothing.** The same predicate the rebind gate uses: no text
 and no tool event. A turn that edited files must never be silently repeated, whatever the
@@ -990,7 +990,7 @@ error said. Every retry is announced, because a silent retry hides both cost and
 - the roster shows it with its reason and when it returns;
 - routing skips it, and a formation with a benched member runs with the rest;
 - it un-benches itself when the time passes, with no user action;
-- its benched turns are excluded from success rates, exactly like an interruption — a quota
+- its benched turns are excluded from success rates, exactly like an interruption - a quota
   wall says nothing about how good an agent is at the work.
 
 If **every** agent is benched, konvoy stops and says when the first one returns. That is the
@@ -1028,7 +1028,7 @@ Claude Code has `--autocompact`.
 Compaction is two facts at once, and konvoy records both: it **costs** tokens to summarise, and
 it **loses detail**. The second is the one that matters between agents.
 
-- **konvoy does not wait for it.** Waiting restores nothing — the detail is already gone, and
+- **konvoy does not wait for it.** Waiting restores nothing - the detail is already gone, and
   the agent's next answer is simply drawn from a thinner memory.
 - **It is recorded on the turn** and shown in the roster, because an agent that just compacted
   is a worse reviewer than it was an hour ago, and that should be visible rather than felt.
@@ -1038,11 +1038,11 @@ it **loses detail**. The second is the one that matters between agents.
   its own earlier position, and a debate where one side has forgotten its argument is not worth
   paying for another round of. The parley closes on its declared decision rule and records that
   it did so because of a compaction.
-- **In `relay`, `party` and `race` it changes nothing** — those agents work from the brief and
+- **In `relay`, `party` and `race` it changes nothing** - those agents work from the brief and
   the repository, not from each other's memory, which is the reason the protocol was built that
   way in section 21.
 
-Where a CLI reports context pressure before it compacts — kiro does — konvoy prefers to hand
+Where a CLI reports context pressure before it compacts - kiro does - konvoy prefers to hand
 off *before* the compaction rather than after, which keeps the detail in the agent that earned
 it instead of in a summary.
 
@@ -1050,7 +1050,7 @@ it instead of in a summary.
 
 Section 21 specifies how one agent hands work to another: the sender writes a bounded envelope
 of intent, konvoy adds machine facts it can compute itself, and anything the receiver can fetch
-travels as a pointer. That protocol assumes a **cooperative sender** — an agent that finishes
+travels as a pointer. That protocol assumes a **cooperative sender** - an agent that finishes
 its turn and describes what it is passing on.
 
 Failover is exactly the case where that assumption fails. A codex that has hit its weekly limit
@@ -1062,13 +1062,13 @@ section closes that gap.
 **Cooperative.** The previous turn ended with a `<<<konvoy … >>>` envelope. konvoy parses it and
 uses the sender's own account of the task, the open questions and the decisions taken.
 
-**Derived.** The previous turn was blocked — `auth`, `rate` or `upstream` — and produced no
+**Derived.** The previous turn was blocked - `auth`, `rate` or `upstream` - and produced no
 envelope. konvoy synthesises a prelude from what it already stores: the session goal, the last
 few turns as prompt-and-answer pairs, and the machine facts.
 
 A derived prelude carries less than a cooperative one and konvoy says so rather than hiding it.
 It knows what was asked and what was answered; it does not know why the previous agent chose its
-approach, or what it had not yet settled — the two things section 21 calls the most valuable part
+approach, or what it had not yet settled - the two things section 21 calls the most valuable part
 of a handoff. The receiving agent is told, in the prelude itself, that this is a failover handoff
 and that the previous agent's intent was never recorded. An agent that knows its context is
 partial asks; one that believes it is complete proceeds.
@@ -1085,12 +1085,12 @@ of it and would cost more than the compression it was meant to save.
 Section 18 measured a per-turn floor near 20,800 tokens. A prelude that grows with session length
 would eventually dominate every turn, so it is capped: the goal always, machine facts always, and
 at most the three most recent turns, each truncated. When turns are dropped, the prelude says how
-many — a receiver that knows it is seeing a window behaves differently from one that believes it
+many - a receiver that knows it is seeing a window behaves differently from one that believes it
 is seeing everything.
 
 ## 29. Machine facts travel as a table
 
-konvoy computes the facts it supplies — changed files, commit range, per-agent turns and spend —
+konvoy computes the facts it supplies - changed files, commit range, per-agent turns and spend -
 from git and its own store. These are uniform rows: the same fields repeated per item. That is
 the one shape where a tabular encoding measurably beats JSON, at roughly forty per cent fewer
 tokens with equal or better retrieval accuracy, so konvoy emits them as a table rather than as
@@ -1112,7 +1112,7 @@ konvoy emits this format directly. It takes no dependency to print a table.
 
 ## 30. Failover between agents
 
-A user names an ordered chain — "codex, then claude, then kiro" — globally or for one session.
+A user names an ordered chain - "codex, then claude, then kiro" - globally or for one session.
 When the agent at the head of the chain cannot work, konvoy moves to the next one and says so.
 
 ### What counts as blocked
@@ -1125,7 +1125,7 @@ When the agent at the head of the chain cannot work, konvoy moves to the next on
 | `crash`, `timeout` | never switch | the fault is in the work, and the next agent inherits it |
 | `interrupted` | never switch | the user stopped it |
 
-`upstream` is a new kind. It covers an API that is reachable but refusing — at capacity,
+`upstream` is a new kind. It covers an API that is reachable but refusing - at capacity,
 overloaded, temporarily unavailable, service unavailable, server busy, internal server error,
 upstream connect failures. Those predicates are taken from opencode's own classifier rather than
 invented.
@@ -1133,8 +1133,8 @@ invented.
 ### Told, not asked
 
 The user configured the chain, so konvoy does not ask permission to follow it. It reports which
-agent was blocked, what it said — the reset time travels inside the message text, so quoting it
-is enough — and which agent took over. One line, not a stream of retries.
+agent was blocked, what it said - the reset time travels inside the message text, so quoting it
+is enough - and which agent took over. One line, not a stream of retries.
 
 ### No failback
 
@@ -1150,7 +1150,7 @@ unrelated work. This is the first writer of a column the schema has carried sinc
 
 ## 31. Output style
 
-konvoy has no model of its own, so it cannot reformat an agent's answer — it can only ask for a
+konvoy has no model of its own, so it cannot reformat an agent's answer - it can only ask for a
 different one. A style is therefore a request that travels with the prompt, and whatever comes
 back is what gets stored. There is no shorter view over a fuller record.
 
@@ -1160,7 +1160,7 @@ by section 21 and nobody is watching it for omissions.
 
 ### Why this is safe where compression would not be
 
-`brief` removes what carries no information — preamble, recap, closing pleasantries — and
+`brief` removes what carries no information - preamble, recap, closing pleasantries - and
 restructures what remains: lead with the action, number multi-step work, end with one concrete
 next step. Nothing is compressed; filler is dropped.
 
@@ -1175,7 +1175,7 @@ handoff does not know to.
 ### konvoy owns the intent, not the text
 
 `brief` names a short set of rules konvoy defines. It does not vendor anyone else's prompt.
-Third-party styles exist — some ship as skills for one CLI and as nothing at all for the others —
+Third-party styles exist - some ship as skills for one CLI and as nothing at all for the others -
 and a copy taken into konvoy would rot with no owner and no way to tell it had. Where a user has
 installed such a skill themselves, `harness: inherit` already exposes it; `konvoy doctor` reports
 which ones it can see, and that is the whole of konvoy's involvement.
@@ -1198,7 +1198,7 @@ it a writer.
 
 ### The simplest honest mechanism
 
-A session may configure a gate command — `bun test`, `cargo check`, anything that exits zero or
+A session may configure a gate command - `bun test`, `cargo check`, anything that exits zero or
 non-zero. After a turn that changed files, konvoy runs it and records the verdict on the turn.
 
 konvoy does not judge the work itself. It has no model, and a gate that asked another agent to
@@ -1210,14 +1210,14 @@ and already exists in every project worth running a convoy on.
 A gate runs automatically after a turn, which makes it a different kind of setting from the rest
 of the configuration: a cloned repository that could name the command would have konvoy execute
 it unprompted. That is the same path `agents.<id>.bin` opened and section 30's trust rules
-closed, and it reopens wider here — `bin` at least required the user to be using that agent,
+closed, and it reopens wider here - `bin` at least required the user to be using that agent,
 where a gate runs on every turn.
 
 So `gate.command` is privileged: only the global configuration may set it, and a project layer
 that tries is ignored with a warning, exactly as `bin`, `permission` and `harness` already are.
 
-This costs something honest. A gate is naturally a per-project fact — `bun test` in one
-repository, `cargo test` in another — and a single global command serves a developer who works
+This costs something honest. A gate is naturally a per-project fact - `bun test` in one
+repository, `cargo test` in another - and a single global command serves a developer who works
 in one language better than one who does not. The alternative designs each carry their own
 weight: an allowlist in the global config with the project choosing among it, or a trust prompt
 remembered per directory. Neither is written now, because the safe and simple version can be
@@ -1234,11 +1234,11 @@ Where no gate is configured, `gate_passed` stays null and every rate reads as a 
 
 ## 33. Roadmap
 
-**v1** — sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
+**v1** - sessions, bindings, ledger, headless turns, attach, delegation over MCP, roster,
 status, doctor, config, update.
-**v1.x** — `harness: minimal` for kiro (a generated agent profile) and opencode
+**v1.x** - `harness: minimal` for kiro (a generated agent profile) and opencode
 (`OPENCODE_CONFIG`); adopting a session the user started outside konvoy (`attach --id`);
 the codex rate-limit stream shape captured, so an informational error item can be told from a
 failed turn (audit 2026-09-21, C-pre-1).
-**v2** — `drive()` over each CLI's persistent protocol: live streaming, steer, cancel.
-**v3** — parallel worktrees by default with conflict-aware merge; tmux-backed live attach.
+**v2** - `drive()` over each CLI's persistent protocol: live streaming, steer, cancel.
+**v3** - parallel worktrees by default with conflict-aware merge; tmux-backed live attach.

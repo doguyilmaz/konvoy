@@ -1,12 +1,12 @@
-// bun run smoke — two live turns per installed, authenticated agent, run through konvoy's own
+// bun run smoke - two live turns per installed, authenticated agent, run through konvoy's own
 // send() so the real adapter, parser, store and resume path are exercised instead of a
 // reimplementation. The first turn stores a nonce; the second resumes the binding konvoy
 // captured and asks for it back. That second answer is the only cheap proof of konvoy's central
-// promise — that a bound session carries its context — and every unit test of it uses fakes.
+// promise - that a bound session carries its context - and every unit test of it uses fakes.
 // This spends real agent quota: opt-in only, and never reachable from `bun test`.
 //
 // The fixtures in tests/fixtures/streams/ are frozen against a CLI version captured on the day
-// they were recorded (see provenance.json) — they prove a parser handled that day's output, not
+// they were recorded (see provenance.json) - they prove a parser handled that day's output, not
 // today's. A passing smoke run against a newer installed version is the signal that it's time
 // to re-capture; this script says so rather than staying silently green while the fixture ages.
 import type { Database } from 'bun:sqlite'
@@ -58,7 +58,7 @@ export type AgentOutcome =
 function versionDrift(agent: AgentId, installed: string | null): string | null {
   const captured = provenance[agent]?.cliVersion
   if (!installed || !captured || installed === captured) return null
-  return `installed ${installed}, fixtures captured from ${captured} — consider re-capturing tests/fixtures/streams/${agent}*.jsonl`
+  return `installed ${installed}, fixtures captured from ${captured} - consider re-capturing tests/fixtures/streams/${agent}*.jsonl`
 }
 
 export async function runSmoke(deps: SmokeDeps): Promise<AgentOutcome[]> {
@@ -79,11 +79,11 @@ export async function runSmoke(deps: SmokeDeps): Promise<AgentOutcome[]> {
 
     const auth = await detectAuth(agent, { bin: settings.bin, deps: deps.detectDeps })
     if (auth.authed === false) {
-      results.push({ agent, status: 'skipped', reason: `not logged in — ${loginHint(agent)}` })
+      results.push({ agent, status: 'skipped', reason: `not logged in - ${loginHint(agent)}` })
       continue
     }
 
-    const session = newSession(deps.db, { cwd: deps.tmpDir, goal: `konvoy smoke — ${agent}`, lead: agent })
+    const session = newSession(deps.db, { cwd: deps.tmpDir, goal: `konvoy smoke - ${agent}`, lead: agent })
 
     try {
       const opts = { timeoutSec: deps.timeoutSec ?? DEFAULT_TIMEOUT_SEC }
@@ -116,7 +116,7 @@ export async function runSmoke(deps: SmokeDeps): Promise<AgentOutcome[]> {
         results.push({
           agent,
           status: 'failed',
-          reason: `resume did not carry context — stored ${word}, got "${oneLine(second.final, 80)}"`,
+          reason: `resume did not carry context - stored ${word}, got "${oneLine(second.final, 80)}"`,
         })
         continue
       }
@@ -163,11 +163,11 @@ async function main(): Promise<number> {
   const tmpDir = await makeTmpDir()
   const db = openDb(':memory:')
   try {
-    // cwd is the throwaway dir, not the repo — a project-level .konvoy/config.jsonc here would
+    // cwd is the throwaway dir, not the repo - a project-level .konvoy/config.jsonc here would
     // otherwise leak into a run meant to be isolated. The global layer still applies, since that
     // is where a real agents.opencode.bin override (opencode has none on PATH) would live.
     const cfg = await loadConfig({ cwd: tmpDir })
-    console.log('smoke — two live turns per installed, authenticated agent, the second resumed (spends real quota)\n')
+    console.log('smoke - two live turns per installed, authenticated agent, the second resumed (spends real quota)\n')
     const results = await runSmoke({ db, cfg, tmpDir })
     for (const r of results) console.log(formatOutcome(r))
 

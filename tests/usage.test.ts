@@ -52,7 +52,7 @@ test('the gate rate counts only turns that have a verdict', () => {
   const d = db()
   const s = createSession(d, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
   // asymmetric on purpose (2 known, 1 unknown): a 1/1 split can't tell "known" and
-  // "unknown" apart if the CASE that computes gate_known is inverted — both readings
+  // "unknown" apart if the CASE that computes gate_known is inverted - both readings
   // land on 1. This shape breaks under inversion (2 vs 1) instead of surviving it.
   const a = recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
   const b = recordTurn(d, { sessionId: s.id, agent: 'codex', prompt: 'p', final: 'f', costUsd: 0, exitCode: 0 })
@@ -122,7 +122,7 @@ test('an unreported cost shows as a dash, never as zero', () => {
 })
 
 test('the spend column reads a dash, not a zero, when nothing was reported', () => {
-  // gateKnown is 1 here so the GATE column reads "1/1", not "-" — isolating the SPEND
+  // gateKnown is 1 here so the GATE column reads "1/1", not "-" - isolating the SPEND
   // cell from the coincidental dash the GATE column would otherwise contribute.
   const out = formatUsage([
     { agent: 'opencode', turns: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0, gatePassed: 1, gateKnown: 1 },
@@ -229,7 +229,7 @@ test('an agent whose model changed mid-session is priced per model, not by one r
     { agent: 'codex', model: 'cheap', inputTokens: 1_000_000, outputTokens: 0, costUsd: 0, credits: 0 },
     { agent: 'codex', model: 'expensive', inputTokens: 1_000_000, outputTokens: 0, costUsd: 0, credits: 0 },
   ]
-  // per-model sum: 1*1 + 1*100 = 101 — pricing the 2M aggregate as entirely "cheap" would give 2,
+  // per-model sum: 1*1 + 1*100 = 101 - pricing the 2M aggregate as entirely "cheap" would give 2,
   // entirely "expensive" would give 200; the correct answer matches neither
   const out = formatUsage(rows, pricing, modelRows)
   const line = out.split('\n').find((l) => l.startsWith('codex'))!
@@ -243,7 +243,7 @@ test('turns with model = NULL do not erase an agent estimate that comes from cre
     { agent: 'kiro', turns: 2, inputTokens: 500, outputTokens: 50, costUsd: 0, credits: 0.4, gatePassed: 0, gateKnown: 0 },
   ]
   const modelRows: Parameters<typeof formatUsage>[2] = [
-    // a pre-migration turn: tokens recorded, no model, no credits — must not poison the total
+    // a pre-migration turn: tokens recorded, no model, no credits - must not poison the total
     { agent: 'kiro', model: null, inputTokens: 500, outputTokens: 50, costUsd: 0, credits: 0 },
     // the turn that actually carries the charge
     { agent: 'kiro', model: null, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0.4 },
@@ -364,7 +364,7 @@ test('usage with no session in this directory reports the standard error and exi
     err.mockRestore()
   }
   expect(code).toBe(2)
-  expect(lines).toContain('no konvoy session here — run `konvoy new "<goal>"` first')
+  expect(lines).toContain('no konvoy session here - run `konvoy new "<goal>"` first')
 })
 
 test('a turn after midnight is counted on its own local day, not the UTC one', () => {
@@ -457,5 +457,5 @@ test('usage for a session with zero turns reports that and exits 0', () => {
     log.mockRestore()
   }
   expect(code).toBe(0)
-  expect(lines).toContain('session s — no turns yet')
+  expect(lines).toContain('session s - no turns yet')
 })

@@ -36,7 +36,7 @@ test('it reaches the command line', () => {
   expect(claudeAdapter.turn(ctx({ delegation: true })).cmd.join(' ')).toContain('<<<konvoy')
 })
 
-// Not in the brief's verbatim test list — added to catch a mutation that would otherwise be
+// Not in the brief's verbatim test list - added to catch a mutation that would otherwise be
 // MISSED: dropping the "emit nothing" sentence from DELEGATION_INSTRUCTION changes no other
 // assertion above, since those only check for the block's presence, not its full content.
 test('the instruction says a turn not handing off emits nothing', () => {

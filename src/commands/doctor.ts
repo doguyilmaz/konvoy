@@ -12,7 +12,7 @@ export function distinctPaths(stdout: string): string[] {
 }
 
 // engine, policy.maxDelegationDepth and policy.isolation are in the schema and the spec, but
-// nothing reads them yet — the delegation work will. Comparing the parsed policy values against
+// nothing reads them yet - the delegation work will. Comparing the parsed policy values against
 // their schema defaults is an approximation (a value set explicitly equal to the default reads
 // as unset), acceptable for an informational line with no behavioural effect.
 export function acceptedButUnusedKeys(cfg: Config): string[] {
@@ -59,10 +59,10 @@ export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number>
     const auth = await detectAuth(agent, { bin: settings.bin, deps })
     if (auth.authed === false) {
       if (required.has(agent)) {
-        console.log(`x ${agent}: ${auth.detail} — ${loginHint(agent)}`)
+        console.log(`x ${agent}: ${auth.detail} - ${loginHint(agent)}`)
         problems++
       } else {
-        console.log(`- ${agent}: ${auth.detail} — ${loginHint(agent)}`)
+        console.log(`- ${agent}: ${auth.detail} - ${loginHint(agent)}`)
       }
       continue
     }
@@ -73,13 +73,13 @@ export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number>
     }
 
     if (agent === 'opencode' && !settings.model) {
-      console.log(`! opencode: no model configured — it returns HTTP 403 without an explicit -m`)
+      console.log(`! opencode: no model configured - it returns HTTP 403 without an explicit -m`)
     }
 
     const shadow = Bun.spawnSync(['which', '-a', settings.bin ?? getAdapter(agent).bin])
     const paths = distinctPaths(new TextDecoder().decode(shadow.stdout))
     if (paths.length > 1 && !settings.bin) {
-      console.log(`! ${agent}: ${paths.length} binaries on PATH, "${paths[0]}" wins — set agents.${agent}.bin to be explicit`)
+      console.log(`! ${agent}: ${paths.length} binaries on PATH, "${paths[0]}" wins - set agents.${agent}.bin to be explicit`)
     }
 
     if (settings.model) {
@@ -90,13 +90,13 @@ export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number>
 
   for (const [model, users] of models) {
     if (users.length > 1) {
-      console.log(`! ${users.join(' and ')} both run ${model} — they will not disagree with each other`)
+      console.log(`! ${users.join(' and ')} both run ${model} - they will not disagree with each other`)
     }
   }
 
   const unused = acceptedButUnusedKeys(cfg)
   if (unused.length > 0) {
-    console.log(`i ${unused.join(', ')} — accepted but not yet used`)
+    console.log(`i ${unused.join(', ')} - accepted but not yet used`)
   }
 
   console.log(problems === 0 ? '\nno problems found' : `\n${problems} problem(s) found`)

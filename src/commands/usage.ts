@@ -37,12 +37,12 @@ export function cmdUsage(
   } else {
     session = opts.slug ? getSessionBySlug(db, opts.slug) : currentSession(db, cwd)
     if (!session) {
-      console.error('no konvoy session here — run `konvoy new "<goal>"` first')
+      console.error('no konvoy session here - run `konvoy new "<goal>"` first')
       return 2
     }
     rows = usageForSession(db, session.id)
     if (rows.length === 0) {
-      console.log(`session ${session.slug} — no turns yet`)
+      console.log(`session ${session.slug} - no turns yet`)
       return 0
     }
     console.log(`session ${session.slug}`)

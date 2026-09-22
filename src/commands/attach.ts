@@ -26,7 +26,7 @@ export function attachPlan(db: Database, session: Session, agent: AgentId, bin?:
   return { ...plan, cmd, cwd: session.cwd }
 }
 
-// Bind a session the user started outside konvoy — the id a CLI prints for its own resume
+// Bind a session the user started outside konvoy - the id a CLI prints for its own resume
 // command. The same shape check as every stream-captured id applies at the write path; the
 // binding is only reported as adopted if it actually holds the id.
 export function adoptForeignSession(
@@ -52,12 +52,12 @@ export interface AttachOptions {
 export async function cmdAttach(db: Database, cwd: string, agent: string, opts: AttachOptions = {}): Promise<number> {
   const { slug, bin } = opts
   if (!agentIds.includes(agent as AgentId)) {
-    console.error(`unknown agent "${agent}" — expected one of ${agentIds.join(', ')}`)
+    console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
     return 2
   }
   const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
   if (!session) {
-    console.error('no konvoy session here — run `konvoy new "<goal>"` first')
+    console.error('no konvoy session here - run `konvoy new "<goal>"` first')
     return 2
   }
 
@@ -73,10 +73,10 @@ export async function cmdAttach(db: Database, cwd: string, agent: string, opts: 
       permission: opts.permission ?? 'edit',
     })
     if (!adopted) {
-      console.error(`konvoy: ${agent} not bound — the id was refused; nothing opened`)
+      console.error(`konvoy: ${agent} not bound - the id was refused; nothing opened`)
       return 2
     }
-    console.error(`konvoy: ${agent} bound to session ${oneLine(opts.id, 60)} — the next turn resumes it; opening it now`)
+    console.error(`konvoy: ${agent} bound to session ${oneLine(opts.id, 60)} - the next turn resumes it; opening it now`)
   }
 
   const plan = attachPlan(db, session, agent as AgentId, bin)

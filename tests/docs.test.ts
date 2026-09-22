@@ -10,8 +10,8 @@ function fencedBlocks(lang: string): string[] {
   return [...readme.matchAll(re)].map((m) => m[1]!)
 }
 
-// Every `konvoy <word>` invocation the README actually shows a reader — inside ```bash
-// fences (comments stripped) and inline `konvoy ...` code spans — not prose mentions of
+// Every `konvoy <word>` invocation the README actually shows a reader - inside ```bash
+// fences (comments stripped) and inline `konvoy ...` code spans - not prose mentions of
 // the word "konvoy" itself.
 function konvoyInvocations(): string[] {
   const words: string[] = []
@@ -47,8 +47,8 @@ test('every "konvoy <word>" shown in README.md is a real command or alias', () =
 })
 
 test("every --flag README.md gives konvoy is one konvoy reads", async () => {
-  // Only konvoy's own flags. The README also documents facts about the four CLIs it drives —
-  // that claude takes --session-id, that opencode's --session continues rather than creates —
+  // Only konvoy's own flags. The README also documents facts about the four CLIs it drives -
+  // that claude takes --session-id, that opencode's --session continues rather than creates -
   // and konvoy's source has no reason to read those. Scanning the whole file made the test
   // shape the prose instead of checking it: the flags got written as "session-id flag" to keep
   // it quiet, which is worse documentation than the thing the test was protecting.

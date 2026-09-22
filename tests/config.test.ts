@@ -42,7 +42,7 @@ test('a per-agent value beats the defaults block', async () => {
   expect(explain(cfg, 'kiro', 'effort').source).toBe('defaults')
 })
 
-// These four assert the schema's strictness through the global layer — the user's own file, where
+// These four assert the schema's strictness through the global layer - the user's own file, where
 // a mistake stays fatal. The same inputs in a project file are reported and set aside instead
 // (config-security.test.ts), because a cloned repository's mistake must not stop konvoy.
 test('an unknown key is rejected with its path', async () => {

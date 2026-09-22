@@ -79,7 +79,7 @@ test('attach opens the session interactively', () => {
 })
 
 // The stream this replaced was captured from a turn that called no tools, and opencode only
-// emits step_finish once a step does tool work — so the fixture never carried usage and this
+// emits step_finish once a step does tool work - so the fixture never carried usage and this
 // test asserted its absence as correct. That is how an unexercised branch reads as covered.
 // This capture does call a tool: it carries cost and tokens, and pins both.
 test('the captured v2 success stream parses into session, text, usage and cost', async () => {
@@ -90,7 +90,7 @@ test('the captured v2 success stream parses into session, text, usage and cost',
     foreignId: 'ses_f3d905791ffecnY1rPhgZKHUWz',
   })
   expect(events.find((e) => e.t === 'text')).toEqual({ t: 'text', text: 'OK' })
-  // re-captured against 2.0.11: input + cache.read + cache.write = 16596 — opencode's `input` is the uncached
+  // re-captured against 2.0.11: input + cache.read + cache.write = 16596 - opencode's `input` is the uncached
   // remainder, as its own `total` arithmetic shows (input+output+cache = total). Whether its
   // `reasoning` count sits inside `output` is not established, so output is left untouched.
   expect(events.find((e) => e.t === 'usage')).toEqual({

@@ -3,7 +3,7 @@ import { oneLine, safeText, stripControlChars } from '../src/adapters/types'
 
 // What an agent writes and what a CLI puts on stderr both reach the terminal through konvoy's
 // own notices and output. Escape sequences there can erase the `· <tool>` lines konvoy just
-// printed — its record of what the agent did — so nothing from either source is printed raw.
+// printed - its record of what the agent did - so nothing from either source is printed raw.
 test('stripControlChars removes whole escape sequences, not just the ESC byte', () => {
   // dropping only ESC would leave "[31m" behind in a session id or a notice
   expect(stripControlChars('a\u001b[31mb\u001b]0;title\u0007c\u001bMd\u0000e')).toBe('abcde')

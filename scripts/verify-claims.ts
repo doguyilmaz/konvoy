@@ -1,10 +1,10 @@
 import { agentIds, getAdapter } from '../src/adapters'
 import type { AgentId, Binding, TurnContext } from '../src/types'
 
-// bun run verify:claims — checks the claims konvoy's own docs make about the four agent
+// bun run verify:claims - checks the claims konvoy's own docs make about the four agent
 // CLIs against what --help actually says on this machine. This is the standing form of a
 // manual check that already caught one stale belief (a `doctor` claim no command ever
-// implemented); the other kind of stale belief — silent tilde in a `bin` path — is a
+// implemented); the other kind of stale belief - silent tilde in a `bin` path - is a
 // separate, config-level bug this script does not reach.
 //
 // Every check is a --help / --version spawn. Never a prompt, never quota.
@@ -40,7 +40,7 @@ function expandHome(p: string): string {
 }
 
 // konvoy's own README used to tell readers to write a `~` path into `bin` and let it
-// silently do nothing — so this resolver expands `~` itself instead of trusting the shell.
+// silently do nothing - so this resolver expands `~` itself instead of trusting the shell.
 async function resolveBin(candidates: string[]): Promise<string | null> {
   for (const raw of candidates) {
     const bin = expandHome(raw)
@@ -53,7 +53,7 @@ const BIN_CANDIDATES: Record<string, string[]> = {
   claude: ['claude'],
   codex: ['codex'],
   'kiro-cli': ['kiro-cli'],
-  // opencode's own installer puts it here by default, off $PATH — the exact path the
+  // opencode's own installer puts it here by default, off $PATH - the exact path the
   // README's config example points `bin` at.
   opencode: ['opencode', '~/.opencode/bin/opencode'],
 }
@@ -67,13 +67,13 @@ function updateCheck(name: keyof typeof BIN_CANDIDATES, args: string[]): Check {
     label: `${name} ${args[0]} subcommand exists`,
     run: async () => {
       const bin = await resolveBin(BIN_CANDIDATES[name])
-      if (!bin) return { ok: false, detail: `${name} not found on this machine — cannot verify` }
+      if (!bin) return { ok: false, detail: `${name} not found on this machine - cannot verify` }
       const result = await run([bin, ...args])
       if (!result) return { ok: false, detail: `${bin} ${args.join(' ')} failed to spawn` }
       if (result.exitCode !== 0) {
         return { ok: false, detail: `${bin} ${args.join(' ')} exited ${result.exitCode}: ${firstLine(result.output)}` }
       }
-      return { ok: true, detail: `${bin} ${args.join(' ')} — exit 0` }
+      return { ok: true, detail: `${bin} ${args.join(' ')} - exit 0` }
     },
   }
 }
@@ -88,7 +88,7 @@ function helpCheck(
     label,
     run: async () => {
       const bin = await resolveBin(BIN_CANDIDATES[name])
-      if (!bin) return { ok: false, detail: `${name} not found on this machine — cannot verify` }
+      if (!bin) return { ok: false, detail: `${name} not found on this machine - cannot verify` }
       const result = await run([bin, ...helpArgs])
       if (!result) return { ok: false, detail: `${bin} ${helpArgs.join(' ')} failed to spawn` }
       return verify(result.output)
@@ -117,7 +117,7 @@ const checks: Check[] = [
     (out) =>
       SESSION_ID_FLAG.test(out)
         ? { ok: false, detail: 'codex now advertises --session-id in `codex exec --help`' }
-        : { ok: true, detail: 'absent from `codex exec --help` — only `resume <id>` for an existing session' },
+        : { ok: true, detail: 'absent from `codex exec --help` - only `resume <id>` for an existing session' },
   ),
   helpCheck(
     'kiro-cli',
@@ -126,7 +126,7 @@ const checks: Check[] = [
     (out) =>
       SESSION_ID_FLAG.test(out)
         ? { ok: false, detail: 'kiro-cli now advertises --session-id in `kiro-cli chat --help`' }
-        : { ok: true, detail: 'absent from `kiro-cli chat --help` — only `--resume-id` for an existing session' },
+        : { ok: true, detail: 'absent from `kiro-cli chat --help` - only `--resume-id` for an existing session' },
   ),
 
   helpCheck('opencode', ['run', '--help'], 'opencode --session exists', (out) =>
@@ -150,7 +150,7 @@ const checks: Check[] = [
 // Every flag an adapter actually places on a command line, checked against that CLI's own
 // --help. The captured fixtures prove each flag worked on the day of capture; this proves it
 // still parses today. The list is built from the adapters' real argv across every permission,
-// harness and binding state — not kept by hand — so a flag added to an adapter is checked here
+// harness and binding state - not kept by hand - so a flag added to an adapter is checked here
 // without anyone remembering to add it.
 const AGENT_KEY: Record<AgentId, keyof typeof BIN_CANDIDATES> = { claude: 'claude', codex: 'codex', kiro: 'kiro-cli', opencode: 'opencode' }
 const TURN_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['exec', '--help'], kiro: ['chat', '--help'], opencode: ['run', '--help'] }
@@ -192,7 +192,7 @@ function flagCheck(id: AgentId, kind: 'turn' | 'attach'): Check {
     label: `${id} ${kind}() flags all appear in its --help`,
     run: async () => {
       const bin = await resolveBin(BIN_CANDIDATES[AGENT_KEY[id]])
-      if (!bin) return { ok: false, detail: `${id} not found on this machine — cannot verify` }
+      if (!bin) return { ok: false, detail: `${id} not found on this machine - cannot verify` }
       const helpArgs = kind === 'turn' ? TURN_HELP[id] : ATTACH_HELP[id]
       const result = await run([bin, ...helpArgs])
       if (!result) return { ok: false, detail: `${bin} ${helpArgs.join(' ')} failed to spawn` }
@@ -218,7 +218,7 @@ function authCheck(id: AgentId): Check {
     label: `${id} auth-status subcommand exists (${AUTH_ARGS[id].join(' ')})`,
     run: async () => {
       const bin = await resolveBin(BIN_CANDIDATES[AGENT_KEY[id]])
-      if (!bin) return { ok: false, detail: `${id} not found on this machine — cannot verify` }
+      if (!bin) return { ok: false, detail: `${id} not found on this machine - cannot verify` }
       const result = await run([bin, ...AUTH_ARGS[id]])
       if (!result) return { ok: false, detail: `${bin} ${AUTH_ARGS[id].join(' ')} failed to spawn` }
       if (result.exitCode === 127) return { ok: false, detail: 'exit 127' }
@@ -231,13 +231,13 @@ function authCheck(id: AgentId): Check {
 for (const id of agentIds) checks.push(authCheck(id))
 
 // `codex exec resume` parses only its own flags; an exec flag placed after `resume` is rejected
-// at run time. Found by a live resumed turn on 2026-09-21 after the flag check above passed —
+// at run time. Found by a live resumed turn on 2026-09-21 after the flag check above passed -
 // it read the flags against `codex exec --help`, the wrong surface for the bound variant.
 checks.push({
   label: 'codex: no flag follows resume unless codex exec resume --help lists it',
   run: async () => {
     const bin = await resolveBin(BIN_CANDIDATES.codex)
-    if (!bin) return { ok: false, detail: 'codex not found on this machine — cannot verify' }
+    if (!bin) return { ok: false, detail: 'codex not found on this machine - cannot verify' }
     const help = await run([bin, 'exec', 'resume', '--help'])
     if (!help) return { ok: false, detail: 'codex exec resume --help failed to spawn' }
     const bound: Binding = { sessionId: 's', agent: 'codex', foreignId: 'x', model: null, effort: 'high', permission: 'edit', status: 'bound', turns: 1, costUsd: 0, credits: 0, lastSeen: null }
@@ -252,11 +252,11 @@ checks.push({
 })
 
 let staleCount = 0
-console.log("verify:claims — checking konvoy's documented CLI claims against what's installed here\n")
+console.log("verify:claims - checking konvoy's documented CLI claims against what's installed here\n")
 for (const check of checks) {
   const { ok, detail } = await check.run()
   if (!ok) staleCount++
-  console.log(`[${ok ? 'ok   ' : 'stale'}] ${check.label} — ${detail}`)
+  console.log(`[${ok ? 'ok   ' : 'stale'}] ${check.label} - ${detail}`)
 }
 
 console.log(`\n${checks.length - staleCount} ok, ${staleCount} stale`)

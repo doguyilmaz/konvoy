@@ -7,7 +7,7 @@ import type { DetectDeps } from '../src/core/detect'
 import { runSmoke } from '../scripts/smoke'
 
 // runSmoke is the one place konvoy proves, against a real CLI, that a resumed binding carries
-// its context. Its own logic — store a nonce, resume, demand it back — is proven here with
+// its context. Its own logic - store a nonce, resume, demand it back - is proven here with
 // fakes that either remember the nonce or do not, so a false pass or a false fail in the
 // script cannot hide behind quota.
 const detectDeps: DetectDeps = {
@@ -42,7 +42,7 @@ function fakeSession(remembers: boolean): Adapter {
 
 test('an agent whose resumed session carries the nonce passes', async () => {
   const db = openDb(':memory:')
-  // one fake for both turns — send() asks adapterFor() per turn, and the memory lives in the fake
+  // one fake for both turns - send() asks adapterFor() per turn, and the memory lives in the fake
   const adapter = fakeSession(true)
   const results = await runSmoke({
     db, cfg: configSchema.parse({}), tmpDir: process.cwd(), agents: ['claude'], detectDeps, adapterFor: () => adapter,
@@ -58,5 +58,5 @@ test('an agent whose resumed session forgets the nonce fails, and the reason say
     db, cfg: configSchema.parse({}), tmpDir: process.cwd(), agents: ['claude'], detectDeps, adapterFor: () => adapter,
   })
   expect(results[0]?.status).toBe('failed')
-  expect((results[0] as { reason: string }).reason).toMatch(/resume did not carry context — stored [0-9a-f]{6}, got "I do not know"/)
+  expect((results[0] as { reason: string }).reason).toMatch(/resume did not carry context - stored [0-9a-f]{6}, got "I do not know"/)
 })

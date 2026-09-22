@@ -23,7 +23,7 @@ export function estimateUsd(row: Priced, pricing: Pricing): number | null {
     const rate = pricing.models[row.model]
     if (rate) {
       // inputTokens is the whole context sent, cache reads included, and those bill at a
-      // tenth of this rate — so a cache-heavy turn estimates high. Only turns whose CLI
+      // tenth of this rate - so a cache-heavy turn estimates high. Only turns whose CLI
       // reported no cost of its own reach here, which today is never claude's.
       return (row.inputTokens / 1_000_000) * rate.inputPerMTok +
         (row.outputTokens / 1_000_000) * rate.outputPerMTok
@@ -33,7 +33,7 @@ export function estimateUsd(row: Priced, pricing: Pricing): number | null {
   return null
 }
 
-// pricing defaults to empty, so an unconfigured user must never see a ~USD column of dashes —
+// pricing defaults to empty, so an unconfigured user must never see a ~USD column of dashes -
 // the column exists only once there's at least one rate to estimate from
 export function isPricingConfigured(pricing: Pricing): boolean {
   return Object.keys(pricing.models).length > 0 || Object.keys(pricing.credits).length > 0
@@ -50,7 +50,7 @@ export interface ModelUsage {
 
 // Summed per model, never priced once on the aggregate: a session that ran half its turns on
 // an expensive model and half on a cheap one must not be priced as though it used either one
-// throughout — that's the whole reason `model` lives on the turn instead of the binding.
+// throughout - that's the whole reason `model` lives on the turn instead of the binding.
 export function estimateAgentUsd(agent: AgentId, rows: ModelUsage[], pricing: Pricing): number | null {
   const mine = rows.filter((r) => r.agent === agent)
   // An agent bills one way or the other. Kiro charges credits and reports token counts beside

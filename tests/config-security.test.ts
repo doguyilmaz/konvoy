@@ -118,7 +118,7 @@ test('turnTimeoutSec under the cap is left alone', async () => {
   expect(cfg.policy.turnTimeoutSec).toBe(1200)
 })
 
-// opencode names models as `provider/model` — its own `--help` says so — and MODEL_PATTERN had no
+// opencode names models as `provider/model` - its own `--help` says so - and MODEL_PATTERN had no
 // `/`, so every opencode model a user configured was stripped with a warning and opencode ran on
 // its default model instead. `#` stays excluded: the variant after it is konvoy's effort dial.
 test('a provider/model value survives for opencode; a leading dash and a variant suffix still do not', async () => {
@@ -142,7 +142,7 @@ test('a provider/model value survives for opencode; a leading dash and a variant
 })
 
 // Privileged project keys were dropped with a warning while an unrecognized or mistyped project
-// key was fatal for every command in that directory — a stranger's repository could stop konvoy
+// key was fatal for every command in that directory - a stranger's repository could stop konvoy
 // there. The project layer is the lower-trust one: its mistakes are reported and the layer is
 // set aside; the user's own global file stays strict.
 test('an invalid project config is reported and ignored, while an invalid global config still stops konvoy', async () => {

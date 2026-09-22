@@ -27,7 +27,7 @@ export interface DashboardData {
 }
 
 // collect is a pure read of the same tables `konvoy usage --chart` reads, through the same
-// queries — a parallel query here is exactly how the two views would start disagreeing
+// queries - a parallel query here is exactly how the two views would start disagreeing
 export function collect(db: Database, cfg: Config, sessionId?: string): DashboardData {
   const rows = sessionId ? usageForSession(db, sessionId) : usageAcrossSessions(db)
   const modelRows = usageByAgentModel(db, sessionId)
@@ -64,7 +64,7 @@ function escape(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 }
 
-// every day between the first and last, inclusive — gaps filled with zero downstream — so
+// every day between the first and last, inclusive - gaps filled with zero downstream - so
 // bars line up between agents the same way the terminal's sparklines line up columns
 function expandDays(start: string, end: string): string[] {
   const days: string[] = []
@@ -124,7 +124,7 @@ function agentBarsSvg(rows: { agent: string; day: string; count: number }[]): st
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([agent, dayCounts]) => ({ agent, values: range.map((d) => dayCounts.get(d) ?? 0) }))
 
-  // one shared max across every agent — a per-row scale would draw a quiet agent's two
+  // one shared max across every agent - a per-row scale would draw a quiet agent's two
   // turns at a busy agent's height, hiding exactly the comparison this chart is for
   const sharedMax = Math.max(...series.flatMap((s) => s.values), 1)
 
@@ -188,7 +188,7 @@ export function renderPage(data: DashboardData): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>konvoy dashboard — ${title}</title>
+<title>konvoy dashboard - ${title}</title>
 <style>${STYLE}</style>
 </head>
 <body>

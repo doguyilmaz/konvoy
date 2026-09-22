@@ -16,12 +16,12 @@ export async function cmdSend(
   slug?: string,
 ): Promise<number> {
   if (!agentIds.includes(agent as AgentId)) {
-    console.error(`unknown agent "${agent}" — expected one of ${agentIds.join(', ')}`)
+    console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
     return 2
   }
   const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
   if (!session) {
-    console.error('no konvoy session here — run `konvoy new "<goal>"` first')
+    console.error('no konvoy session here - run `konvoy new "<goal>"` first')
     return 2
   }
 
@@ -51,7 +51,7 @@ export interface SendOutcome {
 
 // The exit code is decided here, once, from the same two facts turn.ts keeps separate: whether
 // output was produced (result.final) and whether the agent is now blocked (result.error.kind).
-// A turn that answered and then hit a limit is both successful and blocked — it prints what it
+// A turn that answered and then hit a limit is both successful and blocked - it prints what it
 // produced, plus the one line saying the agent can't keep going, and exits 0.
 export function decideOutcome(agent: AgentId, result: TurnResult): SendOutcome {
   if (result.error) {

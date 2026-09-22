@@ -1,9 +1,9 @@
-// bun run scripts/release.ts build [--only darwin|linux]   — compile every target into dist/release/<os>_<arch>/konvoy
-// bun run scripts/release.ts pack                          — tar each built binary with LICENSE and README, write checksums
+// bun run scripts/release.ts build [--only darwin|linux]   - compile every target into dist/release/<os>_<arch>/konvoy
+// bun run scripts/release.ts pack                          - tar each built binary with LICENSE and README, write checksums
 //
 // Split in two so the macOS runner can sign and notarize the darwin binaries between the steps.
 // The build recipe is the one measured on 2026-09-21: esm bytecode for a 10 ms start, sourcemaps
-// for readable stack traces, and no .env or bunfig autoload from the directory konvoy runs in —
+// for readable stack traces, and no .env or bunfig autoload from the directory konvoy runs in -
 // konvoy runs inside other people's repositories and hands its environment to the agents.
 import pkg from '../package.json'
 
@@ -62,7 +62,7 @@ async function pack(): Promise<void> {
     lines.push(`${await sha256(asset)}  ${assetName(t)}`)
     console.log(`packed ${asset}`)
   }
-  if (lines.length === 0) throw new Error('nothing built to pack — run build first')
+  if (lines.length === 0) throw new Error('nothing built to pack - run build first')
   // one file per OS so the two runners' outputs merge into checksums.txt without a collision
   const os = new Set(lines.map((l) => l.split('_')[1]))
   const suffix = os.size === 1 ? [...os][0] : 'all'

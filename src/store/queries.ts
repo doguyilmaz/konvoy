@@ -87,8 +87,8 @@ export function deleteSession(db: Database, id: string): void {
 }
 
 // Every foreign id konvoy has met: UUIDs, kiro's cli_<uuid>_<suffix>, opencode's ses_…. An id
-// is replayed onto a command line — after a flag by three adapters, as a bare positional by
-// codex — so anything else, a leading dash above all, is refused here at the one write path.
+// is replayed onto a command line - after a flag by three adapters, as a bare positional by
+// codex - so anything else, a leading dash above all, is refused here at the one write path.
 const FOREIGN_ID = /^[A-Za-z0-9][\w.:-]*$/
 
 export function upsertBinding(
@@ -100,14 +100,14 @@ export function upsertBinding(
     effort: string
     permission: Permission
     model?: string | null
-    /** set by a turn that failed on auth — the roster then says which agent needs a login */
+    /** set by a turn that failed on auth - the roster then says which agent needs a login */
     status?: 'auth_required'
   },
 ): void {
   const foreignId = input.foreignId !== null && !FOREIGN_ID.test(input.foreignId) ? null : input.foreignId
   if (foreignId === null && input.foreignId !== null) {
     console.error(
-      `konvoy: ignoring foreign session id ${JSON.stringify(input.foreignId.slice(0, 60))} for ${input.agent} — not a shape konvoy places on a command line`,
+      `konvoy: ignoring foreign session id ${JSON.stringify(input.foreignId.slice(0, 60))} for ${input.agent} - not a shape konvoy places on a command line`,
     )
   }
   db.query(
@@ -235,7 +235,7 @@ export function lastTurnId(db: Database, sessionId: string): string | null {
   return row?.id ?? null
 }
 
-// Who actually produced the most recent turn — which, after a failover move, is not
+// Who actually produced the most recent turn - which, after a failover move, is not
 // necessarily the agent `send()` was originally asked to run.
 export function lastTurnAgent(db: Database, sessionId: string): AgentId | null {
   const row = db.query('SELECT agent FROM turn WHERE session_id = $sessionId ORDER BY rowid DESC LIMIT 1').get({
@@ -397,8 +397,7 @@ export function usageByAgentModel(db: Database, sessionId?: string): ModelUsage[
   }))
 }
 
-// Buckets are cut in JS so the CLI keeps one clock: bun:sqlite's 'localtime' modifier reads
-// libc's zone, which ignores process.env.TZ and needs tzdata on the host.
+// bun:sqlite's 'localtime' follows libc's zone, not process.env.TZ, and needs tzdata on the host
 function localDay(ms: number): string {
   const d = new Date(ms)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

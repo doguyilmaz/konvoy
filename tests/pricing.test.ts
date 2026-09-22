@@ -47,7 +47,7 @@ test('no rates at all means no estimate', () => {
 })
 
 test('tokens that could not be priced report nothing, not nothing spent', () => {
-  // an agent with no model configured records model: null, which is the DEFAULT — not a
+  // an agent with no model configured records model: null, which is the DEFAULT - not a
   // legacy row. Reporting $0.00 for real tokens says they were free; a dash says we cannot say.
   const rows = [{ agent: 'codex' as const, model: null, inputTokens: 4500, outputTokens: 1800, costUsd: 0, credits: 0 }]
   expect(estimateAgentUsd('codex', rows, pricing)).toBe(null)
@@ -58,7 +58,7 @@ test('a row that consumed nothing at all still contributes nothing', () => {
   expect(estimateAgentUsd('codex', rows, pricing)).toBe(0)
 })
 
-// An agent bills in credits or in tokens, never both — the comment above estimateUsd says so,
+// An agent bills in credits or in tokens, never both - the comment above estimateUsd says so,
 // and format.ts's spend() relies on it. A credits row with no configured credit rate must
 // estimate to null (unknown), not fall through to a token price for a model the agent is not
 // billed by: kiro at 5 credits was showing ~USD $3.000 from claude-sonnet-5's token rate.

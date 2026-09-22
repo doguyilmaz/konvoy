@@ -142,7 +142,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     killSignal: 'SIGTERM',
   })
   } catch (error) {
-    // the binary exists but cannot start — no execute bit, a bad interpreter: detection cannot
+    // the binary exists but cannot start - no execute bit, a bad interpreter: detection cannot
     // see it, and the turn row recorded above is what keeps the failure from leaving no trace
     result.exitCode = 127
     result.error = { message: `could not start ${plan.cmd[0]}: ${error instanceof Error ? error.message : String(error)}`, kind: 'crash' }
@@ -160,7 +160,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
 
 
   // exit_code -1 means konvoy itself died before it could record the turn. Every ordinary
-  // ending, including an interruption, replaces it — so a surviving -1 is a real signal, not
+  // ending, including an interruption, replaces it - so a surviving -1 is a real signal, not
   // a default. Failure is decided by the error field, not by the exit code alone: an interrupted turn
   // carries 130 or 143 and a message, and a codex turn can exit 0 with an informational error.
 
@@ -193,7 +193,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
 
 
   // every path below must reach finish(): an onEvent callback that throws, a parser crash a
-  // wrapper missed, or a signal — otherwise the turn row stays at its INSERT placeholder and
+  // wrapper missed, or a signal - otherwise the turn row stays at its INSERT placeholder and
   // usage counts it as a free turn.
   const releaseExitHandler = onExit((signal) => {
     if (!result.error) result.error = { message: `konvoy was interrupted by ${signal}`, kind: 'interrupted' }
@@ -236,10 +236,10 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     }
 
     // The exit code says whether the turn produced its output; the error says whether the
-    // agent is now blocked. auth and rate never mean "just informational" — the agent cannot
-    // work until something changes — so they survive even a turn that answered and exited 0.
+    // agent is now blocked. auth and rate never mean "just informational" - the agent cannot
+    // work until something changes - so they survive even a turn that answered and exited 0.
     // crash and unknown keep the old behaviour: discarded once there was any output at all.
-    // an error that stayed wordless through the stream and stderr — say so, rather than show
+    // an error that stayed wordless through the stream and stderr - say so, rather than show
     // the user an empty quote
     if (result.error && !result.error.message.trim()) {
       result.error.message = `${adapter.id} exited ${result.exitCode} and reported an error without a message`

@@ -35,7 +35,7 @@ const RECENT_TURNS = 3
 //   kiro     "error: ACP load_session failed" on stderr, exit 1, no stream events at all
 //            (re-measured 2026-09-21 against kiro-cli 2.22.1). The 2026-09-19 note here said
 //            kiro reported nothing and silently opened an empty session under whatever id it
-//            was handed, and recorded that as an undetectable limit — it is detectable, and
+//            was handed, and recorded that as an undetectable limit - it is detectable, and
 //            leaving the old wording in place is what kept the rebind from firing for kiro.
 const STALE =
   /no conversation found|no rollout found|session not found|no such session|unknown session|not found with session|load_session failed/i
@@ -108,16 +108,16 @@ export async function send(
   const lease = inherited ?? crypto.randomUUID()
   const alreadyHeld = inherited !== undefined && lockOwner(deps.db, session.id) === inherited
   if (!alreadyHeld && !acquireLock(deps.db, session.id, lease)) {
-    throw new Error(`session "${session.slug}" is busy — another konvoy turn is running`)
+    throw new Error(`session "${session.slug}" is busy - another konvoy turn is running`)
   }
 
-  // Set once withLock() has built the primary prelude — followHandoff needs its own, built
+  // Set once withLock() has built the primary prelude - followHandoff needs its own, built
   // fresh after the handing-off turn is recorded, so it is read rather than recomputed here.
   let facts = ''
 
   try {
     const result = await withLock()
-    // The turn just finished writing its own row — runGate reads that row itself to decide
+    // The turn just finished writing its own row - runGate reads that row itself to decide
     // whether there is anything for it to judge, so it is always safe to call here.
     const turnId = lastTurnId(deps.db, session.id)
     if (turnId) await runGate(deps.db, deps.cfg, session, turnId)
@@ -133,7 +133,7 @@ export async function send(
   }
 
   // One hop per send: this reads the envelope on the turn `send()` was asked to run, resolves
-  // it once, and returns whatever that recipient's own turn produces — including an envelope
+  // it once, and returns whatever that recipient's own turn produces - including an envelope
   // of its own, which is never fed back in here. A mistaken `to:` pointing back at the sender
   // would otherwise loop until something ran out, and the caller asked for one turn.
   async function followHandoff(result: TurnResult, turnId: string): Promise<TurnResult | null> {
@@ -145,7 +145,7 @@ export async function send(
     const recipient = resolveRecipient(deps.cfg, envelope.to)
     if (!recipient) {
       console.error(
-        `konvoy: ${ranAsAgent} handed off to "${oneLine(envelope.to, 80)}" — no such agent or role, ${ranAsAgent}'s turn stands`,
+        `konvoy: ${ranAsAgent} handed off to "${oneLine(envelope.to, 80)}" - no such agent or role, ${ranAsAgent}'s turn stands`,
       )
       return null
     }
@@ -154,21 +154,21 @@ export async function send(
     const recipientDetection = recipientSettings.enabled
       ? await detectFor(recipient, { model: recipientSettings.model, bin: recipientSettings.bin })
       : { agent: recipient, installed: false, version: null }
-    // Reported, not silently dropped — the same rule the failover chain already follows for a
+    // Reported, not silently dropped - the same rule the failover chain already follows for a
     // disabled or uninstalled member.
     if (!recipientSettings.enabled || !recipientDetection.installed) {
       const why = !recipientSettings.enabled ? 'disabled in config' : 'not installed'
       console.error(
-        `konvoy: ${ranAsAgent} handed off to ${recipient}, but ${recipient} is ${why} — ${ranAsAgent}'s turn stands`,
+        `konvoy: ${ranAsAgent} handed off to ${recipient}, but ${recipient} is ${why} - ${ranAsAgent}'s turn stands`,
       )
       return null
     }
 
-    console.error(`konvoy: ${ranAsAgent} handed off to ${recipient} — "${oneLine(envelope.task)}"`)
+    console.error(`konvoy: ${ranAsAgent} handed off to ${recipient} - "${oneLine(envelope.task)}"`)
 
     const recipientEffort = clampEffort(recipientSettings.effort, recipientDetection.efforts)
     // Built fresh, after the handing-off turn was recorded: the prelude built at the top of
-    // this send() describes the state before that turn ran — the opposite of what the
+    // this send() describes the state before that turn ran - the opposite of what the
     // recipient needs, which is its own cooperative handoff, envelope and all.
     const delegatedPrelude = buildPrelude(deps.db, session, facts, { recent: RECENT_TURNS })
     return runOnce(
@@ -194,7 +194,7 @@ export async function send(
     )
   }
 
-  // One attempt at one agent: run the turn, and — exactly as before failover existed — rebind
+  // One attempt at one agent: run the turn, and - exactly as before failover existed - rebind
   // a stale foreign session once and retry, never more. This is unchanged by the chain walk;
   // it just now runs once per agent the chain visits instead of once per `send()` call.
   async function runOnce(
@@ -217,13 +217,13 @@ export async function send(
     // Only a crash can be a dead session. An auth failure phrased as "session not found" would
     // otherwise be rebound instead of surfaced, discarding a live session and then failing again
     // identically; a rate limit, a timeout and an interruption say nothing about the session at
-    // all. The kinds exist so that failures can be told apart — this is where it matters.
+    // all. The kinds exist so that failures can be told apart - this is where it matters.
     const recoverable = first.error?.kind === 'crash' || first.error?.kind === 'unknown'
     const stale = first.error != null && recoverable && STALE.test(first.error.message) && producedNothing
     if (!stale || !wasResuming) return first
 
     // said out loud: a silent rebind looks like continuity and is not
-    console.error(`konvoy: ${current} could not load session ${oneLine(resumedId ?? '', 60)} — starting a new one`)
+    console.error(`konvoy: ${current} could not load session ${oneLine(resumedId ?? '', 60)} - starting a new one`)
     clearForeignId(deps.db, session.id, current)
     return runTurn(
       { db: deps.db, adapter: currentAdapter },
@@ -262,13 +262,13 @@ export async function send(
           ? await detectFor(current, { model: currentSettings.model, bin: currentSettings.bin })
           : { agent: current, installed: false, version: null }
       }
-      // A chain member the user hasn't actually set up can't take the handoff — skip it
+      // A chain member the user hasn't actually set up can't take the handoff - skip it
       // rather than aborting the whole chain, since a later member might still work. Say so:
       // a three-agent chain that quietly becomes a two-agent chain is the user not being told.
       if (!currentSettings.enabled || !currentDetection.installed) {
         if (!isHead) {
           const why = !currentSettings.enabled ? 'disabled in config' : 'not installed'
-          console.error(`konvoy: skipping ${current} in the failover chain — ${why}`)
+          console.error(`konvoy: skipping ${current} in the failover chain - ${why}`)
         }
         if (result) continue
         break
@@ -279,7 +279,7 @@ export async function send(
       // said "moving to claude" and then ran kiro when claude turned out to be unusable.
       if (blocked) {
         console.error(
-          `konvoy: ${blocked.agent} is blocked (${blocked.kind}) — "${oneLine(blocked.message)}" — ${current} is taking over`,
+          `konvoy: ${blocked.agent} is blocked (${blocked.kind}) - "${oneLine(blocked.message)}" - ${current} is taking over`,
         )
         blocked = null
       }
@@ -308,7 +308,7 @@ export async function send(
         r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId)
         if (firstTurnId === null) firstTurnId = lastTurnId(deps.db, session.id)
         // upstream is transient and usually returns, so it is worth retrying on the same
-        // agent — with backoff, since a hammered upstream is the last thing to hammer again.
+        // agent - with backoff, since a hammered upstream is the last thing to hammer again.
         if (r.error?.kind === 'upstream' && retries < upstreamRetries) {
           retries++
           await Bun.sleep((deps.upstreamBackoffMs ?? UPSTREAM_BACKOFF_MS) * retries)
@@ -319,7 +319,7 @@ export async function send(
       result = r
 
       const kind = result.error?.kind
-      // rate and auth switch at once — a rate window is hours and an auth failure needs a
+      // rate and auth switch at once - a rate window is hours and an auth failure needs a
       // human, so retrying either is pointless. upstream only reaches here once its retries
       // are spent. crash, timeout and interrupted never switch: the fault travels with the
       // agent, not with the CLI running it, so a second agent would just fail the same way.

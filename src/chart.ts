@@ -7,7 +7,7 @@ export function sparkline(values: number[], max?: number): string {
   // an explicit max lets several series share one scale (see agentSparklines); omitted, a
   // series scales to its own peak, as a lone sparkline always has
   const m = max ?? Math.max(...values)
-  // counts have a fixed baseline of zero, not the series' own minimum — a flat run of busy
+  // counts have a fixed baseline of zero, not the series' own minimum - a flat run of busy
   // days must render full, not empty. Guard only the case where there's no signal at all.
   if (m <= 0) return BLOCKS[0]!.repeat(values.length)
   // a nonzero count is never the zero glyph: below m/14 Math.round lands on 0, and a quiet day
@@ -32,7 +32,7 @@ export function shareBars(rows: { label: string; value: number }[], width = 18):
   )
 }
 
-// a lone agent's sparkline can't reveal whether it's the busy one or the quiet one — every
+// a lone agent's sparkline can't reveal whether it's the busy one or the quiet one - every
 // agent must be drawn against the same peak, and every row must span the same dense day
 // range (gaps filled with zero) so the columns line up between agents
 export function agentSparklines(rows: { agent: string; day: string; count: number }[]): { agent: string; line: string }[] {

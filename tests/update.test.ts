@@ -91,7 +91,7 @@ test('a non-zero spawn exit is reported, counted as a failure, and does not stop
   }
 })
 
-// realUpdateDeps.detect is the memoized detect, keyed by agent, model and bin — identical before
+// realUpdateDeps.detect is the memoized detect, keyed by agent, model and bin - identical before
 // and after the spawn, so the "after" version came from the memo and every update printed
 // "X -> X". The suite's own output showed "ok opencode: 2.0.10 -> 2.0.10". This drives the real
 // memoized detect with an injected --version whose answer changes when the update runs.

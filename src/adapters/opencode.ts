@@ -39,7 +39,7 @@ export const opencodeAdapter: Adapter = {
           | undefined
         const tokens = step?.tokens
         if (tokens) {
-          // opencode's `input` is the uncached remainder, like claude's and unlike codex's —
+          // opencode's `input` is the uncached remainder, like claude's and unlike codex's -
           // its own `total` is input + output + cache, which is what settles that. It also
           // reports the turn's cost here, on the same part.
           const input = (tokens.input ?? 0) + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0)

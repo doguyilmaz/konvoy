@@ -114,7 +114,7 @@ test('the captured fixture parses into session, tool call, text and completion',
   const lines = (await Bun.file('tests/fixtures/streams/claude.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => claudeAdapter.parse(l))
   expect(events.filter((e) => e.t === 'session')).toHaveLength(1)
-  // a real Read call — the fixture this replaced came from a turn that called nothing, so the
+  // a real Read call - the fixture this replaced came from a turn that called nothing, so the
   // tool branch had a unit test written from the guess and no capture behind it
   expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'Read', status: 'start' }])
   expect(events.find((e) => e.t === 'done')).toEqual({ t: 'done', final: 'OK' })
@@ -166,11 +166,11 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   // a parser complaining about a token is not an auth failure
   expect(classifyError('SyntaxError: Unexpected token, expected ";"')).toBe('unknown')
   expect(classifyError('Invalid token in JSON at position 4')).toBe('unknown')
-  expect(classifyError("Unexpected token '<' — the config file is invalid")).toBe('unknown')
+  expect(classifyError("Unexpected token '<' - the config file is invalid")).toBe('unknown')
   expect(classifyError('parse error at token 12: the trailing comma is invalid')).toBe('unknown')
   expect(classifyError('rate limit exceeded')).toBe('rate')
 
-  // Captured verbatim from Claude Code on 2026-09-20 — the only real limit messages this
+  // Captured verbatim from Claude Code on 2026-09-20 - the only real limit messages this
   // project has ever observed. Everything else in RATE is conjecture from other vendors.
   expect(classifyError("You've hit your weekly limit \u00b7 resets 7am (Europe/Istanbul)")).toBe('rate')
   expect(classifyError("You've hit your session limit \u00b7 resets 12:40am (Europe/Istanbul)")).toBe('rate')
@@ -188,7 +188,7 @@ test('ordinary coding vocabulary is not mistaken for an auth failure', () => {
   // conjectured phrasings, kept because they cost nothing and may match another CLI
   expect(classifyError('You have reached your usage limit. Your limit resets at 7pm.')).toBe('rate')
   expect(classifyError('Weekly limit reached')).toBe('rate')
-  // a crash that merely contains the word "limit" must not read as a rate limit — these pin the
+  // a crash that merely contains the word "limit" must not read as a rate limit - these pin the
   // regex's precision, not just its reach, and a bare /limit/ has to fail them
   expect(classifyError('SyntaxError: near "LIMIT": syntax error')).toBe('unknown')
   expect(classifyError('EMFILE: too many open files, watch')).toBe('unknown')
@@ -209,7 +209,7 @@ test('an API that is reachable but refusing is upstream, not a crash', () => {
   expect(classifyError("You've hit your weekly limit")).toBe('rate')
   // order matters: a message that is both rate-limited and mentions 503 is still a rate limit,
   // because that window is hours, not seconds
-  expect(classifyError("You've hit your weekly limit — upstream also returned 503")).toBe('rate')
+  expect(classifyError("You've hit your weekly limit - upstream also returned 503")).toBe('rate')
   // and ordinary failures stay where they were
   expect(classifyError('ENOENT: no such file or directory')).toBe('unknown')
   expect(classifyError('TypeError: cannot read property of undefined')).toBe('unknown')
@@ -217,7 +217,7 @@ test('an API that is reachable but refusing is upstream, not a crash', () => {
 
 // claude reports input in three fields and only one of them is the uncached remainder. A live
 // minimal-harness turn on 2026-09-21 returned input_tokens 2, cache_creation 4,454, cache_read
-// 16,344 — reading input_tokens alone records 2 for a turn that sent 20,800. codex reports the
+// 16,344 - reading input_tokens alone records 2 for a turn that sent 20,800. codex reports the
 // opposite convention (its input_tokens already contains cached_input_tokens, which is why its
 // wire format also carries a derived net_new_input_tokens), so an adapter that drops claude's
 // cache fields does not merely undercount: it puts two different units in one column that
@@ -246,7 +246,7 @@ test('input tokens survive a result that reports no cache fields at all', () => 
 // Captured 2026-09-21 by resuming a session id that does not exist: claude exits 1, prints
 // "No conversation found with session ID: <id>" on stderr, and its only stdout line is a
 // result with is_error and no result text. Inventing "unknown error" here is what kept the
-// real wording out of reach — turn.ts consults stderr only when the stream produced no error.
+// real wording out of reach - turn.ts consults stderr only when the stream produced no error.
 test('an error result with no text reports an empty message rather than inventing one', () => {
   const line = JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 'gone', total_cost_usd: 0 })
   expect(claudeAdapter.parse(line)).toEqual([{ t: 'error', message: '', kind: 'unknown' }])

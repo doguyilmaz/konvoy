@@ -42,7 +42,7 @@ export function openDb(path: string): Database {
   try {
     db = new Database(path, { create: true, strict: true })
     if (path !== ':memory:') {
-      // konvoy runs concurrently by design — a nested konvoy inside an agent, a dashboard beside
+      // konvoy runs concurrently by design - a nested konvoy inside an agent, a dashboard beside
       // a send. Set before anything that takes a lock: switching a fresh file to WAL needs an
       // exclusive one, and without the timeout the losers of that first statement throw
       db.exec('PRAGMA busy_timeout = 5000')

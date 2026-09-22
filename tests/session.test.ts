@@ -53,7 +53,7 @@ test('send binds the agent on its first turn', async () => {
 })
 
 // The brief's gate.test.ts calls runGate directly, so it never proves send() actually wires
-// it up — a call site bug (wrong session, wrong turnId, or no call at all) would slip past it.
+// it up - a call site bug (wrong session, wrong turnId, or no call at all) would slip past it.
 test('send runs the configured gate after a successful turn', async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
@@ -162,7 +162,7 @@ test('an auth failure phrased like a missing session is surfaced, not rebound', 
         cmd: [
           'bun',
           'tests/fixtures/fake-agent.ts',
-          JSON.stringify({ type: 'result', is_error: true, result: 'Invalid API key — session not found for this account' }),
+          JSON.stringify({ type: 'result', is_error: true, result: 'Invalid API key - session not found for this account' }),
         ],
         env: { ...process.env, FAKE_AGENT_EXIT: '1' } as Record<string, string>,
         cwd: process.cwd(),
@@ -309,11 +309,11 @@ test('the agent taking over receives what the previous one did, not a bare quest
 
 // Measured against kiro-cli 2.22.1 on 2026-09-21 by resuming a truncated session id: it exits
 // 1 with `error: ACP load_session failed` on stderr and emits no stream events at all. The
-// comment above STALE recorded the opposite — that kiro silently opens an empty session under
-// whatever id it is handed — which was captured on 2026-09-19 and is no longer what it does.
+// comment above STALE recorded the opposite - that kiro silently opens an empty session under
+// whatever id it is handed - which was captured on 2026-09-19 and is no longer what it does.
 // That wording matters because it is the only thing standing between a dead binding and a
 // rebind: a resume that fails this way must clear the foreign id and start fresh, not fail
-// the turn. Truncated ids are not hypothetical — kiro's own `/session-id` panel prints the
+// the turn. Truncated ids are not hypothetical - kiro's own `/session-id` panel prints the
 // resume command on a line it wraps, so the id shown there is short by its last characters.
 test('a kiro resume that cannot load the session rebinds instead of failing the turn', async () => {
   const db = openDb(':memory:')
@@ -354,9 +354,9 @@ test('a kiro resume that cannot load the session rebinds instead of failing the 
   } finally {
     err.mockRestore()
   }
-  // a rebind the user is not told about looks like continuity and is not — the id they may have
+  // a rebind the user is not told about looks like continuity and is not - the id they may have
   // adopted by hand, or watched konvoy bind, was dropped
-  expect(said).toContain('kiro could not load session gone — starting a new one')
+  expect(said).toContain('kiro could not load session gone - starting a new one')
   expect(call).toBe(2)
   expect(r.final).toBe('recovered')
   expect(getBinding(db, s.id, 'kiro')?.foreignId).toBe('kiro-new')
@@ -367,7 +367,7 @@ test('a kiro resume that cannot load the session rebinds instead of failing the 
 // and "No conversation found with session ID: <id>" on stderr. The rebind test above fakes
 // that wording inside the stream's result field; the CLI does not put it there, so the adapter
 // invented "unknown error", turn.ts never looked at stderr, and STALE never matched.
-test('a claude resume whose id no longer exists rebinds — the wording arrives on stderr', async () => {
+test('a claude resume whose id no longer exists rebinds - the wording arrives on stderr', async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
   upsertBinding(db, { sessionId: s.id, agent: 'claude', foreignId: 'gone', effort: 'high', permission: 'edit' })

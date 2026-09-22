@@ -1,6 +1,5 @@
 name: release
-# A tag publishes. A manual run on a branch is the dry run: it builds, signs and notarizes
-# with the real secrets and uploads the artifacts, and publishes nothing.
+# Tag: publish. Manual run on a branch: dry run (build, sign, notarize, upload artifacts, publish nothing).
 on:
   push:
     tags: ["v*"]
@@ -105,7 +104,7 @@ jobs:
           merge-multiple: true
       - run: cat dist/release/checksums-*.txt > dist/release/checksums.txt && cat dist/release/checksums.txt
       - run: bun run scripts/tap-cask.ts "$(bun -e 'console.log(require("./package.json").version)')" dist/release/checksums.txt > dist/release/konvoy.rb
-      - name: Dry run — keep what a tag would have published
+      - name: Dry run - keep what a tag would have published
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
@@ -127,8 +126,7 @@ jobs:
           git diff --quiet --cached && { echo "tap already carries this version"; exit 0; }
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${GITHUB_REF_NAME}" || echo "cask unchanged"
           git push
-      # npm's trusted publishing is an OIDC handshake only npm's own CLI performs; bun publish has no
-      # equivalent, so this one step runs npm. The publisher is configured once on npmjs.com.
+      # bun publish has no OIDC exchange; trusted publishing needs npm's CLI
       - name: Publish to npm
         if: github.ref_type == 'tag'
         run: |

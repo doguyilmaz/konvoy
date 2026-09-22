@@ -25,7 +25,7 @@ export async function cmdStatus(
   )
   console.log(formatVersions(rows))
   for (const r of rows) {
-    if (!r.installed) console.log(`warning: ${r.agent} is not installed — it will be skipped`)
+    if (!r.installed) console.log(`warning: ${r.agent} is not installed - it will be skipped`)
     else if (r.authed === false) console.log(`warning: ${r.agent}: ${r.detail}`)
   }
   // status reports; it does not judge. A directory with no session is not a failure of the

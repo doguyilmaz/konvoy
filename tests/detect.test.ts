@@ -81,7 +81,7 @@ test('a configured binary path reaches the auth check for opencode', async () =>
 // tests/fixtures/codex-models-cache.json is a slice of the real ~/.codex/models_cache.json
 // (codex 0.155.1, 2026-09-21): only slug, default_reasoning_level and supported_reasoning_levels
 // per model. The test this replaced faked the file as `{ id, supported_reasoning_levels: [string] }`
-// — the real file has no `id` (the key is `slug`) and each level is `{ effort, description }`. The
+// - the real file has no `id` (the key is `slug`) and each level is `{ effort, description }`. The
 // lookup therefore never matched on a real machine and codex effort was never clamped.
 test('codex effort capabilities come from the model cache, keyed by slug, levels by their effort field', async () => {
   const cache = await Bun.file('tests/fixtures/codex-models-cache.json').text()

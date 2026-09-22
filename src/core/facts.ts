@@ -52,7 +52,7 @@ export async function collectFacts(deps: FactsDeps, db: Database, session: Sessi
 }
 
 // A field is quoted only when it has to be. 48% of this repository's own commit subjects
-// contain a comma, so an unquoted row is the common case, not the edge one — and a shifted
+// contain a comma, so an unquoted row is the common case, not the edge one - and a shifted
 // row makes every number after it wrong while still looking like a table.
 function cell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
@@ -99,7 +99,7 @@ export function realFactsDeps(): FactsDeps {
   return {
     git: async (args, cwd) => {
       try {
-        // stderr is never read, so it is not piped — a chatty git would fill the pipe and block;
+        // stderr is never read, so it is not piped - a chatty git would fill the pipe and block;
         // and a git that hangs must not hang the turn
         const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'ignore', timeout: 10_000 })
         const stdout = await new Response(proc.stdout).text()

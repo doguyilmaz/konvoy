@@ -34,7 +34,7 @@ test('a set that would produce an invalid config is rejected before writing', ()
 
 test('a dotted path cannot reach Object.prototype', () => {
   // `config set __proto__.x` would otherwise write onto the shared prototype while the config
-  // itself stayed empty — a silent no-op that poisons every object in the process
+  // itself stayed empty - a silent no-op that poisons every object in the process
   expect(() => setPath({}, '__proto__.polluted', 'true')).toThrow()
   expect(({} as Record<string, unknown>).polluted).toBeUndefined()
 

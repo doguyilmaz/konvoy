@@ -77,7 +77,7 @@ async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly 
     const cache = JSON.parse(raw) as { models?: unknown }
     if (!Array.isArray(cache.models)) return undefined
     // the real file (codex 0.155.1, 2026-09-21) keys models by `slug` and lists each level as
-    // `{ effort, description }` — see tests/fixtures/codex-models-cache.json
+    // `{ effort, description }` - see tests/fixtures/codex-models-cache.json
     const hit = (cache.models as { slug?: string; supported_reasoning_levels?: unknown }[]).find(
       (m) => m.slug === model,
     )
@@ -178,8 +178,7 @@ function realDeps(): DetectDeps {
 const detectCacheMap = new Map<string, Promise<Detection>>()
 const detectAuthCacheMap = new Map<string, Promise<AuthState>>()
 
-// Real detection shares one memo; each injected deps object gets its own, so a fake answering in
-// one place is never handed to another.
+// one memo per injected deps object; real detection shares its own
 const depsIds = new WeakMap<DetectDeps, number>()
 let nextDepsId = 0
 function scope(deps?: DetectDeps): string {

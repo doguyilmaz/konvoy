@@ -22,7 +22,7 @@ test('a first turn runs codex exec with json output and an isolated config', () 
 
 // `codex exec resume` is its own subcommand with its own flag set: --json, -s, -m and the rest
 // belong to `exec` and must precede it. The version of this test that stood before pinned
-// `codex exec resume <id> --json …`, which codex rejects with "unexpected argument" — every
+// `codex exec resume <id> --json …`, which codex rejects with "unexpected argument" - every
 // resumed codex turn had failed live while the suite was green.
 test('a later turn resumes the thread by id, with resume after every exec-level flag', () => {
   const cmd = codexAdapter.turn(ctx({ binding: bound('thread-9') })).cmd
@@ -87,7 +87,7 @@ test('the captured fixture parses into session, tool call, text, notice and usag
   expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'command_execution', status: 'ok' }])
   expect(events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')).toBe('I’ll read package.json now.OK')
   // codex reports its skills-context-budget notice as an item of type "error" on a turn that
-  // then completes normally; it must stay unclassified (kind unknown) so turn.ts can clear it —
+  // then completes normally; it must stay unclassified (kind unknown) so turn.ts can clear it -
   // a notice whose wording matched RATE or AUTH would otherwise trip failover on a healthy turn
   expect(events.filter((e) => e.t === 'error').map((e) => (e as { kind: string }).kind)).toEqual(['unknown'])
   expect(events.some((e) => e.t === 'usage')).toBe(true)
@@ -107,7 +107,7 @@ test('an error item or a failed turn without a message reports an empty message,
 
 // Whether a real codex rate limit arrives as an item-level error or as turn.failed decides how
 // the two must be told apart; no capture shows it yet. The parsed event now carries which wire
-// event it came from, and konvoy persists every event — so the next real limit answers it from
+// event it came from, and konvoy persists every event - so the next real limit answers it from
 // the event log, with nothing asked of the user.
 test('an error event says whether it came from an item or from turn.failed', () => {
   expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'notice' } }))[0]).toMatchObject({ t: 'error', source: 'item' })

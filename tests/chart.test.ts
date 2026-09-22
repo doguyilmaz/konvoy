@@ -5,7 +5,7 @@ test('a sparkline uses the full block range and scales to its own maximum', () =
   expect(sparkline([0, 1, 2, 3, 4, 5, 6, 7])).toBe('▁▂▃▄▅▆▇█')
 })
 
-test('a busy flat series is full, not empty — the baseline is zero, not the minimum', () => {
+test('a busy flat series is full, not empty - the baseline is zero, not the minimum', () => {
   expect(sparkline([3, 3, 3])).toBe('███')
   expect(sparkline([5, 6, 7])).toBe('▆▇█')
   expect(sparkline([0, 0, 0])).toBe('▁▁▁')
@@ -34,7 +34,7 @@ test('agentSparklines draws every agent on one shared scale, not each against it
   const codex = out.find((r) => r.agent === 'codex')!.line
   // claude is the busiest agent, so it renders at the top of the shared scale
   expect(claude).toBe('██')
-  // codex is far quieter — on its OWN scale it would also render at the top; on the
+  // codex is far quieter - on its OWN scale it would also render at the top; on the
   // scale shared with claude it must render near the bottom instead
   // two turns a day on a scale set by a much busier agent: near the bottom, but visible
   expect(codex).toBe('▂▂')
@@ -51,7 +51,7 @@ test('an agent idle in the middle of the range renders zeros there, and every ro
   const codex = out.find((r) => r.agent === 'codex')!.line
   expect(claude.length).toBe(5)
   expect(codex.length).toBe(5)
-  // codex only turned on day 3 (the middle day) — every other day, including the ones
+  // codex only turned on day 3 (the middle day) - every other day, including the ones
   // neither endpoint mentions, must still render as an explicit zero, not be dropped
   expect(claude).toBe('█▁▁▁█')
   expect(codex).toBe('▁▁█▁▁')
@@ -92,7 +92,7 @@ test('an empty heatmap is empty, not a crash', () => {
 })
 
 test('a heatmap fills the gap between two recorded days as zero, not as missing', () => {
-  // a week apart with nothing recorded in between — every day in that gap must still render
+  // a week apart with nothing recorded in between - every day in that gap must still render
   // as a zero cell so every row stays the same width; dropping it would shift later columns left
   const days = [
     { day: '2026-09-01', count: 5 },

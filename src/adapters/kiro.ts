@@ -60,7 +60,7 @@ export const kiroAdapter: Adapter = {
 
     if (o.type === 'runFinished') {
       if (data.status === 'success') {
-        // finalText comes with a finalTextTruncated flag — kiro truncates it. Only an untruncated
+        // finalText comes with a finalTextTruncated flag - kiro truncates it. Only an untruncated
         // copy is authoritative; otherwise no done is emitted and the streamed chunks stand.
         if (typeof data.finalText === 'string' && data.finalTextTruncated !== true) events.push({ t: 'done', final: data.finalText })
       } else {

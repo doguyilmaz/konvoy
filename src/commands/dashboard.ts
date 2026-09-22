@@ -20,7 +20,7 @@ export async function cmdDashboard(
       })
     },
   })
-  console.log(`konvoy dashboard on http://127.0.0.1:${server.port} — ctrl-c to stop`)
+  console.log(`konvoy dashboard on http://127.0.0.1:${server.port} - ctrl-c to stop`)
   await new Promise(() => {})
   return 0
 }

@@ -42,8 +42,8 @@ test('attach against an uninstalled agent prints the friendly line, not a raw sp
   }
 })
 
-// A session the user started in a CLI's own TUI — kiro prints its id and the resume command
-// under /session-id — could not be handed to konvoy: foreignId was only ever written from a
+// A session the user started in a CLI's own TUI - kiro prints its id and the resume command
+// under /session-id - could not be handed to konvoy: foreignId was only ever written from a
 // parsed stream. Adopting one binds it; the next turn resumes it; the id shape check at the
 // write path still applies, and a refused id leaves the binding unbound and attach exits 2.
 test('adopting a foreign session binds it so attach and the next turn resume it', async () => {

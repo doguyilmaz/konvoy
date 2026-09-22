@@ -44,7 +44,7 @@ interface CommandContext {
 
 type Handler = (ctx: CommandContext, rest: string[]) => number | Promise<number>
 
-// Every key of CommandName must be handled here — TypeScript's excess/missing property
+// Every key of CommandName must be handled here - TypeScript's excess/missing property
 // checks on an object literal assigned to Record<CommandName, Handler> make an
 // undocumented-yet-dispatched or dispatched-yet-undocumented command a compile error.
 const handlers: Record<CommandName, Handler> = {

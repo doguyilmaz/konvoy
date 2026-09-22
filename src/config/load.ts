@@ -162,17 +162,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 // bin, permission and harness decide what konvoy runs and how much it trusts the process it
-// spawns — properties of the machine the person is running konvoy on, not of the repo they
+// spawns - properties of the machine the person is running konvoy on, not of the repo they
 // cloned. A project layer may not set them at any level they appear; only the global config can.
 const PRIVILEGED_DEFAULTS_KEYS = ['permission', 'harness'] as const
 const PRIVILEGED_AGENT_KEYS = ['bin', 'permission', 'harness'] as const
-// gate names a command konvoy executes automatically after every turn — wider than `bin`,
+// gate names a command konvoy executes automatically after every turn - wider than `bin`,
 // which at least requires the user to already be using that agent. It sits at the top level
 // of the config, not under `defaults` or `agents.<id>`, so it needs its own case here.
 const PRIVILEGED_TOP_LEVEL_KEYS = ['gate'] as const
 
 function warnIgnored(path: string): void {
-  console.error(`konvoy: ignoring project-level "${path}" — privileged, set it in the global config instead`)
+  console.error(`konvoy: ignoring project-level "${path}" - privileged, set it in the global config instead`)
 }
 
 function stripProjectPrivileges(layer: Record<string, unknown>): Record<string, unknown> {
@@ -220,7 +220,7 @@ function stripProjectPrivileges(layer: Record<string, unknown>): Record<string, 
 
 // A leading dash is what makes a model string dangerous: spawned with `--model <value>`, it
 // lands as the next argv token with no `--` guard, unlike the prompt. Unlike bin/permission/
-// harness, a project may legitimately pin a model — so this is validated, not merge-source
+// harness, a project may legitimately pin a model - so this is validated, not merge-source
 // restricted, and applies to whichever layer's value survives the merge.
 // `/` because opencode names models provider/model; `#` stays out because the variant after
 // it is konvoy's own effort dial, appended by the adapter
@@ -238,7 +238,7 @@ function stripInvalidModels(layer: Record<string, unknown>): Record<string, unkn
     }
     const cleaned = { ...agentCfg }
     if (typeof cleaned.model === 'string' && !MODEL_PATTERN.test(cleaned.model)) {
-      console.error(`konvoy: ignoring invalid agents.${id}.model "${cleaned.model}" — must match ${MODEL_PATTERN}`)
+      console.error(`konvoy: ignoring invalid agents.${id}.model "${cleaned.model}" - must match ${MODEL_PATTERN}`)
       delete cleaned.model
     }
     setOwn(cleanedAgents, id, cleaned)
@@ -247,7 +247,7 @@ function stripInvalidModels(layer: Record<string, unknown>): Record<string, unkn
   return out
 }
 
-// only a leading `~/`, or a bare `~`, is a home-directory reference — a tilde anywhere else
+// only a leading `~/`, or a bare `~`, is a home-directory reference - a tilde anywhere else
 // in the path (e.g. `rel/~/x`) is left alone
 function expandHome(p: string): string {
   if (p === '~') return home()
@@ -267,7 +267,7 @@ export async function loadConfig(opts: { cwd: string; globalPath?: string }): Pr
     // set aside, so konvoy still runs in that directory; the user's own file stays strict
     const globalOnly = configSchema.safeParse(stripInvalidModels(merge(globalLayer, {})))
     if (globalOnly.success) {
-      console.error(`konvoy: ignoring project-level config at ${projectConfigPath(opts.cwd)} — invalid at ${where}`)
+      console.error(`konvoy: ignoring project-level config at ${projectConfigPath(opts.cwd)} - invalid at ${where}`)
       return finishConfig(globalOnly.data)
     }
     throw new Error(`invalid konvoy config at ${where}`)
@@ -294,7 +294,7 @@ export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
   const ownStyle = a.style
   const defaultStyle = cfg.defaults.style ?? undefined
   // an explicit `null` opts an agent out of a `defaults.style`, unlike `effort`/`permission`
-  // where the per-agent value is only ever absent or set — so this can't reuse `??`.
+  // where the per-agent value is only ever absent or set - so this can't reuse `??`.
   const style = ownStyle === null ? undefined : (ownStyle ?? defaultStyle)
   return {
     enabled: a.enabled ?? true,
@@ -310,7 +310,7 @@ export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
 
 const isAgentId = (value: string): value is AgentId => (agentIds as readonly string[]).includes(value)
 
-// An envelope's `to` is free text a model wrote, not a validated key — trimmed and
+// An envelope's `to` is free text a model wrote, not a validated key - trimmed and
 // lower-cased before either check runs, since a model may write "Reviewer" or " claude ".
 // An agent id wins over a role of the same name: a role can be reassigned mid-session, an
 // agent id cannot.

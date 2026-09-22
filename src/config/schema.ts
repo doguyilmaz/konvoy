@@ -5,7 +5,7 @@ export const effortSchema = z.enum(['low', 'medium', 'high', 'max'])
 export const permissionSchema = z.enum(['safe', 'edit', 'yolo'])
 export const harnessSchema = z.enum(['minimal', 'inherit'])
 export const agentIdSchema = z.enum(agentIds)
-// konvoy's own instruction, not a model capability — `.nullish()` so a per-agent `null` can
+// konvoy's own instruction, not a model capability - `.nullish()` so a per-agent `null` can
 // opt out of a `defaults.style` of 'brief', which a plain `.optional()` cannot express.
 export const styleSchema = z.enum(['brief'])
 
@@ -46,7 +46,7 @@ const MAX_TURN_TIMEOUT_SEC = 24 * 60 * 60
 const policyObjectSchema = z
   .object({
     maxDelegationDepth: z.number().int().positive().default(3),
-    // A project config sets this, so it is clamped rather than trusted outright — otherwise a
+    // A project config sets this, so it is clamped rather than trusted outright - otherwise a
     // hostile repo could make konvoy wait forever on every turn.
     turnTimeoutSec: z
       .number()
@@ -74,7 +74,7 @@ export const configSchema = z
     agents: z.partialRecord(agentIdSchema, agentConfigSchema).default({}),
     roles: rolesObjectSchema.prefault({}),
     policy: policyObjectSchema.prefault({}),
-    // The command konvoy runs after a turn to produce a pass/fail verdict on the work — a
+    // The command konvoy runs after a turn to produce a pass/fail verdict on the work - a
     // project layer may never set this; see stripProjectPrivileges in config/load.ts.
     gate: z.object({ command: z.string().nullish() }).strict().prefault({}),
     failover: failoverObjectSchema.prefault({}),

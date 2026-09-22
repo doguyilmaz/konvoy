@@ -104,7 +104,7 @@ test('the captured fixture parses end to end, tool call included', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/kiro.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => kiroAdapter.parse(l))
   expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: 'be869d81-e85b-463b-a084-52c6b852a523' })
-  // tool_call then tool_call_update for the same fs_read — kiro titles them, so the name is
+  // tool_call then tool_call_update for the same fs_read - kiro titles them, so the name is
   // the title, and both the start and the completion carry it
   expect(events.filter((e) => e.t === 'tool')).toEqual([
     { t: 'tool', name: 'Reading package.json:1', status: 'start' },
@@ -118,14 +118,14 @@ test('attach resumes the session interactively', () => {
   expect(kiroAdapter.attach(bound('sess_abc')).cmd).toEqual(['kiro-cli', 'chat', '--resume-id', 'sess_abc'])
 })
 
-// A failed run with no stopReason must not invent "run failed" — an empty message lets turn.ts
+// A failed run with no stopReason must not invent "run failed" - an empty message lets turn.ts
 // fall through to stderr, which is where kiro puts the reason when the stream has none.
 test('a failed run without a stop reason reports an empty message, not a placeholder', () => {
   const line = JSON.stringify({ type: 'runFinished', data: { sessionId: 's', status: 'failed' } })
   expect(kiroAdapter.parse(line)).toEqual([{ t: 'session', foreignId: 's' }, { t: 'error', message: '', kind: 'unknown' }])
 })
 
-// kiro streams the answer in chunks and then repeats it in runFinished.finalText — with a
+// kiro streams the answer in chunks and then repeats it in runFinished.finalText - with a
 // finalTextTruncated flag, which means it truncates. The streamed text konvoy already holds in
 // full must win whenever finalText is missing or flagged; only an untruncated finalText is
 // authoritative.

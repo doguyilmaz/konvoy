@@ -11,7 +11,7 @@ export function coerce(raw: string): string | number | boolean {
 }
 
 // `__proto__` resolves to Object.prototype through an ordinary property read, so a dotted path
-// containing it writes onto the shared prototype — poisoning every object in the process while
+// containing it writes onto the shared prototype - poisoning every object in the process while
 // the config itself stays empty. `constructor` and `prototype` are blocked for the same reason.
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
 
@@ -100,7 +100,7 @@ export async function cmdConfig(
     const parsed = configSchema.safeParse(next)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
-      console.error(`refusing to write: ${issue?.path.join('.')} — ${issue?.message}`)
+      console.error(`refusing to write: ${issue?.path.join('.')} - ${issue?.message}`)
       return 2
     }
     await Bun.write(path, JSON.stringify(next, null, 2) + '\n')

@@ -10,13 +10,13 @@ export interface Adapter {
   prepare?(ctx: TurnContext): Promise<void>
 }
 
-// konvoy's own instruction, owned here rather than vendored from any installed skill — a
+// konvoy's own instruction, owned here rather than vendored from any installed skill - a
 // user's own such skill is already reachable via `harness: inherit`. It shapes what the user
 // reads, not what agents exchange, so it asks for omission, never compression.
 export const BRIEF_INSTRUCTION =
   'Lead with the action. Number multi-step work. End with one concrete next step. Skip preamble, recap, and closing pleasantries.'
 
-// konvoy has no model and cannot decide when a turn hands off — only the agent running it
+// konvoy has no model and cannot decide when a turn hands off - only the agent running it
 // knows. This instruction is what asks it to say so. A turn not handing work over must emit
 // nothing: the envelope costs output tokens only on the turns that actually use it.
 export const DELEGATION_INSTRUCTION =
@@ -27,11 +27,11 @@ export const DELEGATION_INSTRUCTION =
   'open: <optional list>\n' +
   'decisions: <optional list>\n' +
   '>>>\n' +
-  'If this turn is not handing work over, emit nothing — no block at all.'
+  'If this turn is not handing work over, emit nothing - no block at all.'
 
 // One composition point rather than four: the adapters cannot drift in how they join these,
 // and the prelude leads because a stable prefix is what prompt caching discounts. The style
-// and delegation instructions trail the prompt for the same reason — they must never join
+// and delegation instructions trail the prompt for the same reason - they must never join
 // the cached prefix.
 export function withPrelude(ctx: TurnContext): string {
   const base = ctx.prelude ? `${ctx.prelude}\n\n${ctx.prompt}` : ctx.prompt
@@ -61,22 +61,22 @@ export function stripControlChars(value: string): string {
   return value.replace(ANSI, '').replace(/[\x00-\x1f\x7f]/g, '')
 }
 
-// For a notice or a table cell: one line, no control bytes, capped — an agent's own words or a
+// For a notice or a table cell: one line, no control bytes, capped - an agent's own words or a
 // CLI's stderr can run to kilobytes and can carry escapes that rewrite what konvoy printed.
 export function oneLine(value: string, max = 200): string {
   const flat = stripControlChars(value.replace(/\r?\n/g, ' ')).replace(/ {2,}/g, ' ').trim()
   return flat.length > max ? `${flat.slice(0, max)}…` : flat
 }
 
-// For an agent's final text: keep newlines and tabs, drop every other control byte — CR
+// For an agent's final text: keep newlines and tabs, drop every other control byte - CR
 // included, which would let a line overwrite the one before it.
 export function safeText(value: string): string {
   return value.replace(ANSI, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
 }
 
 // Extracted from the four installed binaries on 2026-09-20. Expiry is phrased around
-// "session" or "token" — "Cloud gateway session expired", "AWS session has expired",
-// "Login token is expired", "MCP OAuth access token is expired" — so requiring the literal
+// "session" or "token" - "Cloud gateway session expired", "AWS session has expired",
+// "Login token is expired", "MCP OAuth access token is expired" - so requiring the literal
 // word "credentials" missed every real expiry. The noun must sit next to the state, or a
 // parser's "Unexpected token" and "Invalid token in JSON" read as auth failures.
 const AUTH =
@@ -86,14 +86,14 @@ const AUTH =
 // · resets 12:40am", both carrying error type rate_limit / HTTP 429. The remaining
 // alternatives are conjecture from other vendors' wording and have never been observed here.
 // kiro-cli emits no rate-limit prose at all, only AWS exception type names, and those carry
-// no separators once lowercased — hence the optional separators below. codex's five-hour
+// no separators once lowercased - hence the optional separators below. codex's five-hour
 // window is worded "5-hour usage limit", which "usage limit" already covers.
 const RATE =
   /hit your \w+ limit|rate[_ ]?limit|quota exceeded|too ?many ?requests|usage limit|weekly limit|\d+[- ]hour (?:usage )?limit|throttl|\b429\b/
 // Captured verbatim from opencode's embedded overload classifier, recovered from its binary on
 // 2026-09-20: "the service is at capacity", "Overloaded", "temporarily unavailable", "503
 // Service Unavailable", "server is busy, try again", "Internal Server Error", and "upstream
-// connect error". These describe an API that is reachable but refusing — the one failure worth
+// connect error". These describe an API that is reachable but refusing - the one failure worth
 // retrying before giving up on an agent, unlike a rate limit (checked first: a message that is
 // both rate-limited and mentions 503 is a rate limit, since that window is hours, not seconds).
 const UPSTREAM =

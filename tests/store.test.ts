@@ -324,12 +324,12 @@ test('re-acquiring a lock as its owner adopts the caller pid so the lock reads a
   expect(lockOwner(db, s.id)).toBe('lease-X')
 })
 
-// konvoy is designed to run concurrently — the lease exists for a nested konvoy inside an agent,
+// konvoy is designed to run concurrently - the lease exists for a nested konvoy inside an agent,
 // a dashboard sits beside a send. Before the fix, eight processes opening one fresh file threw
 // between 3 and 8 times per round ("database is locked", "no such table: main.turn", "table
 // session already exists"): migrations ran outside any transaction with no busy timeout. This
 // uses real processes because the race is between processes; it carries no mutation entry
-// because its red is probabilistic and a flaky gate is worse than none — the transaction is the
+// because its red is probabilistic and a flaky gate is worse than none - the transaction is the
 // structural guarantee, and this test is the standing observation of it.
 test('eight processes opening one fresh database at once all succeed and agree on the schema version', async () => {
   const dir = (await Bun.$`mktemp -d`.text()).trim()
@@ -347,7 +347,7 @@ test('eight processes opening one fresh database at once all succeed and agree o
 // Three adapters replay a foreign id after a flag and codex after a bare positional; an id that
 // began with "-" would be offered to the CLI's flag parser. No CLI produces one today and a
 // model cannot forge a stream line, but the write path is the one place to say what shape an
-// id may have — every id konvoy has met: UUIDs, kiro's cli_<uuid>_<suffix>, opencode's ses_….
+// id may have - every id konvoy has met: UUIDs, kiro's cli_<uuid>_<suffix>, opencode's ses_….
 test('a foreign id that is not an id shape is not bound, and the binding stays unbound', () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })

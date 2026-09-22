@@ -95,7 +95,7 @@ test('a crash does not move to the next agent, because the fault travels with th
 
 // The brief's own crash test drives a message classifyError falls through to 'unknown', not
 // the literal 'crash' kind turn.ts assigns to a bare nonzero exit. Both must stay put, so this
-// exercises the other one directly — otherwise "the chain also moves on crash" is a mutation
+// exercises the other one directly - otherwise "the chain also moves on crash" is a mutation
 // the suite above cannot see.
 test('a bare nonzero exit (kind "crash") does not move to the next agent either', async () => {
   const { db, s } = seed()
@@ -195,8 +195,8 @@ test('a chain member the user never set up is skipped out loud, not silently', a
   expect(skipped!.toLowerCase()).toMatch(/skip|disabled|not installed/)
 })
 
-// The takeover notice quotes the blocked agent's own message — on a non-zero exit that is raw
-// stderr — so it is the one line in a failover where a CLI's escape sequence would reach the
+// The takeover notice quotes the blocked agent's own message - on a non-zero exit that is raw
+// stderr - so it is the one line in a failover where a CLI's escape sequence would reach the
 // terminal under konvoy's name.
 test('the takeover notice is one clean line even when the limit message carries an escape sequence', async () => {
   const { db, s } = seed()
@@ -213,7 +213,7 @@ test('the takeover notice is one clean line even when the limit message carries 
     err.mockRestore()
   }
   expect(lines.find((l) => l.includes('taking over'))).toBe(
-    'konvoy: codex is blocked (rate) — "You\'ve hit your weekly limit · resets 7am" — claude is taking over',
+    'konvoy: codex is blocked (rate) - "You\'ve hit your weekly limit · resets 7am" - claude is taking over',
   )
 })
 

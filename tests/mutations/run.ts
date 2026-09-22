@@ -1,4 +1,4 @@
-// Mutation sweep runner — `bun run mutate`. For every entry in registry.ts: verify the
+// Mutation sweep runner - `bun run mutate`. For every entry in registry.ts: verify the
 // defect's `from` text still appears exactly once in the real source, apply it, run only the
 // tests that claim to catch it, record CAUGHT or MISSED, and restore the file byte-for-byte
 // before moving to the next entry. See registry.ts for why this exists.
@@ -12,11 +12,11 @@ function run(cmd: string[]): { code: number; out: string } {
 }
 
 function assertCleanTree(): void {
-  // Only src/ is touched by the sweep — that is the "source" the brief's rationale is about —
+  // Only src/ is touched by the sweep - that is the "source" the brief's rationale is about -
   // so a dirty tests/ file (e.g. while demonstrating this very runner) does not block a run.
   const status = run(['git', 'status', '--porcelain', '--', 'src'])
   if (status.out.trim() !== '') {
-    console.error('mutate: refusing to start — src/ has uncommitted changes:')
+    console.error('mutate: refusing to start - src/ has uncommitted changes:')
     console.error(status.out)
     process.exit(1)
   }
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
       console.error(`INTEGRITY FAILURE: ${path} does not match its pre-sweep content`)
     }
   }
-  if (corrupted === 0) console.log(`ok — ${pristine.size} file(s) byte-identical to their pre-sweep content`)
+  if (corrupted === 0) console.log(`ok - ${pristine.size} file(s) byte-identical to their pre-sweep content`)
 
   console.log('')
   console.log('running the full suite...')
