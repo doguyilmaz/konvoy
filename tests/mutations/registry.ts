@@ -1237,4 +1237,25 @@ export const mutations: Mutation[] = [
     to: 'const limit = 0',
     tests: ['tests/session-required.test.ts'],
   },
+  {
+    name: 'the banner stops saying that harness minimal withheld the user own MCP servers and skills',
+    file: 'src/render.ts',
+    from: "if (facts.harness === 'minimal' && HARNESS_AWARE.has(facts.agent)) {",
+    to: 'if (false) {',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the banner claims harness minimal for kiro and opencode, which never read it',
+    file: 'src/render.ts',
+    from: "const HARNESS_AWARE = new Set(['claude', 'codex'])",
+    to: "const HARNESS_AWARE = new Set(['claude', 'codex', 'kiro', 'opencode'])",
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the banner stops warning that an approval-needing tool cannot be approved in a headless turn',
+    file: 'src/render.ts',
+    from: "if (facts.permission !== 'yolo') {",
+    to: 'if (false) {',
+    tests: ['tests/render.test.ts'],
+  },
 ]

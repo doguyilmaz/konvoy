@@ -124,3 +124,40 @@ export function remainder(final: string, alreadyStreamed: string): string {
   if (final.startsWith(alreadyStreamed)) return final.slice(alreadyStreamed.length)
   return final
 }
+
+export interface BannerFacts {
+  version: string
+  slug: string
+  dir: string
+  agent: string
+  harness: 'minimal' | 'inherit'
+  permission: string
+}
+
+// Only claude and codex read `harness` (design section 18); saying it about kiro or opencode
+// would be describing behavior that was never built.
+const HARNESS_AWARE = new Set(['claude', 'codex'])
+
+// A first run that silently drops the user's own setup is how konvoy turned "my Maestro MCP is
+// installed" into an agent blaming the user's machine: `minimal` passes
+// --strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands ("Disable all
+// skills", per claude --help) and --setting-sources '' , so none of it is loaded. konvoy knows
+// that and said nothing. The same for permission: nobody can answer an approval prompt in a
+// headless turn, so a tool that needs one is refused and the turn reads as if it did no work.
+export function sessionBanner(facts: BannerFacts, color: boolean): string[] {
+  const p = palette(color)
+  const lines = [
+    `${p.bold('konvoy')} ${p.dim(facts.version)}  ${p.dim('session')} ${facts.slug}  ${p.dim('lead')} ${agentPaint(color)(facts.agent)(facts.agent)}`,
+    p.dim(`  ${facts.dir}`),
+  ]
+  if (facts.harness === 'minimal' && HARNESS_AWARE.has(facts.agent)) {
+    lines.push(`${p.yellow('  !')} ${p.dim(`harness minimal: ${facts.agent} runs without your MCP servers, skills or settings files`)}`)
+    lines.push(p.dim('    konvoy config set defaults.harness inherit --global   to run it with your own setup'))
+  }
+  if (facts.permission !== 'yolo') {
+    lines.push(
+      `${p.yellow('  !')} ${p.dim(`permission ${facts.permission}: a tool that needs approval is refused, since a headless turn has nobody to ask`)}`,
+    )
+  }
+  return lines
+}

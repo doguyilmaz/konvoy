@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { remainder, turnRender, type RenderDeps } from '../src/render'
+import { remainder, sessionBanner, turnRender, type RenderDeps } from '../src/render'
 import type { KonvoyEvent } from '../src/types'
 
 // What a user saw before this: eighteen lines of "  · Bash" with no target, no outcome and no
@@ -141,4 +141,39 @@ test('colour is applied to the chrome and never to the agent own words', () => {
   expect(h.err.join('')).toContain('\x1b[')
   // the model's own output is handed to the terminal exactly as it came
   expect(h.out.join('')).toBe('the answer')
+})
+
+// The report that led to all of this: a first-time user's MCP server was stripped by konvoy's own
+// default and the agent told them to restart their CLI, and every tool call that needed approval
+// was refused with nothing on screen to say so. konvoy knew both facts before the turn started.
+test('the banner says what konvoy took away before the first turn runs', () => {
+  const lines = sessionBanner(
+    { version: '0.3.3', slug: 'test', dir: '/repo/.konvoy/test', agent: 'claude', harness: 'minimal', permission: 'edit' },
+    false,
+  ).join('\n')
+  expect(lines).toContain('session test')
+  expect(lines).toContain('/repo/.konvoy/test')
+  expect(lines).toContain('harness minimal')
+  expect(lines).toContain('MCP servers, skills or settings files')
+  expect(lines).toContain('konvoy config set defaults.harness inherit --global')
+  expect(lines).toContain('a tool that needs approval is refused')
+})
+
+test('the banner claims nothing about the two agents that do not read harness', () => {
+  for (const agent of ['kiro', 'opencode'] as const) {
+    const lines = sessionBanner(
+      { version: '0.3.3', slug: 's', dir: '/d', agent, harness: 'minimal', permission: 'edit' },
+      false,
+    ).join('\n')
+    expect(lines, agent).not.toContain('harness minimal')
+  }
+})
+
+test('a session with nothing withheld gets a banner with no warnings in it', () => {
+  const lines = sessionBanner(
+    { version: '0.3.3', slug: 's', dir: '/d', agent: 'claude', harness: 'inherit', permission: 'yolo' },
+    false,
+  )
+  expect(lines).toHaveLength(2)
+  expect(lines.join('\n')).not.toContain('!')
 })

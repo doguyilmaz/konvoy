@@ -6,7 +6,9 @@ import { getSessionBySlug } from './store/queries'
 import { agentIds } from './config/schema'
 import type { Config } from './config/schema'
 import { openDb } from './store/db'
-import { dbPath } from './paths'
+import { dbPath, sessionDir } from './paths'
+import { sessionBanner } from './render'
+import { colorEnabled } from './style'
 import { cmdNew } from './commands/new'
 import { cmdSend } from './commands/send'
 import { cmdLs } from './commands/ls'
@@ -179,6 +181,19 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
     return 2
   }
   const io = given ?? terminalIo()
+  // Only for a human at a terminal: a piped run is a script, and a banner in its output is noise.
+  if (io.tty) {
+    const lead = resolveAgent(cfg, session.lead)
+    const facts = {
+      version: VERSION,
+      slug: session.slug,
+      dir: sessionDir(session.cwd, session.slug),
+      agent: session.lead,
+      harness: lead.harness,
+      permission: lead.permission,
+    }
+    for (const line of sessionBanner(facts, colorEnabled(Bun.env, true))) io.write(`${line}\n`)
+  }
   try {
     return await runRepl(io, db, cfg, cwd, session, (tokens, current) => {
       const a = parseArgs(tokens)
