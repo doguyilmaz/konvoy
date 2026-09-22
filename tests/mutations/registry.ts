@@ -1309,4 +1309,41 @@ export const mutations: Mutation[] = [
     to: 'if (!pending) return',
     tests: ['tests/render.test.ts'],
   },
+
+  // --- the kiro minimal harness (src/adapters/kiro.ts, src/core/turn.ts) ---
+  {
+    name: 'the kiro agent profile is written but never named, so the turn silently runs the user setup',
+    file: 'src/adapters/kiro.ts',
+    from: "if ((ctx.harness ?? 'minimal') === 'minimal') cmd.push('--agent', MINIMAL_AGENT)\n",
+    to: '',
+    tests: ['tests/adapter-kiro.test.ts'],
+  },
+  {
+    name: 'an inherited kiro turn is given the minimal profile anyway, stripping the setup the user asked for',
+    file: 'src/adapters/kiro.ts',
+    from: "    if ((ctx.harness ?? 'minimal') !== 'minimal') return\n",
+    to: '',
+    tests: ['tests/adapter-kiro.test.ts'],
+  },
+  {
+    name: "the generated kiro profile merges the user's mcp.json after all, so minimal is not minimal",
+    file: 'src/adapters/kiro.ts',
+    from: '    includeMcpJson: false,',
+    to: '    includeMcpJson: true,',
+    tests: ['tests/adapter-kiro.test.ts'],
+  },
+  {
+    name: 'a kiro turn that did not load its profile says nothing, so konvoy reports a harness it did not run',
+    file: 'src/adapters/kiro.ts',
+    from: '    if (!failed) return []',
+    to: '    return []',
+    tests: ['tests/adapter-kiro.test.ts'],
+  },
+  {
+    name: 'adapter warnings are never collected, so a stderr warning on a successful turn is lost',
+    file: 'src/core/turn.ts',
+    from: 'for (const warning of adapter.warnings(await stderrText)) result.warnings.push(warning)',
+    to: 'void adapter.warnings',
+    tests: ['tests/turn.test.ts'],
+  },
 ]

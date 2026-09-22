@@ -44,6 +44,8 @@ export async function cmdSend(
   view.finish(result)
 
   const outcome = decideOutcome(target, result)
+  // a turn that answered while konvoy was withholding something it did not manage to withhold
+  for (const warning of result.warnings) console.error(`konvoy: ${warning}`)
   for (const line of outcome.stderrLines) console.error(line)
   // the answer was streamed as it arrived; only what the stream did not carry is printed here
   if (outcome.stdout !== null) {

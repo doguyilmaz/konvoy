@@ -8,6 +8,8 @@ export interface Adapter {
   parse(line: string): KonvoyEvent[]
   attach(binding: Binding): SpawnPlan
   prepare?(ctx: TurnContext): Promise<void>
+  /** lines a CLI wrote to stderr that the user must see even though the turn succeeded */
+  warnings?(stderr: string): string[]
 }
 
 // konvoy's own instruction, owned here rather than vendored from any installed skill - a

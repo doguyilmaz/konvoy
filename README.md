@@ -291,10 +291,13 @@ turn. A command that can't even be spawned records nothing, and a failed turn is
 turn's driver decides. A turn **you** typed, in the REPL or with `konvoy send`, runs `inherit`:
 your MCP servers, skills, hooks and settings, the CLI exactly as you would run it by hand. A turn
 **konvoy** drives, meaning the recipient of a handoff, runs `minimal`: claude with no MCP servers,
-no skills and no settings files, codex with `--ignore-user-config`. That split is the point of
+no skills and no settings files, codex with `--ignore-user-config`, kiro under a generated
+`konvoy-minimal` agent profile that konvoy writes to the project's `.kiro/agents/` (kiro resolves
+`--agent` by name from there, and its own conversation store rules out relocating `KIRO_HOME`).
+That split is the point of
 `minimal` in the first place, since konvoy supplies a handed-over turn's context itself through
 the brief and the prelude, and it measured 2.6× less context per turn (docs/design.md §18).
-kiro and opencode run with their own configuration either way.
+opencode still runs with its own configuration either way.
 
 Set it explicitly and that wins everywhere, in both directions. Privileged: the global config only.
 

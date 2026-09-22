@@ -14,6 +14,8 @@ export interface TurnResult {
   exitCode: number
   error: { message: string; kind: string } | null
   events: KonvoyEvent[]
+  /** things the CLI said on stderr that the turn survived but the user must know about */
+  warnings: string[]
 }
 
 export interface TurnDeps {
@@ -71,6 +73,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     exitCode: 0,
     error: null,
     events: [],
+    warnings: [],
   }
 
   let accumulated = ''
@@ -221,6 +224,14 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     }
 
     result.exitCode = await proc.exited
+
+    // A CLI can succeed and still have done something other than what konvoy asked: kiro warns
+    // on stderr and carries on when it cannot load an agent profile, so a turn konvoy believes
+    // is running a minimal harness quietly runs the user's whole setup. stderr below is read
+    // only when the turn FAILED, which is exactly the case this misses.
+    if (adapter.warnings) {
+      for (const warning of adapter.warnings(await stderrText)) result.warnings.push(warning)
+    }
 
     if (!sawDone) result.final = accumulated
 

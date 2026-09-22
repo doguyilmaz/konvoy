@@ -377,8 +377,22 @@ runs rather than leaving the agent to guess.
 |---|---|---|
 | claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
 | codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
-| kiro | **not implemented** - runs with the user's own agent and MCP configuration | same |
+| kiro | a generated `konvoy-minimal` agent profile in the project's `.kiro/agents/`, selected with `--agent` | no `--agent`, the user's own default agent |
 | opencode | **not implemented** - runs with its own config discovery | same |
+
+**kiro, added 2026-09-22.** `--agent` takes a NAME, and kiro resolves names only from
+`<cwd>/.kiro/agents` or `$KIRO_HOME/agents` (kiro-cli 2.23.0, `kiro-cli agent list`); a path is
+not loaded. `KIRO_HOME` cannot be moved, because kiro's conversation store lives under it and a
+temp `KIRO_HOME` returns an empty `chat --list-sessions`, orphaning every binding and breaking
+`attach --id`. So konvoy writes one file it owns, `.kiro/agents/konvoy-minimal.json`, into the
+project it is already working in, with `mcpServers: {}`, `includeMcpJson: false` and
+`resources: []` - the three fields through which the built-in `kiro_default` otherwise pulls in
+the user's MCP servers and resources for AGENTS.md, README.md, every skill glob and the global
+steering directory. One hazard measured the same day: an `--agent` kiro cannot resolve does NOT
+fail the turn. It prints `[warn] failed to set agent '<name>': Internal error` on stderr and
+continues with the default agent, so konvoy would report a minimal harness while running the
+user's whole setup. `Adapter.warnings(stderr)` exists for exactly that: turn.ts reads stderr on
+every turn, not only a failed one, and the turn's answer stands with the warning beside it.
 
 Only claude and codex honor `harness` today (`src/adapters/claude.ts`, `src/adapters/codex.ts`);
 the kiro and opencode rows above described intended behavior that was never built, corrected
