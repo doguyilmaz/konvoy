@@ -1023,4 +1023,13 @@ export const mutations: Mutation[] = [
     to: '',
     tests: ['tests/repl.test.ts'],
   },
+
+  // --- the Bun-only rule (src/, scripts/) ---
+  {
+    name: "src/paths.ts reaches for node:path instead of konvoy's own join, breaking the Bun-only rule",
+    file: 'src/paths.ts',
+    from: 'export function join(...parts: string[]): string {',
+    to: "import { join as nodeJoin } from 'node:path'\n\nexport function join(...parts: string[]): string {",
+    tests: ['tests/imports.test.ts'],
+  },
 ]
