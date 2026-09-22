@@ -12,6 +12,51 @@ export interface ReplIo {
   lines: AsyncIterable<string>
   write: (text: string) => void
   tty: boolean
+  /** stop reading stdin while a command runs, so a child that inherits the terminal gets every keystroke */
+  pause: () => void
+  resume: () => void
+}
+
+export function terminalIo(): ReplIo {
+  const queue: string[] = []
+  const decoder = new TextDecoder()
+  let buffered = ''
+  let ended = false
+  let wake: (() => void) | undefined
+  const flush = (): void => {
+    wake?.()
+    wake = undefined
+  }
+  process.stdin.on('data', (chunk: Uint8Array) => {
+    buffered += decoder.decode(chunk, { stream: true })
+    let at: number
+    while ((at = buffered.indexOf('\n')) >= 0) {
+      queue.push(buffered.slice(0, at))
+      buffered = buffered.slice(at + 1)
+    }
+    flush()
+  })
+  process.stdin.on('end', () => {
+    if (buffered) queue.push(buffered)
+    ended = true
+    flush()
+  })
+  async function* lines(): AsyncGenerator<string> {
+    for (;;) {
+      if (queue.length > 0) yield queue.shift()!
+      else if (ended) return
+      else await new Promise<void>((resolve) => (wake = resolve))
+    }
+  }
+  return {
+    lines: lines(),
+    write: (text) => {
+      process.stdout.write(text)
+    },
+    tty: Boolean(process.stdin.isTTY),
+    pause: () => process.stdin.pause(),
+    resume: () => process.stdin.resume(),
+  }
 }
 
 /** runs one command line through the command table, as `konvoy <tokens>` would, for the given session */
@@ -52,6 +97,15 @@ export async function runRepl(
     return fresh !== undefined
   }
 
+  const exec = async (tokens: string[]): Promise<void> => {
+    io.pause()
+    try {
+      await run(tokens, session.slug)
+    } finally {
+      io.resume()
+    }
+  }
+
   prompt()
   for await (const raw of io.lines) {
     const line = raw.trim()
@@ -60,7 +114,7 @@ export async function runRepl(
       continue
     }
     if (!line.startsWith('/')) {
-      await run(['send', agent, line], session.slug)
+      await exec(['send', agent, line])
       // failover never falls back, so the agent that answered is the one to keep talking to
       const moved = lastTurnAgent(db, session.id)
       if (moved && moved !== agent) agent = moved
@@ -94,13 +148,13 @@ export async function runRepl(
     } else if (cmd === 'rename') {
       if (rest.length === 0) console.error('usage: /rename <new-name>')
       else {
-        await run(['rename', session.slug, rest.join(' ')], session.slug)
+        await exec(['rename', session.slug, rest.join(' ')])
         refresh()
       }
     } else if (cmd === 'attach') {
-      await run(['attach', rest[0] ?? agent, ...rest.slice(1)], session.slug)
+      await exec(['attach', rest[0] ?? agent, ...rest.slice(1)])
     } else {
-      await run([cmd, ...rest], session.slug)
+      await exec([cmd, ...rest])
       if (cmd === 'resume' && rest[0]) {
         const target = getSessionBySlug(db, rest[0])
         if (target) {

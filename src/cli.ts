@@ -22,7 +22,7 @@ import { cmdRename } from './commands/rename'
 import { cmdUsage } from './commands/usage'
 import { cmdDashboard } from './commands/dashboard'
 import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
-import { runRepl, startSession, type ReplIo } from './commands/repl'
+import { runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
 import type { AgentId } from './types'
 import pkg from '../package.json'
 
@@ -115,15 +115,7 @@ const handlers: Record<CommandName, Handler> = {
     }),
 }
 
-const stdio = (): ReplIo => ({
-  lines: console as unknown as AsyncIterable<string>,
-  write: (text) => {
-    process.stdout.write(text)
-  },
-  tty: Boolean(process.stdin.isTTY),
-})
-
-export async function main(argv: string[], io: ReplIo = stdio()): Promise<number> {
+export async function main(argv: string[], io?: ReplIo): Promise<number> {
   const args = parseArgs(argv)
   const [command, ...rest] = args._
   const cwd = process.cwd()
@@ -172,7 +164,7 @@ async function dispatch(command: string, rest: string[], cwd: string, slug: stri
   return handlers[name]({ db, cfg, cwd, args, slug }, rest)
 }
 
-async function interactive(io: ReplIo, cwd: string, slug: string | undefined): Promise<number> {
+async function interactive(given: ReplIo | undefined, cwd: string, slug: string | undefined): Promise<number> {
   const db = openDb(dbPath())
   const cfg = await loadConfig({ cwd: (slug ? getSessionBySlug(db, slug)?.cwd : undefined) ?? cwd })
   const session = await startSession(db, cfg, cwd, slug)
@@ -180,16 +172,21 @@ async function interactive(io: ReplIo, cwd: string, slug: string | undefined): P
     console.error(slug ? `no konvoy session named "${slug}"` : 'could not create a session here')
     return 2
   }
-  return runRepl(io, db, cfg, cwd, session, (tokens, current) => {
-    const a = parseArgs(tokens)
-    const [cmd = '', ...r] = a._
-    const name = resolveCommandName(cmd)
-    if (!name) {
-      console.error(`unknown command "/${cmd}" - /help lists them`)
-      return 2
-    }
-    return handlers[name]({ db, cfg, cwd, args: a, slug: current }, r)
-  })
+  const io = given ?? terminalIo()
+  try {
+    return await runRepl(io, db, cfg, cwd, session, (tokens, current) => {
+      const a = parseArgs(tokens)
+      const [cmd = '', ...r] = a._
+      const name = resolveCommandName(cmd)
+      if (!name) {
+        console.error(`unknown command "/${cmd}" - /help lists them`)
+        return 2
+      }
+      return handlers[name]({ db, cfg, cwd, args: a, slug: current }, r)
+    })
+  } finally {
+    io.pause()
+  }
 }
 
 if (import.meta.main) {

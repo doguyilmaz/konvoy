@@ -15,12 +15,20 @@ function harness(input: string[], tty = true) {
   const s = createSession(db, { slug: 's', goal: '', cwd: '/nowhere/s', lead: 'claude' })
   const out: string[] = []
   const calls: string[][] = []
-  const io: ReplIo = { lines: lines(...input), write: (t) => out.push(t), tty }
+  const events: string[] = []
+  const io: ReplIo = {
+    lines: lines(...input),
+    write: (t) => out.push(t),
+    tty,
+    pause: () => events.push('pause'),
+    resume: () => events.push('resume'),
+  }
   const run = (tokens: string[], slug: string) => {
     calls.push([slug, ...tokens])
+    events.push(tokens[0]!)
     return 0
   }
-  return { db, cfg, s, out, calls, io, run, go: (session: Session = s) => runRepl(io, db, cfg, '/nowhere/s', session, run) }
+  return { db, cfg, s, out, calls, events, io, run, go: (session: Session = s) => runRepl(io, db, cfg, '/nowhere/s', session, run) }
 }
 
 test('plain text is a turn against the current agent, and /use changes the agent', async () => {
@@ -110,4 +118,10 @@ test('without a tty nothing is prompted and EOF ends the loop', async () => {
   expect(await h.go()).toBe(0)
   expect(h.out).toEqual([])
   expect(h.calls).toEqual([['s', 'send', 'claude', 'hello']])
+})
+
+test('stdin is paused for the whole run of every command, so an attached TUI owns the keyboard', async () => {
+  const h = harness(['hello', '/attach', '/roster'])
+  await h.go()
+  expect(h.events).toEqual(['pause', 'send', 'resume', 'pause', 'attach', 'resume', 'pause', 'roster', 'resume'])
 })

@@ -164,7 +164,7 @@ test('bare konvoy creates a session in a fresh directory and returns 0 at end of
   try {
     let code = -1
     await withEnv(dir, home, async () => {
-      code = await main([], { lines: noInput(), write: () => {}, tty: false })
+      code = await main([], { lines: noInput(), write: () => {}, tty: false, pause: () => {}, resume: () => {} })
     })
     expect(code).toBe(0)
     expect(log.mock.calls.map((c) => String(c[0])).some((l) => l.startsWith('created session '))).toBe(true)
@@ -189,7 +189,7 @@ test('-v and --version print one line and start nothing', async () => {
   try {
     for (const flag of ['-v', '--version']) {
       log.mockClear()
-      expect(await main([flag], { lines: noInput(), write: () => {}, tty: true })).toBe(0)
+      expect(await main([flag], { lines: noInput(), write: () => {}, tty: true, pause: () => {}, resume: () => {} })).toBe(0)
       expect(log.mock.calls.map((c) => String(c[0]))).toEqual([`konvoy ${pkg.version}`])
     }
   } finally {
@@ -203,7 +203,7 @@ test('-h prints the usage, and a stray flag with no command is refused instead o
   try {
     expect(await main(['-h'])).toBe(0)
     expect(String(log.mock.calls[0]?.[0])).toBe(USAGE)
-    expect(await main(['--bogus'], { lines: noInput(), write: () => {}, tty: true })).toBe(2)
+    expect(await main(['--bogus'], { lines: noInput(), write: () => {}, tty: true, pause: () => {}, resume: () => {} })).toBe(2)
     expect(String(err.mock.calls[0]?.[0])).toBe('unknown flag --bogus')
   } finally {
     log.mockRestore()
