@@ -10,7 +10,7 @@ export interface CommandSpec {
 }
 
 export const commandTable = [
-  { name: 'new', aliases: ['start'], usage: 'new "<goal>"', summary: 'create a session in this directory' },
+  { name: 'new', aliases: ['start'], usage: 'new ["<goal>"]', summary: 'create a session in this directory' },
   { name: 'send', aliases: [], usage: 'send <agent> "<msg>"', summary: 'run one turn against one agent' },
   { name: 'ls', aliases: ['sessions'], usage: 'ls', summary: 'list sessions' },
   { name: 'resume', aliases: [], usage: 'resume [session]', summary: 'make a session current and show its roster' },

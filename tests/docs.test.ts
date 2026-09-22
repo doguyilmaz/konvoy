@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { USAGE } from '../src/cli'
 import { commandTable, resolveCommandName } from '../src/commands/table'
 import { configSchema } from '../src/config/schema'
 import { stripJsonc } from '../src/config/load'
@@ -77,4 +78,11 @@ test('every ```jsonc block in README.md parses against configSchema', () => {
     const result = configSchema.safeParse(parsed)
     expect(result.success).toBe(true)
   }
+})
+
+test('the design doc lists exactly the commands konvoy help prints', async () => {
+  const design = await Bun.file(new URL('../docs/design.md', import.meta.url)).text()
+  const section = design.slice(design.indexOf('## 6. CLI surface'), design.indexOf('## 7. '))
+  const block = section.match(/```\n([\s\S]*?)```/)![1]!.trimEnd()
+  expect(block).toBe(USAGE.split('\n\nagents:')[0]!.split('\n').slice(2).join('\n'))
 })
