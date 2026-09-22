@@ -22,6 +22,7 @@ import { cmdRename } from './commands/rename'
 import { cmdUsage } from './commands/usage'
 import { cmdDashboard } from './commands/dashboard'
 import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
+import { noSessionNamed } from './commands/messages'
 import { runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
 import type { AgentId } from './types'
 import { version as VERSION } from '../package.json'
@@ -167,7 +168,7 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
   const cfg = await loadConfig({ cwd: (slug ? getSessionBySlug(db, slug)?.cwd : undefined) ?? cwd })
   const session = await startSession(db, cfg, cwd, slug)
   if (!session) {
-    console.error(slug ? `no konvoy session named "${slug}"` : 'could not create a session here')
+    console.error(slug ? noSessionNamed(slug) : 'could not create a session here')
     return 2
   }
   const io = given ?? terminalIo()

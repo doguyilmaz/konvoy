@@ -1112,4 +1112,26 @@ export const mutations: Mutation[] = [
     to: '    console.error(unknownAgent(name))\n    return name as AgentId',
     tests: ['tests/agent-required.test.ts'],
   },
+  // --- one source for the named-session error (src/commands/messages.ts) ---
+  {
+    name: 'requireNamedSession reports the wrong thing: an empty directory instead of the name it was given',
+    file: 'src/commands/messages.ts',
+    from: '  if (!session) console.error(noSessionNamed(slug))\n  return session',
+    to: '  if (!session) console.error(NO_SESSION_HERE)\n  return session',
+    tests: ['tests/session-required.test.ts'],
+  },
+  {
+    name: 'rm deletes nothing and exits 0 when the session it was given does not exist',
+    file: 'src/commands/rm.ts',
+    from: 'if (!session) return 2',
+    to: 'if (!session) return 0',
+    tests: ['tests/session-required.test.ts'],
+  },
+  {
+    name: 'resume with no name falls back to the first session instead of reporting there is none',
+    file: 'src/commands/resume.ts',
+    from: '  if (!session) return 2',
+    to: '  if (!session) return 0',
+    tests: ['tests/session-required.test.ts'],
+  },
 ]

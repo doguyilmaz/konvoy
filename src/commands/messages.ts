@@ -17,6 +17,13 @@ export function requireSession(db: Database, cwd: string, slug?: string): Sessio
   return session
 }
 
+/** the same, for a command whose session is always named: rm, rename */
+export function requireNamedSession(db: Database, slug: string): Session | null {
+  const session = getSessionBySlug(db, slug)
+  if (!session) console.error(noSessionNamed(slug))
+  return session
+}
+
 export const unknownAgent = (name: string): string =>
   `unknown agent "${name}" - expected one of ${agentIds.join(', ')}`
 

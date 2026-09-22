@@ -2,11 +2,14 @@ import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { configSchema } from '../src/config/schema'
 import { createSession } from '../src/store/queries'
-import { NO_SESSION_HERE, noSessionNamed, requireSession } from '../src/commands/messages'
+import { NO_SESSION_HERE, noSessionNamed, requireNamedSession, requireSession } from '../src/commands/messages'
 import { cmdRoster } from '../src/commands/roster'
 import { cmdUsage } from '../src/commands/usage'
 import { cmdAttach } from '../src/commands/attach'
 import { cmdSend } from '../src/commands/send'
+import { cmdRm } from '../src/commands/rm'
+import { cmdRename } from '../src/commands/rename'
+import { cmdResume } from '../src/commands/resume'
 
 const cfg = configSchema.parse({})
 
@@ -56,6 +59,51 @@ test('requireSession returns the session it found and says nothing', () => {
     expect(requireSession(db, '/repo')?.id).toBe(s.id)
     expect(requireSession(db, '/elsewhere', 'there')?.id).toBe(s.id)
     expect(err.mock.calls.length).toBe(0)
+  } finally {
+    err.mockRestore()
+  }
+})
+
+// rm, rename and resume take a session by name, and each wrote that sentence itself. resume also
+// had a second wording of its own for the no-name case, which is the same condition the four
+// commands above report with NO_SESSION_HERE.
+test('every command that takes a session by name names the one it could not find', async () => {
+  const db = openDb(':memory:')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    expect(cmdRm(db, '/repo', 'nope', { yes: true })).toBe(2)
+    expect(await cmdRename(db, 'nope', 'other')).toBe(2)
+    expect(cmdResume(db, cfg, '/repo', 'nope')).toBe(2)
+    lines = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+  expect(lines).toEqual([noSessionNamed('nope'), noSessionNamed('nope'), noSessionNamed('nope')])
+})
+
+test('resume with no name gives the same answer as every other command with no session', () => {
+  const db = openDb(':memory:')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    expect(cmdResume(db, cfg, '/nowhere')).toBe(2)
+    lines = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+  expect(lines).toEqual([NO_SESSION_HERE])
+})
+
+test('requireNamedSession returns the session it found and says nothing', () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'there', goal: 'g', cwd: '/repo', lead: 'claude' })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect(requireNamedSession(db, 'there')?.id).toBe(s.id)
+    expect(err.mock.calls.length).toBe(0)
+    expect(requireNamedSession(db, 'gone')).toBe(null)
+    expect(err.mock.calls.map((c) => String(c[0]))).toEqual([noSessionNamed('gone')])
   } finally {
     err.mockRestore()
   }

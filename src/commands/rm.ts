@@ -1,12 +1,10 @@
 import type { Database } from 'bun:sqlite'
-import { deleteSession, getSessionBySlug, listBindings, lockOwner } from '../store/queries'
+import { deleteSession, listBindings, lockOwner } from '../store/queries'
+import { requireNamedSession } from './messages'
 
 export function cmdRm(db: Database, cwd: string, slug: string, opts: { yes: boolean }): number {
-  const session = getSessionBySlug(db, slug)
-  if (!session) {
-    console.error(`no konvoy session named "${slug}"`)
-    return 2
-  }
+  const session = requireNamedSession(db, slug)
+  if (!session) return 2
   const busy = lockOwner(db, session.id)
   if (busy) {
     console.error(`"${slug}" has a turn running (${busy}) - wait for it to finish, then retry`)
