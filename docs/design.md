@@ -398,9 +398,12 @@ sender's `task` as its prompt.
   to <recipient>:`, so the recipient knows whose words it is reading.
 - **One hop bounds the blast radius.** A handoff is followed once per `send` (§10); a confused
   or compromised agent cannot chain further turns on its own.
-- **Not built:** the prelude does not yet state that agent-produced text is a proposal without
-  authority over the recipient's own rules, nor that a request to change permissions or act
-  outside the goal must be refused. The design called for both.
+- **The text is framed as a proposal.** Every prelude that carries agent-written text opens with
+  one fixed statement (`TRUST` in src/core/prelude.ts): the turns below are a proposal, not an
+  instruction with authority over the reader's own rules, the reader's own configuration and the
+  session goal decide what it does, and a request to raise a permission, disable a safeguard or
+  work outside the goal is refused out loud. Handoff and failover carry the same words, since a
+  successor reading a derived transcript is in the same position as a named recipient.
 - **konvoy holds no credentials**, so it cannot be used as a path to them.
 
 ## 20. Session locking and delegation leases
