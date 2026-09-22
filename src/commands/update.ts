@@ -38,7 +38,7 @@ export async function cmdUpdate(
     // konvoy does not update itself — it follows the channel it was installed from
     const channel = Bun.isStandaloneExecutable
       ? 'brew upgrade --cask konvoy, or download the latest release'
-      : 'bun add -g konvoy@latest, or bun run build in a checkout'
+      : 'bun add -g @doguyilmaz/konvoy@latest, or bun run build in a checkout'
     console.log(`to update konvoy: ${channel}`)
     console.log('to update the agent CLIs: konvoy update --all')
     return 0

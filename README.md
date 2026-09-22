@@ -22,7 +22,7 @@ install -m 755 konvoy ~/.local/bin/konvoy
 With Bun 1.4+ already installed, from npm:
 
 ```bash
-bun add -g konvoy        # or run once: bunx konvoy help
+bun add -g @doguyilmaz/konvoy        # or run once: bunx @doguyilmaz/konvoy help
 ```
 
 From a checkout:
@@ -32,7 +32,7 @@ bun install
 bun run build          # produces ./dist/konvoy
 ```
 
-Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g konvoy@latest`, or `bun run build`.
+Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g @doguyilmaz/konvoy@latest`, or `bun run build`.
 
 The brew and tarball binaries carry the Bun runtime, so each is about 60 MB on disk and 25–35 MB
 to download; the npm package is a few kilobytes of source and runs on the Bun you already have.

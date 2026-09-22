@@ -132,5 +132,5 @@ jobs:
         run: |
           set -euo pipefail
           V=$(bun -e 'console.log(require("./package.json").version)')
-          if curl -fsS "https://registry.npmjs.org/konvoy/$V" >/dev/null 2>&1; then echo "konvoy@$V is already on npm"; exit 0; fi
+          if curl -fsS "https://registry.npmjs.org/@doguyilmaz%2Fkonvoy/$V" >/dev/null 2>&1; then echo "@doguyilmaz/konvoy@$V is already on npm"; exit 0; fi
           bun publish --access public --auth-type legacy
