@@ -145,5 +145,8 @@ test('the store keeps the prompt the user typed, not the composed one', () => {
 test('a session without a goal gets no goal line', () => {
   const db = openDb(':memory:')
   const s = createSession(db, { slug: 's', goal: '', cwd: '/x', lead: 'claude' })
-  expect(buildPrelude(db, s, '', { recent: 3 })).not.toContain('goal:')
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'first ask', final: 'first answer', exitCode: 0, costUsd: 0 })
+  const out = buildPrelude(db, s, '', { recent: 3 })
+  expect(out).toContain('first ask')
+  expect(out).not.toContain('goal:')
 })
