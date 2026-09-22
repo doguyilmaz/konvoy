@@ -1,8 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import type { AgentId } from '../types'
-import { agentIds } from '../adapters'
-import { requireSession } from './messages'
+import { requireAgent, requireSession } from './messages'
 import { send } from '../core/session'
 import { oneLine, safeText } from '../adapters/types'
 import type { TurnResult } from '../core/turn'
@@ -15,16 +14,14 @@ export async function cmdSend(
   prompt: string,
   slug?: string,
 ): Promise<number> {
-  if (!agentIds.includes(agent as AgentId)) {
-    console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
-    return 2
-  }
+  const target = requireAgent(agent)
+  if (!target) return 2
   const session = requireSession(db, cwd, slug)
   if (!session) return 2
 
   let result: TurnResult
   try {
-    result = await send({ db, cfg }, session, agent as AgentId, prompt, {
+    result = await send({ db, cfg }, session, target, prompt, {
       onEvent: (e) => {
         if (e.t === 'tool') console.error(`  · ${oneLine(e.name, 120)}`)
       },
@@ -34,7 +31,7 @@ export async function cmdSend(
     return 2
   }
 
-  const outcome = decideOutcome(agent as AgentId, result)
+  const outcome = decideOutcome(target, result)
   for (const line of outcome.stderrLines) console.error(line)
   if (outcome.stdout !== null) console.log(outcome.stdout)
   return outcome.code

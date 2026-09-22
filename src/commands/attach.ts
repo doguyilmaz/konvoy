@@ -1,8 +1,8 @@
 import type { Database } from 'bun:sqlite'
 import type { AgentId, Effort, Permission, Session, SpawnPlan } from '../types'
-import { agentIds, getAdapter } from '../adapters'
+import { getAdapter } from '../adapters'
 import { getBinding, upsertBinding } from '../store/queries'
-import { requireSession } from './messages'
+import { requireAgent, requireSession } from './messages'
 import { oneLine } from '../adapters/types'
 import { detect } from '../core/detect'
 
@@ -52,21 +52,19 @@ export interface AttachOptions {
 
 export async function cmdAttach(db: Database, cwd: string, agent: string, opts: AttachOptions = {}): Promise<number> {
   const { slug, bin } = opts
-  if (!agentIds.includes(agent as AgentId)) {
-    console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
-    return 2
-  }
+  const target = requireAgent(agent)
+  if (!target) return 2
   const session = requireSession(db, cwd, slug)
   if (!session) return 2
 
-  const detection = await detect(agent as AgentId, { bin })
+  const detection = await detect(target, { bin })
   if (!detection.installed) {
     console.error(`${agent}: not installed`)
     return 2
   }
 
   if (opts.id) {
-    const adopted = adoptForeignSession(db, session, agent as AgentId, opts.id, {
+    const adopted = adoptForeignSession(db, session, target, opts.id, {
       effort: opts.effort ?? 'high',
       permission: opts.permission ?? 'edit',
     })
@@ -77,7 +75,7 @@ export async function cmdAttach(db: Database, cwd: string, agent: string, opts: 
     console.error(`konvoy: ${agent} bound to session ${oneLine(opts.id, 60)} - the next turn resumes it; opening it now`)
   }
 
-  const plan = attachPlan(db, session, agent as AgentId, bin)
+  const plan = attachPlan(db, session, target, bin)
   const proc = Bun.spawn(plan.cmd, { cwd: plan.cwd, stdio: ['inherit', 'inherit', 'inherit'] })
   return await proc.exited
 }

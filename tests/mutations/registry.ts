@@ -975,11 +975,11 @@ export const mutations: Mutation[] = [
     tests: ['tests/repl.test.ts'],
   },
   {
-    name: '/use accepts any word as an agent',
-    file: 'src/commands/repl.ts',
-    from: "if (!agentIds.includes(next as AgentId)) {",
-    to: "if (next === '') {",
-    tests: ['tests/repl.test.ts'],
+    name: '/use accepts any word as an agent (the guard now lives in requireAgent)',
+    file: 'src/commands/messages.ts',
+    from: 'if (!agentIds.includes(name as AgentId)) {',
+    to: "if (name === '') {",
+    tests: ['tests/repl.test.ts', 'tests/agent-required.test.ts'],
   },
   {
     name: '/quit is sent to the command table instead of leaving',
@@ -1096,5 +1096,20 @@ export const mutations: Mutation[] = [
     from: 'if (!session) return 2',
     to: 'if (!session) return 0',
     tests: ['tests/session-required.test.ts'],
+  },
+  // --- one source for the unknown-agent error (src/commands/messages.ts) ---
+  {
+    name: 'the unknown-agent error stops listing the agents konvoy drives, leaving the user to guess',
+    file: 'src/commands/messages.ts',
+    from: "`unknown agent \"${name}\" - expected one of ${agentIds.join(', ')}`",
+    to: '`unknown agent "${name}"`',
+    tests: ['tests/agent-required.test.ts'],
+  },
+  {
+    name: 'requireAgent reports an unknown agent and hands it back anyway, so the command runs on it',
+    file: 'src/commands/messages.ts',
+    from: '    console.error(unknownAgent(name))\n    return null',
+    to: '    console.error(unknownAgent(name))\n    return name as AgentId',
+    tests: ['tests/agent-required.test.ts'],
   },
 ]

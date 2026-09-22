@@ -1,8 +1,8 @@
 import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import type { AgentId, Session } from '../types'
-import { agentIds } from '../adapters'
 import { onExit } from '../core/children'
+import { requireAgent } from './messages'
 import { resolveAgent } from '../config/load'
 import { sessionDir } from '../paths'
 import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal } from '../store/queries'
@@ -219,13 +219,11 @@ export async function runRepl(
     if (cmd === 'help') {
       io.write(replHelp())
     } else if (cmd === 'use') {
-      const next = rest[0] ?? ''
-      if (!agentIds.includes(next as AgentId)) {
-        console.error(`unknown agent "${next}" - expected one of ${agentIds.join(', ')}`)
-      } else if (!resolveAgent(cfg, next as AgentId).enabled) {
+      const next = requireAgent(rest[0] ?? '')
+      if (next && !resolveAgent(cfg, next).enabled) {
         console.error(`${next} is disabled in this konvoy config`)
-      } else {
-        agent = next as AgentId
+      } else if (next) {
+        agent = next
       }
     } else if (cmd === 'goal') {
       const goal = rest.join(' ')

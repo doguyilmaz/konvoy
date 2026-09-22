@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite'
-import type { Session } from '../types'
+import type { AgentId, Session } from '../types'
+import { agentIds } from '../adapters'
 import { currentSession, getSessionBySlug } from '../store/queries'
 
 // Every command that works on a session resolves it the same way and fails the same way. Four
@@ -14,4 +15,16 @@ export function requireSession(db: Database, cwd: string, slug?: string): Sessio
   const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
   if (!session) console.error(slug ? noSessionNamed(slug) : NO_SESSION_HERE)
   return session
+}
+
+export const unknownAgent = (name: string): string =>
+  `unknown agent "${name}" - expected one of ${agentIds.join(', ')}`
+
+/** the agent a user named, or null with the reason already reported */
+export function requireAgent(name: string): AgentId | null {
+  if (!agentIds.includes(name as AgentId)) {
+    console.error(unknownAgent(name))
+    return null
+  }
+  return name as AgentId
 }
