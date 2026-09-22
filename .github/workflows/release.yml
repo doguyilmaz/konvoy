@@ -113,7 +113,7 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/release/*.tar.gz dist/release/checksums.txt --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" dist/release/*.tar.gz dist/release/checksums.txt --title "$GITHUB_REF_NAME" --generate-notes
       - name: Update the Homebrew tap (needs a PAT with contents:write on doguyilmaz/homebrew-tap)
         if: github.ref_type == 'tag' && env.HOMEBREW_TAP_GITHUB_TOKEN != ''
         run: |
@@ -122,10 +122,15 @@ jobs:
           mv dist/release/konvoy.rb "$RUNNER_TEMP/tap/Casks/konvoy.rb"
           cd "$RUNNER_TEMP/tap"
           git add Casks/konvoy.rb
+          git diff --quiet --cached && { echo "tap already carries this version"; exit 0; }
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${GITHUB_REF_NAME}" || echo "cask unchanged"
           git push
       - name: Publish to npm (when NPM_TOKEN is configured)
         if: github.ref_type == 'tag' && env.NPM_TOKEN != ''
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          bun publish --access public
+          set -euo pipefail
+          V=$(bun -e 'console.log(require("./package.json").version)')
+          if curl -fsS "https://registry.npmjs.org/konvoy/$V" >/dev/null 2>&1; then echo "konvoy@$V is already on npm"; exit 0; fi
+          bun publish --access public --auth-type legacy
