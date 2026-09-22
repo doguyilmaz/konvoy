@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "varlock": "^1.20.0"
   }
 }
