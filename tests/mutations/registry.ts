@@ -139,10 +139,10 @@ export const mutations: Mutation[] = [
 
   // --- day bucketing (src/store/queries.ts) ---
   {
-    name: "turnsPerDay/turnsPerDayByAgent bucket by UTC day instead of local day, misfiling turns near midnight",
+    name: "turnsPerDay/turnsPerDayByAgent bucket by the UTC day instead of the local one, misfiling turns near midnight",
     file: 'src/store/queries.ts',
-    from: `const DAY_EXPR = "date(started_at / 1000, 'unixepoch', 'localtime')"`,
-    to: `const DAY_EXPR = "date(started_at / 1000, 'unixepoch')"`,
+    from: "String(d.getDate()).padStart(2, '0')",
+    to: "String(d.getUTCDate()).padStart(2, '0')",
     tests: ['tests/usage.test.ts'],
   },
 

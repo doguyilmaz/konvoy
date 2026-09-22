@@ -397,28 +397,38 @@ export function usageByAgentModel(db: Database, sessionId?: string): ModelUsage[
   }))
 }
 
-// 'localtime' matters: without it SQLite buckets by UTC, so every turn run between midnight
-// and the local UTC offset lands on the previous day's square — verified on this machine
-// (UTC+3), where a turn at 01:30 on the 21st was reported as the 20th.
-const DAY_EXPR = "date(started_at / 1000, 'unixepoch', 'localtime')"
+// Buckets are cut in JS so the CLI keeps one clock: bun:sqlite's 'localtime' modifier reads
+// libc's zone, which ignores process.env.TZ and needs tzdata on the host.
+function localDay(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function startedAt(db: Database, sessionId?: string): { agent: AgentId; started_at: number }[] {
+  const sql = sessionId
+    ? 'SELECT agent, started_at FROM turn WHERE session_id = $sessionId'
+    : 'SELECT agent, started_at FROM turn'
+  return (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as { agent: AgentId; started_at: number }[]
+}
+
+function countBy<K extends string>(keys: K[]): Map<K, number> {
+  const counts = new Map<K, number>()
+  for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1)
+  return new Map([...counts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+}
 
 export function turnsPerDay(db: Database, sessionId?: string): { day: string; count: number }[] {
-  const sql = sessionId
-    ? `SELECT ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn
-       WHERE session_id = $sessionId GROUP BY day ORDER BY day`
-    : `SELECT ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn GROUP BY day ORDER BY day`
-  const rows = (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as Record<string, unknown>[]
-  return rows.map((r) => ({ day: r.day as string, count: r.count as number }))
+  const counts = countBy(startedAt(db, sessionId).map((r) => localDay(r.started_at)))
+  return [...counts].map(([day, count]) => ({ day, count }))
 }
 
 export function turnsPerDayByAgent(
   db: Database,
   sessionId?: string,
 ): { agent: AgentId; day: string; count: number }[] {
-  const sql = sessionId
-    ? `SELECT agent, ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn
-       WHERE session_id = $sessionId GROUP BY agent, day ORDER BY agent, day`
-    : `SELECT agent, ${DAY_EXPR} AS day, COUNT(*) AS count FROM turn GROUP BY agent, day ORDER BY agent, day`
-  const rows = (sessionId ? db.query(sql).all({ sessionId }) : db.query(sql).all()) as Record<string, unknown>[]
-  return rows.map((r) => ({ agent: r.agent as AgentId, day: r.day as string, count: r.count as number }))
+  const counts = countBy(startedAt(db, sessionId).map((r) => `${r.agent}\u0000${localDay(r.started_at)}`))
+  return [...counts].map(([key, count]) => {
+    const [agent, day] = key.split('\u0000') as [AgentId, string]
+    return { agent, day, count }
+  })
 }
