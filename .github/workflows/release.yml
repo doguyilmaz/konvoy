@@ -88,9 +88,11 @@ jobs:
   release:
     needs: [build-linux, build-darwin]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     env:
       HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -125,12 +127,13 @@ jobs:
           git diff --quiet --cached && { echo "tap already carries this version"; exit 0; }
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${GITHUB_REF_NAME}" || echo "cask unchanged"
           git push
-      - name: Publish to npm (when NPM_TOKEN is configured)
-        if: github.ref_type == 'tag' && env.NPM_TOKEN != ''
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # npm's trusted publishing is an OIDC handshake only npm's own CLI performs; bun publish has no
+      # equivalent, so this one step runs npm. The publisher is configured once on npmjs.com.
+      - name: Publish to npm
+        if: github.ref_type == 'tag'
         run: |
           set -euo pipefail
           V=$(bun -e 'console.log(require("./package.json").version)')
           if curl -fsS "https://registry.npmjs.org/@doguyilmaz%2Fkonvoy/$V" >/dev/null 2>&1; then echo "@doguyilmaz/konvoy@$V is already on npm"; exit 0; fi
-          bun publish --access public --auth-type legacy
+          npm install -g npm@latest >/dev/null
+          npm publish --provenance --access public

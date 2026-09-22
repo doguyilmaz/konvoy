@@ -265,9 +265,10 @@ Bump `version` in `package.json`, then `git tag vX.Y.Z && git push --tags`. The 
 workflow builds four binaries (macOS arm64 and x64, signed and notarized; Linux amd64 and
 arm64), publishes them with checksums, updates `Casks/konvoy.rb` in `doguyilmaz/homebrew-tap`,
 and publishes to npm. It reads these repository secrets, each declared in `.env.schema`:
-`HOMEBREW_TAP_GITHUB_TOKEN`, `NPM_TOKEN`, `MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`,
-`MACOS_NOTARY_ISSUER_ID`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_KEY`. Signing, the tap push
-and the npm publish are each skipped when their secret is absent. To publish by hand, put the
+`HOMEBREW_TAP_GITHUB_TOKEN`, `MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`,
+`MACOS_NOTARY_ISSUER_ID`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_KEY`. Signing and the tap push are
+skipped when their secret is absent; npm is published through trusted publishing (OIDC), configured
+once on npmjs.com, so there is no npm token. To publish by hand, put the
 values in `.env.local` (gitignored) and run each step through `bunx varlock run -- <command>`,
 which injects and redacts them instead of having them pasted into a terminal.
 
