@@ -35,8 +35,12 @@ export async function cmdUpdate(
   deps: UpdateDeps = realUpdateDeps,
 ): Promise<number> {
   if (!opts.all) {
-    console.log('konvoy is built from source: bun run build')
-    console.log('to update the agent CLIs, run: konvoy update --all')
+    // konvoy does not update itself — it follows the channel it was installed from
+    const channel = Bun.isStandaloneExecutable
+      ? 'brew upgrade --cask konvoy, or download the latest release'
+      : 'bun add -g konvoy@latest, or bun run build in a checkout'
+    console.log(`to update konvoy: ${channel}`)
+    console.log('to update the agent CLIs: konvoy update --all')
     return 0
   }
 

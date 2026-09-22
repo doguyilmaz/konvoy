@@ -1,0 +1,120 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun test
+      - run: bun run typecheck
+      - name: The tag must be the package version
+        run: test "$(bun -e 'console.log(require("./package.json").version)')" = "${GITHUB_REF_NAME#v}"
+
+  build-linux:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run scripts/release.ts build --only linux
+      - run: bun run scripts/release.ts pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: |
+            dist/release/*.tar.gz
+            dist/release/checksums-*.txt
+
+  build-darwin:
+    needs: verify
+    runs-on: macos-latest
+    env:
+      MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+      MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+      MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+      MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+      MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run scripts/release.ts build --only darwin
+      - name: Sign and notarize (when a signing identity is configured)
+        if: env.MACOS_SIGN_P12 != ''
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/konvoy.keychain-db"
+          echo "$MACOS_SIGN_P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/sign.p12" -P "$MACOS_SIGN_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' 'NR==1{print $2}')
+          printf '%s' "$MACOS_NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          for dir in dist/release/darwin_*; do
+            codesign --force --options runtime --timestamp --entitlements scripts/entitlements.plist --sign "$IDENTITY" "$dir/konvoy"
+            ditto -c -k --keepParent "$dir/konvoy" "$dir/konvoy.zip"
+            xcrun notarytool submit "$dir/konvoy.zip" --issuer "$MACOS_NOTARY_ISSUER_ID" --key-id "$MACOS_NOTARY_KEY_ID" --key "$RUNNER_TEMP/notary.p8" --wait
+            rm "$dir/konvoy.zip"
+            codesign --verify --verbose "$dir/konvoy"
+          done
+      - run: bun run scripts/release.ts pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-darwin
+          path: |
+            dist/release/*.tar.gz
+            dist/release/checksums-*.txt
+
+  release:
+    needs: [build-linux, build-darwin]
+    runs-on: ubuntu-latest
+    env:
+      HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          merge-multiple: true
+      - run: cat dist/release/checksums-*.txt > dist/release/checksums.txt && cat dist/release/checksums.txt
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/release/*.tar.gz dist/release/checksums.txt --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Update the Homebrew tap (needs a PAT with contents:write on doguyilmaz/homebrew-tap)
+        if: env.HOMEBREW_TAP_GITHUB_TOKEN != ''
+        run: |
+          set -euo pipefail
+          bun run scripts/tap-cask.ts "${GITHUB_REF_NAME#v}" dist/release/checksums.txt > konvoy.rb
+          git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/doguyilmaz/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          mv konvoy.rb "$RUNNER_TEMP/tap/Casks/konvoy.rb"
+          cd "$RUNNER_TEMP/tap"
+          git add Casks/konvoy.rb
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${GITHUB_REF_NAME}" || echo "cask unchanged"
+          git push
+      - name: Publish to npm (when NPM_TOKEN is configured)
+        if: env.NPM_TOKEN != ''
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          bun publish --access public

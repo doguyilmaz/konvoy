@@ -6,10 +6,33 @@ re-explaining anything.
 
 ## Install
 
+macOS, via the tap (a signed binary; no Bun needed):
+
+```bash
+brew install --cask doguyilmaz/tap/konvoy
+```
+
+Linux, from the release tarball (no Bun needed):
+
+```bash
+curl -fsSL https://github.com/doguyilmaz/konvoy/releases/latest/download/konvoy_linux_amd64.tar.gz | tar xz konvoy
+install -m 755 konvoy ~/.local/bin/konvoy
+```
+
+With Bun 1.4+ already installed, from npm:
+
+```bash
+bun add -g konvoy        # or run once: bunx konvoy help
+```
+
+From a checkout:
+
 ```bash
 bun install
 bun run build          # produces ./dist/konvoy
 ```
+
+Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g konvoy@latest`, or `bun run build`.
 
 ## Use
 
@@ -24,7 +47,7 @@ konvoy status
 konvoy attach codex    # drops you into the real Codex TUI, same session
 konvoy attach kiro --id cli_8a1…   # adopt a session you started in kiro's own TUI; the next turn resumes it
 konvoy doctor
-konvoy update --all    # konvoy itself, plus every agent CLI
+konvoy update --all    # every agent CLI; konvoy itself follows its install channel (see Install)
 konvoy rm stale-slug --yes
 konvoy version
 konvoy dashboard --port 4000  # local page with the same numbers as `usage --chart`
@@ -230,7 +253,7 @@ override yet.
 
 ## Requirements
 
-Bun 1.4+, and whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy.
+Whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy. Bun 1.4+ only for the npm install or a checkout; the brew and tarball binaries carry their own runtime.
 Each authenticates itself; konvoy never handles credentials.
 
 ## Development
