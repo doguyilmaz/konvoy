@@ -981,4 +981,18 @@ export const mutations: Mutation[] = [
     to: ': 1',
     tests: ['tests/cli.test.ts'],
   },
+  {
+    name: '-v starts an interactive session instead of printing the version',
+    file: 'src/cli.ts',
+    from: 'if (args.flags.version === true || args.flags.v === true || args.flags.V === true) {',
+    to: 'if (args.flags.version === true) {',
+    tests: ['tests/cli.test.ts'],
+  },
+  {
+    name: 'a stray flag with no command silently starts a session',
+    file: 'src/cli.ts',
+    from: 'if (stray.length > 0) {',
+    to: 'if (stray.length > 1) {',
+    tests: ['tests/cli.test.ts'],
+  },
 ]
