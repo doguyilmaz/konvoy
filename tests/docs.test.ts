@@ -24,7 +24,7 @@ function konvoyInvocations(): string[] {
     }
   }
 
-  for (const m of readme.matchAll(/`(konvoy\s+\S+)[^`]*`/g)) {
+  for (const m of readme.matchAll(/`(konvoy\s+[^\s`]+)[^`]*`/g)) {
     const w = m[1]!.match(/^konvoy\s+(\S+)/)
     if (w) words.push(w[1]!)
   }
