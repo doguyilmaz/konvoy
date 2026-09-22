@@ -24,9 +24,7 @@ import { cmdDashboard } from './commands/dashboard'
 import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
 import { runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
 import type { AgentId } from './types'
-import pkg from '../package.json'
-
-const VERSION = pkg.version
+import { version as VERSION } from '../package.json'
 
 export const USAGE = `konvoy ${VERSION}
 

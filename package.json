@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/doguyilmaz/konvoy.git"
   },
-  "homepage": "https://github.com/doguyilmaz/konvoy#readme",
+  "homepage": "https://doguyilmaz.github.io/konvoy/",
   "bugs": "https://github.com/doguyilmaz/konvoy/issues",
   "keywords": [
     "cli",
@@ -17,7 +17,9 @@
     "codex",
     "kiro",
     "opencode",
-    "bun"
+    "bun",
+    "ai-agents",
+    "developer-tools"
   ],
   "bin": {
     "konvoy": "./src/cli.ts"
