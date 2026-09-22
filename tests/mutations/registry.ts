@@ -918,4 +918,32 @@ export const mutations: Mutation[] = [
     to: 'ctx.slug, { roster: true })',
     tests: ['tests/cli.test.ts'],
   },
+  {
+    name: 'rename lets two sessions share a slug',
+    file: 'src/commands/rename.ts',
+    from: 'if (getSessionBySlug(db, slug)) {',
+    to: 'if (getSessionBySlug(db, slug) && slug === from) {',
+    tests: ['tests/rename.test.ts'],
+  },
+  {
+    name: "konvoy new rewrites the user's .konvoy/.gitignore on every run",
+    file: 'src/commands/new.ts',
+    from: "if (!(await ignore.exists())) await Bun.write(ignore, '*/\\n')",
+    to: "await Bun.write(ignore, '*/\\n')",
+    tests: ['tests/new.test.ts'],
+  },
+  {
+    name: 'a goal-less session is named by the suffix alone, not its directory',
+    file: 'src/commands/new.ts',
+    from: '`${slugify(basename(cwd)).slice(0, 30)}-${suffix}`',
+    to: '`${suffix}`',
+    tests: ['tests/new.test.ts'],
+  },
+  {
+    name: 'an empty goal still prints a bare goal line in the prelude',
+    file: 'src/core/prelude.ts',
+    from: "session.goal ? `goal: ${session.goal}` : ''",
+    to: '`goal: ${session.goal}`',
+    tests: ['tests/prelude.test.ts'],
+  },
 ]
