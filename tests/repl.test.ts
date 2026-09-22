@@ -227,3 +227,23 @@ test('the REPL sends one turn for a pasted block, with every line of it', async 
 
   expect(calls).toEqual([['send', 'claude', 'fix the refresh\nand the retry\nand the test']])
 })
+
+// /help was two blocks padded to two different widths, and the inner list was produced by
+// post-processing the CLI listing with replaceAll('  konvoy ', '  /'), which also rewrote the
+// word "konvoy" inside a summary: the version row read "/and agent versions" to a real user.
+test('/help is one list on one column, and no summary is mangled', () => {
+  const lines = replHelp().trimEnd().split('\n')
+  expect(lines.length).toBeGreaterThan(15)
+
+  const starts = new Set<number>()
+  for (const line of lines) {
+    const row = /^ {2}(\/\S+(?: \S+)*?) {2,}(\S.*)$/.exec(line)
+    expect(row, line).not.toBeNull()
+    starts.add(line.indexOf(row![2]!))
+  }
+  // every summary begins at the same column, which is what makes a list readable
+  expect(starts.size).toBe(1)
+
+  expect(replHelp()).toContain('konvoy and agent versions')
+  expect(replHelp()).not.toContain('/and agent versions')
+})

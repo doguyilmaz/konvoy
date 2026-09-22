@@ -1149,4 +1149,92 @@ export const mutations: Mutation[] = [
     to: 'if (false) {',
     tests: ['tests/agent-required.test.ts', 'tests/repl.test.ts'],
   },
+
+  // --- colour and live turn rendering (src/style.ts, src/render.ts, src/adapters/claude.ts) ---
+  {
+    name: 'NO_COLOR is ignored, so konvoy writes escape sequences to a user who asked for none',
+    file: 'src/style.ts',
+    from: "if (env.NO_COLOR !== undefined && env.NO_COLOR !== '') return false",
+    to: 'if (false) return false',
+    tests: ['tests/style.color.test.ts'],
+  },
+  {
+    name: 'the plain palette colours anyway, so a pipe and a log fill up with escape sequences',
+    file: 'src/style.ts',
+    from: 'out[name] = on ? (text) => `\\x1b[${code}m${text}\\x1b[0m` : identity',
+    to: 'out[name] = (text) => `\\x1b[${code}m${text}\\x1b[0m`',
+    tests: ['tests/style.color.test.ts'],
+  },
+  {
+    name: 'a tool line drops its target, back to a column of bare tool names that say nothing',
+    file: 'src/render.ts',
+    from: "const target = detail ? `  ${detail}` : ''",
+    to: "const target = ''",
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'a failed tool renders as a success, which is worse than not rendering the outcome at all',
+    file: 'src/render.ts',
+    from: "settle(event.status === 'error' ? p.red('✗') : p.green('✓'))",
+    to: "settle(p.green('✓'))",
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the answer stops streaming and appears only when the turn ends',
+    file: 'src/render.ts',
+    from: '          streamed += event.text\n          deps.out(event.text)',
+    to: '          streamed += event.text',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: "thinking is dumped verbatim, so the model's reasoning buries the answer",
+    file: 'src/render.ts',
+    from: "deps.err(`${p.dim('  … thinking')}\\n`)",
+    to: 'deps.err(`${p.dim(`  … ${event.text}`)}\\n`)',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the live rewrite is written to a pipe as well, so a log fills with carriage returns',
+    file: 'src/render.ts',
+    from: 'if (deps.tty) deps.err(`${CLEAR}${text}`)',
+    to: 'deps.err(`${CLEAR}${text}`)',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the streamed answer is printed a second time at the end of the turn',
+    file: 'src/render.ts',
+    from: 'if (final.startsWith(alreadyStreamed)) return final.slice(alreadyStreamed.length)',
+    to: 'if (final.startsWith(alreadyStreamed)) return final',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'claude tool calls lose the path or command they act on',
+    file: 'src/adapters/claude.ts',
+    from: "if (typeof value === 'string' && value !== '') return oneLine(value, 80)",
+    to: 'if (false) return oneLine(value, 80)',
+    tests: ['tests/adapter-claude.test.ts'],
+  },
+  {
+    name: 'claude tool results are dropped again, so no tool call ever shows how it ended',
+    file: 'src/adapters/claude.ts',
+    from: "if (block.type === 'tool_result')",
+    to: "if (block.type === 'never_emitted')",
+    tests: ['tests/adapter-claude.test.ts'],
+  },
+
+  // --- the command listing and unknown commands (src/commands/table.ts) ---
+  {
+    name: 'the command listing loses its shared column, so the longest row sits out of line',
+    file: 'src/commands/table.ts',
+    from: 'const width = Math.max(...left.map((l) => l.length)) + 2',
+    to: 'const width = Math.max(...left.map((l) => l.length))',
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: 'an unknown command never suggests the near miss a user actually typed',
+    file: 'src/commands/table.ts',
+    from: 'const limit = Math.max(1, Math.floor(candidate.length / 3))',
+    to: 'const limit = 0',
+    tests: ['tests/session-required.test.ts'],
+  },
 ]

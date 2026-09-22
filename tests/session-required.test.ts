@@ -108,3 +108,18 @@ test('requireNamedSession returns the session it found and says nothing', () => 
     err.mockRestore()
   }
 })
+
+// `/list` and `/mode` were both typed by a first-time user in one session and both answered
+// "unknown command ... /help lists them", which is a dead end when the command they wanted is
+// one letter away. Both entry points word it once, and name the nearest match when there is one.
+test('an unknown command names the nearest real one, in both the REPL and the CLI', async () => {
+  const { unknownCommand } = await import('../src/commands/messages')
+  expect(unknownCommand('list', '/')).toContain('did you mean /ls')
+  expect(unknownCommand('sessons', 'konvoy ')).toContain('did you mean konvoy ls')
+  expect(unknownCommand('rosterr', '/')).toContain('did you mean /roster')
+  // nothing close enough: it still says where the list is, and never invents a suggestion
+  const far = unknownCommand('xyzzy', '/')
+  expect(far).toContain('xyzzy')
+  expect(far).not.toContain('did you mean')
+  expect(far).toContain('/help')
+})

@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { AgentId, Session } from '../types'
 import { agentIds } from '../adapters'
 import { currentSession, getSessionBySlug } from '../store/queries'
+import { nearestCommand } from './table'
 
 // Every command that works on a session resolves it the same way and fails the same way. Four
 // copies of this sentence drifted into naming only `konvoy new "<goal>"` and into saying "here"
@@ -26,6 +27,14 @@ export function requireNamedSession(db: Database, slug: string): Session | null 
 
 export const unknownAgent = (name: string): string =>
   `unknown agent "${name}" - expected one of ${agentIds.join(', ')}`
+
+// One wording for both entry points: `konvoy bogus` and `/bogus` inside the REPL. `prefix` is
+// how the user got here, so the suggestion is offered in the form they typed.
+export function unknownCommand(word: string, prefix: string): string {
+  const near = nearestCommand(word)
+  const help = prefix === '/' ? '/help lists them' : 'konvoy --help lists them'
+  return near ? `unknown command "${prefix}${word}" - did you mean ${prefix}${near}?` : `unknown command "${prefix}${word}" - ${help}`
+}
 
 /** the agent a user named, or null with the reason already reported */
 export function requireAgent(name: string): AgentId | null {

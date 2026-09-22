@@ -7,7 +7,7 @@ import { disabledAgent, resolveAgent } from '../config/load'
 import { sessionDir } from '../paths'
 import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal } from '../store/queries'
 import { cmdNew } from './new'
-import { formatCommandList } from './table'
+import { commandTable, formatRows, type CommandRow } from './table'
 
 export interface ReplIo {
   lines: AsyncIterable<string>
@@ -154,13 +154,16 @@ export function terminalIo(
 /** runs one command line through the command table, as `konvoy <tokens>` would, for the given session */
 export type Run = (tokens: string[], slug: string) => Promise<number> | number
 
-const INNER = `  /use <agent>                             talk to this agent from now on
-  /goal <text>                             set the session goal
-  /help                                    this list
-  /quit                                    leave (Ctrl-D does too)
-`
+// The commands that exist only inside the REPL. They render through the same two-column helper
+// as the table ones, on one shared width, so `/help` reads as a single list.
+const INNER: readonly CommandRow[] = [
+  { usage: 'use <agent>', summary: 'talk to this agent from now on' },
+  { usage: 'goal <text>', summary: 'set the session goal' },
+  { usage: 'help', summary: 'this list' },
+  { usage: 'quit', summary: 'leave (Ctrl-D does too)' },
+]
 
-export const replHelp = (): string => INNER + formatCommandList().replaceAll('  konvoy ', '  /') + '\n'
+export const replHelp = (): string => `${formatRows('/', [...INNER, ...commandTable])}\n`
 
 export async function startSession(db: Database, cfg: Config, cwd: string, slug?: string): Promise<Session | null> {
   if (slug) return getSessionBySlug(db, slug)

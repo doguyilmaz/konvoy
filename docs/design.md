@@ -99,23 +99,23 @@ starts with, the one bare `konvoy` talks to first; with none configured it is cl
 ## 6. CLI surface
 
 ```
-  konvoy                                   start: resume this directory's session or create one, then talk
+  konvoy                                     start: resume this directory's session or create one, then talk
 
-  konvoy new ["<goal>"]                    create a session in this directory
-  konvoy send <agent> "<msg>"              run one turn against one agent
-  konvoy ls                                list sessions
-  konvoy resume [session]                  make a session current and show its roster
-  konvoy config get|set                    read or write layered configuration
-  konvoy rm <session> --yes                delete a konvoy session (foreign sessions survive)
-  konvoy rename <session> <new-name>       rename a session; its .konvoy folder follows
-  konvoy roster                            who is in the convoy
-  konvoy usage [--all] [--chart]           what this session spent, per agent
-  konvoy status                            versions, auth and roster
+  konvoy new ["<goal>"]                      create a session in this directory
+  konvoy send <agent> "<msg>"                run one turn against one agent
+  konvoy ls                                  list sessions
+  konvoy resume [session]                    make a session current and show its roster
+  konvoy config get|set                      read or write layered configuration
+  konvoy rm <session> --yes                  delete a konvoy session (foreign sessions survive)
+  konvoy rename <session> <new-name>         rename a session; its .konvoy folder follows
+  konvoy roster                              who is in the convoy
+  konvoy usage [--all] [--chart]             what this session spent, per agent
+  konvoy status                              versions, auth and roster
   konvoy attach <agent> [--id <session-id>]  open that agent's own interface, same session
-  konvoy doctor                            check installs, logins, effort and model overlap
-  konvoy update [--all]                    update konvoy, and with --all the agent CLIs
-  konvoy version                           konvoy and agent versions
-  konvoy dashboard [--port N]              open a local page with the same numbers
+  konvoy doctor                              check installs, logins, effort and model overlap
+  konvoy update [--all]                      update konvoy, and with --all the agent CLIs
+  konvoy version                             konvoy and agent versions
+  konvoy dashboard [--port N]                open a local page with the same numbers
 ```
 
 This block is the command table in `src/commands/table.ts` as `konvoy help` prints it;
