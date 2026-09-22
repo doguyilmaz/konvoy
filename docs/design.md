@@ -1,6 +1,6 @@
 # konvoy — design
 
-**Status:** approved design, pre-implementation
+**Status:** the design as approved on 2026-09-19. Where it and the code differ, the README and the code are authoritative; §23–25 (parley, party, formations) are roadmap and not implemented.
 **Date:** 2026-09-19
 **Binary:** `konvoy`
 

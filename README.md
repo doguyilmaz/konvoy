@@ -34,6 +34,9 @@ bun run build          # produces ./dist/konvoy
 
 Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g konvoy@latest`, or `bun run build`.
 
+The brew and tarball binaries carry the Bun runtime, so each is about 60 MB on disk and 25–35 MB
+to download; the npm package is a few kilobytes of source and runs on the Bun you already have.
+
 ## Use
 
 ```bash
