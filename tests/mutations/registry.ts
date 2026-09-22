@@ -1002,11 +1002,4 @@ export const mutations: Mutation[] = [
     to: '',
     tests: ['tests/repl.test.ts'],
   },
-  {
-    name: 'the site shows mermaid diagrams as raw code',
-    file: 'scripts/site.ts',
-    from: '`<pre class="mermaid">${chart}</pre>`',
-    to: '`<pre><code class="language-mermaid">${chart}</code></pre>`',
-    tests: ['tests/site.test.ts'],
-  },
 ]

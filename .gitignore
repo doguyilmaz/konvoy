@@ -8,3 +8,6 @@ dist
 .env
 .env.local
 .env.*.local
+
+# site build output
+.vitepress/cache

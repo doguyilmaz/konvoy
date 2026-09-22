@@ -2,7 +2,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: ["README.md", "package.json", "scripts/site.ts", ".github/workflows/pages.yml"]
+    paths: ["README.md", "package.json", "site/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,16 +14,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - run: bun run scripts/site.ts
+      - run: bun install --frozen-lockfile
+      - run: bun run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/site
+          path: site/.vitepress/dist
   deploy:
     needs: build
     runs-on: ubuntu-latest
