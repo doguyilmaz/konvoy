@@ -166,6 +166,9 @@ Global `~/.config/konvoy/config.jsonc`, per project `.konvoy/config.jsonc`. The 
 file wins. `konvoy config get` shows each agent's resolved settings and whether a value came
 from that agent, from `defaults`, or from konvoy's own built-in.
 
+`konvoy new` also writes `.konvoy/.gitignore` (`*`, then `!config.jsonc`), so a session's `CONTEXT.md`
+and `LEDGER.md` never reach git while the project config can be committed.
+
 ```jsonc
 {
   "defaults": { "effort": "high", "permission": "edit" },

@@ -93,7 +93,7 @@ agent. Roles are hints for delegation, not enforcement. The lead is the agent `k
 ## 6. CLI surface
 
 ```
-konvoy new [goal]              create a session in cwd, write brief, bind lazily
+konvoy new [goal]              create a session in cwd, write brief, bind lazily; no goal: named <dir>-<4 hex>
 konvoy start                   alias of new
 konvoy send <agent> "msg"      one headless turn against one agent
 konvoy run "task"              lead agent runs the task with delegation enabled
@@ -108,6 +108,7 @@ konvoy doctor                  installed / authed / version / capability checks 
 konvoy update [--all]          update konvoy, and with --all the four CLIs
 konvoy version                 konvoy + all four versions in one block
 konvoy rm <session>            delete a session (bindings kept in the foreign CLIs)
+konvoy rename <session> <new>  rename a session; its .konvoy folder follows
 konvoy mcp                     internal: stdio MCP server injected into agents
 ```
 
