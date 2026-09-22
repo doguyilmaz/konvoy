@@ -35,7 +35,7 @@ export const USAGE = `konvoy ${VERSION}
 ${formatCommandList()}
 
 agents: ${agentIds.join(', ')}
-flags:  --session <slug>
+flags:  --session <slug>, --version (-v), --help (-h)
 `
 
 interface CommandContext {
@@ -129,9 +129,21 @@ export async function main(argv: string[], io: ReplIo = stdio()): Promise<number
   const cwd = process.cwd()
   const slug = typeof args.flags.session === 'string' ? args.flags.session : undefined
 
-  if (command === 'help' || args.flags.help) {
+  if (args.flags.version === true || args.flags.v === true || args.flags.V === true) {
+    console.log(`konvoy ${VERSION}`)
+    return 0
+  }
+  if (command === 'help' || args.flags.help === true || args.flags.h === true) {
     console.log(USAGE)
     return 0
+  }
+  if (!command) {
+    const stray = Object.keys(args.flags).filter((f) => f !== 'session')
+    if (stray.length > 0) {
+      console.error(`unknown flag ${stray[0]!.length === 1 ? '-' : '--'}${stray[0]}`)
+      console.log(USAGE)
+      return 2
+    }
   }
 
   try {

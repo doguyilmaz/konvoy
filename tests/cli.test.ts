@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test'
 import { main, USAGE } from '../src/cli'
 import { commandTable } from '../src/commands/table'
+import pkg from '../package.json'
 
 const tmp = (name: string) => `/tmp/konvoy-test-cli-${name}-${Bun.nanoseconds()}`
 
@@ -180,5 +181,32 @@ test('konvoy help prints the usage and exits 0', async () => {
     expect(String(log.mock.calls[0]?.[0])).toContain('konvoy new')
   } finally {
     log.mockRestore()
+  }
+})
+
+test('-v and --version print one line and start nothing', async () => {
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    for (const flag of ['-v', '--version']) {
+      log.mockClear()
+      expect(await main([flag], { lines: noInput(), write: () => {}, tty: true })).toBe(0)
+      expect(log.mock.calls.map((c) => String(c[0]))).toEqual([`konvoy ${pkg.version}`])
+    }
+  } finally {
+    log.mockRestore()
+  }
+})
+
+test('-h prints the usage, and a stray flag with no command is refused instead of starting a session', async () => {
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect(await main(['-h'])).toBe(0)
+    expect(String(log.mock.calls[0]?.[0])).toBe(USAGE)
+    expect(await main(['--bogus'], { lines: noInput(), write: () => {}, tty: true })).toBe(2)
+    expect(String(err.mock.calls[0]?.[0])).toBe('unknown flag --bogus')
+  } finally {
+    log.mockRestore()
+    err.mockRestore()
   }
 })
