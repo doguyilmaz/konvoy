@@ -63,7 +63,8 @@ Bare `konvoy` is the everyday entry: it resumes the session bound to this direct
 one named after it, then reads what you type. Plain text is a turn against the current agent; a
 line starting with `/` runs any command from the list (`/usage --all`, `/rename token-refresh`,
 `/attach`), plus `/use <agent>`, `/goal <text>`, `/help` and `/quit`. Ctrl-D leaves, Ctrl-C stops a
-running turn and leaves, and piped stdin runs one turn per line.
+running turn and leaves, and piped stdin runs one turn per line. A block pasted into a terminal
+is one turn with every line of it, not one turn per line.
 
 ```text
 sinkaf-8f3a claude> fix the token refresh

@@ -1215,5 +1215,9 @@ agent recorded it, because failover never falls back. A line starting with `/` i
 `/use`, `/goal`, `/help` and `/quit` live only inside; every other `/<name>` is the command table
 with the current session implied (`/rename <new>` needs no old name, `/attach` defaults to the
 current agent, `/new` and `/resume` switch the session). Prompts appear only on a TTY, so piped
-stdin runs one turn per line and exits at EOF. Ctrl-C keeps its meaning from section 13: it stops
+stdin runs one turn per line and exits at EOF. On a TTY konvoy also enables bracketed paste
+(DECSET 2004) and treats everything the terminal brackets as a single message: a pasted block is
+one turn carrying all of its lines, where reading the tty line by line made it one turn per line
+and sent the first fragment on its own. A terminal that does not support the mode sends no
+markers and behaves as before. Ctrl-C keeps its meaning from section 13: it stops
 the running turn and the process. The subcommands remain the scripting surface.
