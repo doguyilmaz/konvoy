@@ -1243,3 +1243,15 @@ the codex rate-limit stream shape captured, so an informational error item can b
 failed turn (audit 2026-09-21, C-pre-1).
 **v2** - `drive()` over each CLI's persistent protocol: live streaming, steer, cancel.
 **v3** - parallel worktrees by default with conflict-aware merge; tmux-backed live attach.
+
+## 34. Interactive mode
+
+Bare `konvoy` resumes the session bound to the current directory, or creates one named
+`<directory>-<4 hex>` with an empty goal, and reads stdin line by line. Plain text runs a turn
+against the current agent, the lead at first; after a turn the current agent becomes whichever
+agent recorded it, because failover never falls back. A line starting with `/` is a command:
+`/use`, `/goal`, `/help` and `/quit` live only inside; every other `/<name>` is the command table
+with the current session implied (`/rename <new>` needs no old name, `/attach` defaults to the
+current agent, `/new` and `/resume` switch the session). Prompts appear only on a TTY, so piped
+stdin runs one turn per line and exits at EOF. Ctrl-C keeps its meaning from section 13: it stops
+the running turn and the process. The subcommands remain the scripting surface.

@@ -76,6 +76,10 @@ export function touchSession(db: Database, id: string): void {
   ).run({ id, now: now() })
 }
 
+export function setGoal(db: Database, id: string, goal: string): void {
+  db.query('UPDATE session SET goal = $goal WHERE id = $id').run({ goal, id })
+}
+
 export function renameSession(db: Database, id: string, slug: string): void {
   db.query('UPDATE session SET slug = $slug WHERE id = $id').run({ slug, id })
 }

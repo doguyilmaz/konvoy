@@ -22,12 +22,15 @@ import { cmdRename } from './commands/rename'
 import { cmdUsage } from './commands/usage'
 import { cmdDashboard } from './commands/dashboard'
 import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
+import { runRepl, startSession, type ReplIo } from './commands/repl'
 import type { AgentId } from './types'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
 
 export const USAGE = `konvoy ${VERSION}
+
+  konvoy                                   start: resume this directory's session or create one, then talk
 
 ${formatCommandList()}
 
@@ -112,20 +115,27 @@ const handlers: Record<CommandName, Handler> = {
     }),
 }
 
-export async function main(argv: string[]): Promise<number> {
+const stdio = (): ReplIo => ({
+  lines: console as unknown as AsyncIterable<string>,
+  write: (text) => {
+    process.stdout.write(text)
+  },
+  tty: Boolean(process.stdin.isTTY),
+})
+
+export async function main(argv: string[], io: ReplIo = stdio()): Promise<number> {
   const args = parseArgs(argv)
   const [command, ...rest] = args._
   const cwd = process.cwd()
   const slug = typeof args.flags.session === 'string' ? args.flags.session : undefined
 
-  if (!command || command === 'help' || args.flags.help) {
+  if (command === 'help' || args.flags.help) {
     console.log(USAGE)
-    // asking for help is not a usage error; running konvoy with nothing is
-    return command || args.flags.help ? 0 : 1
+    return 0
   }
 
   try {
-    return await dispatch(command, rest, cwd, slug, args)
+    return command ? await dispatch(command, rest, cwd, slug, args) : await interactive(io, cwd, slug)
   } catch (error) {
     if (Bun.env.KONVOY_DEBUG === '1') throw error
     console.error(`konvoy: ${error instanceof Error ? error.message : String(error)}`)
@@ -148,6 +158,26 @@ async function dispatch(command: string, rest: string[], cwd: string, slug: stri
   }
 
   return handlers[name]({ db, cfg, cwd, args, slug }, rest)
+}
+
+async function interactive(io: ReplIo, cwd: string, slug: string | undefined): Promise<number> {
+  const db = openDb(dbPath())
+  const cfg = await loadConfig({ cwd: (slug ? getSessionBySlug(db, slug)?.cwd : undefined) ?? cwd })
+  const session = await startSession(db, cfg, cwd, slug)
+  if (!session) {
+    console.error(slug ? `no konvoy session named "${slug}"` : 'could not create a session here')
+    return 2
+  }
+  return runRepl(io, db, cfg, cwd, session, (tokens, current) => {
+    const a = parseArgs(tokens)
+    const [cmd = '', ...r] = a._
+    const name = resolveCommandName(cmd)
+    if (!name) {
+      console.error(`unknown command "/${cmd}" - /help lists them`)
+      return 2
+    }
+    return handlers[name]({ db, cfg, cwd, args: a, slug: current }, r)
+  })
 }
 
 if (import.meta.main) {

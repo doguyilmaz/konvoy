@@ -40,6 +40,7 @@ to download; the npm package is a few kilobytes of source and runs on the Bun yo
 ## Use
 
 ```bash
+konvoy                         # start: resume this directory's session or create one, then talk
 konvoy new "refactor the auth layer"
 konvoy new                     # no goal: named after the directory, like sinkaf-8f3a
 konvoy send codex "start with the token refresh path"
@@ -56,6 +57,20 @@ konvoy rm stale-slug --yes
 konvoy rename stale-slug token-refresh   # the session's .konvoy folder follows
 konvoy version
 konvoy dashboard --port 4000  # local page with the same numbers as `usage --chart`
+```
+
+Bare `konvoy` is the everyday entry: it resumes the session bound to this directory or creates
+one named after it, then reads what you type. Plain text is a turn against the current agent; a
+line starting with `/` runs any command from the list (`/usage --all`, `/rename token-refresh`,
+`/attach`), plus `/use <agent>`, `/goal <text>`, `/help` and `/quit`. Ctrl-D leaves, Ctrl-C stops a
+running turn and leaves, and piped stdin runs one turn per line.
+
+```text
+sinkaf-8f3a claude> fix the token refresh
+  · Read src/auth.ts
+Switched the refresh to fire on 401 with a single in-flight retry.
+sinkaf-8f3a claude> /use codex
+sinkaf-8f3a codex> review that diff
 ```
 
 ## Sample output

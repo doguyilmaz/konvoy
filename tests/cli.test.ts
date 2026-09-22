@@ -151,3 +151,34 @@ test('version in a directory with no session reports versions and says nothing o
     log.mockRestore()
   }
 })
+
+async function* noInput(): AsyncGenerator<string> {}
+
+test('bare konvoy creates a session in a fresh directory and returns 0 at end of input', async () => {
+  const dir = tmp('bare')
+  const home = tmp('bare-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/marker`, '')
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    let code = -1
+    await withEnv(dir, home, async () => {
+      code = await main([], { lines: noInput(), write: () => {}, tty: false })
+    })
+    expect(code).toBe(0)
+    expect(log.mock.calls.map((c) => String(c[0])).some((l) => l.startsWith('created session '))).toBe(true)
+    expect(await Bun.file(`${dir}/.konvoy/.gitignore`).exists()).toBe(true)
+  } finally {
+    log.mockRestore()
+  }
+})
+
+test('konvoy help prints the usage and exits 0', async () => {
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    expect(await main(['help'])).toBe(0)
+    expect(String(log.mock.calls[0]?.[0])).toContain('konvoy new')
+  } finally {
+    log.mockRestore()
+  }
+})
