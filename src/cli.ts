@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import type { Database } from 'bun:sqlite'
 import { parseArgs, type Args } from './args'
-import { loadConfig, resolveAgent } from './config/load'
+import { effectiveHarness, loadConfig, resolveAgent } from './config/load'
 import { getSessionBySlug } from './store/queries'
 import { agentIds } from './config/schema'
 import type { Config } from './config/schema'
@@ -189,7 +189,7 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
       slug: session.slug,
       dir: sessionDir(session.cwd, session.slug),
       agent: session.lead,
-      harness: lead.harness,
+      harness: effectiveHarness(lead, 'user'),
       permission: lead.permission,
     }
     for (const line of sessionBanner(facts, colorEnabled(Bun.env, true))) io.write(`${line}\n`)

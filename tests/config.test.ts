@@ -3,12 +3,14 @@ import { loadConfig, resolveAgent, explain } from '../src/config/load'
 
 const tmp = (name: string) => `/tmp/konvoy-test-${name}-${Bun.nanoseconds()}`
 
-test('the harness profile defaults to minimal and is overridable per agent from the global config', async () => {
+test('a harness pinned per agent in the global config beats the driver default', async () => {
   const dir = tmp('harness')
   await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { claude: { harness: 'inherit' } } }))
   const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
   expect(resolveAgent(cfg, 'claude').harness).toBe('inherit')
-  expect(resolveAgent(cfg, 'codex').harness).toBe('minimal')
+  // unset for everyone else, so effectiveHarness() decides from who drove the turn - see
+  // tests/harness.test.ts. A default here would have taken that decision away from the caller.
+  expect(resolveAgent(cfg, 'codex').harness).toBeUndefined()
 })
 
 test('an empty setup yields built-in defaults', async () => {

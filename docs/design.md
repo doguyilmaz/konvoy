@@ -361,7 +361,17 @@ it today. Four agents' minimal floors now measure 20,800 (claude), 18,173 (codex
 (opencode) tokens, with kiro reporting only a percentage - the agreement across three
 independent CLIs is the check that the unit is defined right.
 
-**Decision: `harness` is a first-class setting, defaulting to `minimal`.**
+**Decision: `harness` is a first-class setting, and when it is unset the turn's DRIVER decides.**
+
+A turn the user typed runs `inherit`; a turn konvoy drives, meaning the recipient of a handoff,
+runs `minimal`. Amended 2026-09-22, after a first real session: the old blanket `minimal` default
+stripped a user's own Maestro MCP server out of a turn they typed in their own repository, and
+claude - having no way to know konvoy had done it - told them to reinstall it. The measurement
+above is what `minimal` is for, and it only holds where konvoy supplies the context itself: the
+brief, the prelude, the handed-over task. On the user's own prompt konvoy supplies none of that,
+so the saving is bought by making the agent worse at the work in front of it. An explicit setting
+wins in both directions, and `konvoy` prints what a `minimal` turn withheld before the first turn
+runs rather than leaving the agent to guess.
 
 | | minimal | inherit |
 |---|---|---|

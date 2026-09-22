@@ -27,7 +27,7 @@ const defaultsObjectSchema = z
   .object({
     effort: effortSchema.default('high'),
     permission: permissionSchema.default('edit'),
-    harness: harnessSchema.default('minimal'),
+    harness: harnessSchema.optional(),
     style: styleSchema.nullish(),
   })
   .strict()

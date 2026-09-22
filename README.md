@@ -287,11 +287,16 @@ turn. A command that can't even be spawned records nothing, and a failed turn is
 { "gate": { "command": "bun test" } }
 ```
 
-`harness` decides how much of a CLI's own setup a turn loads. `minimal`, the default, strips
-what konvoy already supplies (claude runs with no MCP servers, slash commands or settings
-files, codex with `--ignore-user-config`) and measured 2.6× less context per turn than
-`inherit`, which runs the CLI exactly as you would by hand, hooks and skills included. kiro and
-opencode run with their own configuration either way. Privileged: the global config only.
+`harness` decides how much of a CLI's own setup a turn loads, and when you do not set it the
+turn's driver decides. A turn **you** typed, in the REPL or with `konvoy send`, runs `inherit`:
+your MCP servers, skills, hooks and settings, the CLI exactly as you would run it by hand. A turn
+**konvoy** drives, meaning the recipient of a handoff, runs `minimal`: claude with no MCP servers,
+no skills and no settings files, codex with `--ignore-user-config`. That split is the point of
+`minimal` in the first place, since konvoy supplies a handed-over turn's context itself through
+the brief and the prelude, and it measured 2.6× less context per turn (docs/design.md §18).
+kiro and opencode run with their own configuration either way.
+
+Set it explicitly and that wins everywhere, in both directions. Privileged: the global config only.
 
 ```jsonc
 { "defaults": { "harness": "inherit" } }
