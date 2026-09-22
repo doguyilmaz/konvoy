@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import type { Database } from 'bun:sqlite'
 import { parseArgs, type Args } from './args'
 import { loadConfig, resolveAgent } from './config/load'
