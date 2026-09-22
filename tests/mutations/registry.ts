@@ -928,8 +928,8 @@ export const mutations: Mutation[] = [
   {
     name: "konvoy new rewrites the user's .konvoy/.gitignore on every run",
     file: 'src/commands/new.ts',
-    from: "if (!(await ignore.exists())) await Bun.write(ignore, '*/\\n')",
-    to: "await Bun.write(ignore, '*/\\n')",
+    from: "if (!(await ignore.exists())) await Bun.write(ignore, '*\\n!config.jsonc\\n')",
+    to: "await Bun.write(ignore, '*\\n!config.jsonc\\n')",
     tests: ['tests/new.test.ts'],
   },
   {

@@ -52,7 +52,7 @@ test('konvoy new leaves a .gitignore in .konvoy that hides session folders, and 
   const log = spyOn(console, 'log').mockImplementation(() => {})
   try {
     await cmdNew(openDb(':memory:'), configSchema.parse({}), dir, 'first')
-    expect(await Bun.file(`${dir}/.konvoy/.gitignore`).text()).toBe('*/\n')
+    expect(await Bun.file(`${dir}/.konvoy/.gitignore`).text()).toBe('*\n!config.jsonc\n')
     await Bun.write(`${dir}/.konvoy/.gitignore`, '# mine\n')
     await cmdNew(openDb(':memory:'), configSchema.parse({}), dir, 'second')
     expect(await Bun.file(`${dir}/.konvoy/.gitignore`).text()).toBe('# mine\n')

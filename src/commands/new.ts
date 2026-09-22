@@ -10,7 +10,7 @@ export async function cmdNew(db: Database, cfg: Config, cwd: string, goal: strin
   const session = newSession(db, { cwd, goal, lead, slug })
   const dir = sessionDir(cwd, session.slug)
   const ignore = Bun.file(join(cwd, '.konvoy', '.gitignore'))
-  if (!(await ignore.exists())) await Bun.write(ignore, '*/\n')
+  if (!(await ignore.exists())) await Bun.write(ignore, '*\n!config.jsonc\n')
   // `konvoy rm` frees the slug but leaves these files - they are the user's. A new session under
   // an old slug adds its goal to the context and appends to the ledger; it truncates neither.
   const context = Bun.file(`${dir}/CONTEXT.md`)
