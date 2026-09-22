@@ -114,9 +114,14 @@ test('the captured fixture parses into session, tool call, text and completion',
   const lines = (await Bun.file('tests/fixtures/streams/claude.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => claudeAdapter.parse(l))
   expect(events.filter((e) => e.t === 'session')).toHaveLength(1)
-  // a real Read call - the fixture this replaced came from a turn that called nothing, so the
-  // tool branch had a unit test written from the guess and no capture behind it
-  expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'Read', status: 'start' }])
+  // a real Read call and its real result - the fixture this replaced came from a turn that
+  // called nothing, so the tool branch had a unit test written from the guess and no capture
+  // behind it. The capture is also what proves the result line exists: konvoy dropped it, and a
+  // turn therefore rendered as a column of tool names with no outcome beside any of them.
+  expect(events.filter((e) => e.t === 'tool')).toEqual([
+    { t: 'tool', name: 'Read', status: 'start', detail: '/tmp/tmp.D8abHtQ1Qa/package.json' },
+    { t: 'tool', name: '', status: 'ok' },
+  ])
   expect(events.find((e) => e.t === 'done')).toEqual({ t: 'done', final: 'OK' })
 })
 
@@ -256,4 +261,62 @@ test('a local resource at capacity is not an upstream outage', () => {
   // captured wording is "the service is at capacity"; a disk or a queue can be at capacity too
   expect(classifyError('the service is at capacity')).toBe('upstream')
   expect(classifyError('ENOSPC: the disk is at capacity')).toBe('unknown')
+})
+
+// From the real capture in tests/fixtures/streams/claude.jsonl: a tool_use block carries its
+// arguments in `input`, and the tool's outcome comes back one line later as a `user` message
+// holding a tool_result. konvoy read the name and dropped both, so a turn rendered as a column
+// of bare "· Bash" with no target and no outcome - eighteen of them, in the report that led here.
+test('a tool call carries what it acted on, so the line can say more than the tool name', () => {
+  const [event] = claudeAdapter.parse(
+    JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: '/repo/src/auth.ts' } }] },
+    }),
+  )
+  expect(event).toEqual({ t: 'tool', name: 'Read', status: 'start', detail: '/repo/src/auth.ts' })
+
+  const [bash] = claudeAdapter.parse(
+    JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'bun test' } }] },
+    }),
+  )
+  expect(bash).toEqual({ t: 'tool', name: 'Bash', status: 'start', detail: 'bun test' })
+
+  // a tool whose input konvoy has no key for still renders, just without a target
+  const [unknown] = claudeAdapter.parse(
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Task', input: { wat: 1 } }] } }),
+  )
+  expect(unknown).toEqual({ t: 'tool', name: 'Task', status: 'start' })
+})
+
+test('a tool result settles the tool line, and a failed one is reported as failed', () => {
+  const ok = claudeAdapter.parse(
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: [{ tool_use_id: 'toolu_1', type: 'tool_result', content: 'file contents' }] },
+    }),
+  )
+  expect(ok).toEqual([{ t: 'tool', name: '', status: 'ok' }])
+
+  const failed = claudeAdapter.parse(
+    JSON.stringify({
+      type: 'user',
+      message: { content: [{ tool_use_id: 'toolu_2', type: 'tool_result', is_error: true, content: 'not permitted' }] },
+    }),
+  )
+  expect(failed).toEqual([{ t: 'tool', name: '', status: 'error' }])
+})
+
+test('the tool detail is sanitized like every other string a model controls', () => {
+  const [event] = claudeAdapter.parse(
+    JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'echo \u001b[2Kgone\nsecond line' } }] },
+    }),
+  )
+  const detail = (event as { detail?: string }).detail ?? ''
+  expect(detail).not.toContain('\u001b')
+  expect(detail).not.toContain('\n')
 })

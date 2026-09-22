@@ -4,6 +4,8 @@ import type { AgentId } from '../types'
 import { requireAgent, requireSession } from './messages'
 import { send } from '../core/session'
 import { oneLine, safeText } from '../adapters/types'
+import { remainder, turnRender } from '../render'
+import { colorEnabled } from '../style'
 import type { TurnResult } from '../core/turn'
 
 export async function cmdSend(
@@ -20,20 +22,28 @@ export async function cmdSend(
   if (!session) return 2
 
   let result: TurnResult
+  const view = turnRender(target, {
+    out: (text) => process.stdout.write(text),
+    err: (text) => process.stderr.write(text),
+    color: colorEnabled(Bun.env, Boolean(process.stderr.isTTY)),
+    tty: Boolean(process.stderr.isTTY),
+    now: () => Date.now(),
+  })
   try {
-    result = await send({ db, cfg }, session, target, prompt, {
-      onEvent: (e) => {
-        if (e.t === 'tool') console.error(`  · ${oneLine(e.name, 120)}`)
-      },
-    })
+    result = await send({ db, cfg }, session, target, prompt, { onEvent: view.onEvent })
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     return 2
   }
+  view.finish(result)
 
   const outcome = decideOutcome(target, result)
   for (const line of outcome.stderrLines) console.error(line)
-  if (outcome.stdout !== null) console.log(outcome.stdout)
+  // the answer was streamed as it arrived; only what the stream did not carry is printed here
+  if (outcome.stdout !== null) {
+    const rest = remainder(outcome.stdout, view.streamed())
+    if (rest.trim() !== '') console.log(rest)
+  }
   return outcome.code
 }
 
