@@ -41,6 +41,7 @@ to download; the npm package is a few kilobytes of source and runs on the Bun yo
 
 ```bash
 konvoy new "refactor the auth layer"
+konvoy new                     # no goal: named after the directory, like sinkaf-8f3a
 konvoy send codex "start with the token refresh path"
 konvoy ls
 konvoy resume                  # make a session current again and show its roster
@@ -52,6 +53,7 @@ konvoy attach kiro --id cli_8a1…   # adopt a session you started in kiro's own
 konvoy doctor
 konvoy update --all    # every agent CLI; konvoy itself follows its install channel (see Install)
 konvoy rm stale-slug --yes
+konvoy rename stale-slug token-refresh   # the session's .konvoy folder follows
 konvoy version
 konvoy dashboard --port 4000  # local page with the same numbers as `usage --chart`
 ```

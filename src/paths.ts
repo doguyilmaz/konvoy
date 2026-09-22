@@ -14,6 +14,8 @@ export function join(...parts: string[]): string {
   return (absolute ? '/' : '') + segments.join('/')
 }
 
+export const basename = (p: string): string => p.split('/').filter(Boolean).at(-1) ?? ''
+
 export function dirname(p: string): string {
   const cut = p.lastIndexOf('/')
   if (cut < 0) return '.'

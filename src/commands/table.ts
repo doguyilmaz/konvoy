@@ -21,6 +21,7 @@ export const commandTable = [
     usage: 'rm <session> --yes',
     summary: 'delete a konvoy session (foreign sessions survive)',
   },
+  { name: 'rename', aliases: [], usage: 'rename <session> <new-name>', summary: 'rename a session; its .konvoy folder follows' },
   { name: 'roster', aliases: [], usage: 'roster', summary: 'who is in the convoy' },
   { name: 'usage', aliases: [], usage: 'usage [--all] [--chart]', summary: 'what this session spent, per agent' },
   { name: 'status', aliases: [], usage: 'status', summary: 'versions, auth and roster' },

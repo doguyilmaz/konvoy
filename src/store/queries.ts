@@ -76,6 +76,10 @@ export function touchSession(db: Database, id: string): void {
   ).run({ id, now: now() })
 }
 
+export function renameSession(db: Database, id: string, slug: string): void {
+  db.query('UPDATE session SET slug = $slug WHERE id = $id').run({ slug, id })
+}
+
 export function deleteSession(db: Database, id: string): void {
   db.transaction(() => {
     db.query('DELETE FROM event WHERE turn_id IN (SELECT id FROM turn WHERE session_id = $id)').run({ id })

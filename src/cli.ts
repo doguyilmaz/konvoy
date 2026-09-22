@@ -18,6 +18,7 @@ import { cmdUpdate } from './commands/update'
 import { cmdConfig } from './commands/config'
 import { cmdResume } from './commands/resume'
 import { cmdRm } from './commands/rm'
+import { cmdRename } from './commands/rename'
 import { cmdUsage } from './commands/usage'
 import { cmdDashboard } from './commands/dashboard'
 import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
@@ -77,6 +78,14 @@ const handlers: Record<CommandName, Handler> = {
   config: (ctx, rest) => {
     const [action, key, value] = rest
     return cmdConfig(ctx.cfg, ctx.cwd, action ?? 'get', key, value, { global: ctx.args.flags.global === true })
+  },
+  rename: (ctx, rest) => {
+    const [from, to] = rest
+    if (!from || !to) {
+      console.error('usage: konvoy rename <session> <new-name>')
+      return 2
+    }
+    return cmdRename(ctx.db, from, to)
   },
   rm: (ctx, rest) => {
     const [target] = rest

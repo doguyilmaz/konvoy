@@ -117,5 +117,5 @@ export function buildPrelude(db: Database, session: Session, facts: string, opts
 
   if (dropped > 0) turnBlocks.push(`(${dropped} earlier turn${dropped === 1 ? '' : 's'} not shown)`)
 
-  return [`goal: ${session.goal}`, facts, turnBlocks.join('\n\n')].filter(Boolean).join('\n\n')
+  return [session.goal ? `goal: ${session.goal}` : '', facts, turnBlocks.join('\n\n')].filter(Boolean).join('\n\n')
 }
