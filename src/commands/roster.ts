@@ -28,7 +28,7 @@ export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string)
     }
   })
 
-  console.log(`session ${session.slug} - ${session.goal}`)
+  console.log(session.goal ? `session ${session.slug} - ${session.goal}` : `session ${session.slug}`)
   console.log(formatRoster(rows))
   for (const model of duplicateModels(rows)) {
     console.log(`warning: ${model} is used by more than one agent - a second opinion from the same model is not one`)

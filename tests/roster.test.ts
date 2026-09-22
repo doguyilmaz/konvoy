@@ -2,6 +2,7 @@ import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { createSession, upsertBinding } from '../src/store/queries'
 import { loadConfig } from '../src/config/load'
+import { configSchema } from '../src/config/schema'
 import { cmdRoster } from '../src/commands/roster'
 
 const tmp = (name: string) => `/tmp/konvoy-test-roster-${name}-${Bun.nanoseconds()}`
@@ -43,6 +44,18 @@ test('cmdRoster still shows each agent bound status correctly', async () => {
     expect(output).toContain('claude')
     expect(output).toContain('bound')
     expect(output).toContain('unbound')
+  } finally {
+    log.mockRestore()
+  }
+})
+
+test('a session without a goal is announced by its name alone', () => {
+  const db = openDb(':memory:')
+  createSession(db, { slug: 'bare', goal: '', cwd: '/x', lead: 'claude' })
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    cmdRoster(db, configSchema.parse({}), '/x', 'bare')
+    expect(String(log.mock.calls[0]?.[0])).toBe('session bare')
   } finally {
     log.mockRestore()
   }
