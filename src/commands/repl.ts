@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import type { AgentId, Session } from '../types'
 import { agentIds } from '../adapters'
+import { onExit } from '../core/children'
 import { resolveAgent } from '../config/load'
 import { sessionDir } from '../paths'
 import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal } from '../store/queries'
@@ -15,29 +16,110 @@ export interface ReplIo {
   /** stop reading stdin while a command runs, so a child that inherits the terminal gets every keystroke */
   pause: () => void
   resume: () => void
+  /** put the terminal back the way it was found; nothing to do for a non-tty io */
+  close?: () => void
 }
 
-export function terminalIo(): ReplIo {
+// Bracketed paste, DECSET 2004. A pasted block is many lines to the tty, so konvoy read it as
+// many messages and sent one turn per line: the first fragment went to the agent while the rest
+// queued behind it. With the mode on, the terminal brackets the block and konvoy can tell a
+// paste from typing. A terminal that does not support it never sends the markers and konvoy
+// behaves exactly as before, one turn per line.
+export const PASTE_ON = '\x1b[?2004h'
+export const PASTE_OFF = '\x1b[?2004l'
+const PASTE_START = '\x1b[200~'
+const PASTE_END = '\x1b[201~'
+
+export interface MessageSplitter {
+  /** every complete message in what has arrived so far */
+  push: (text: string) => string[]
+  /** whatever is left at end of input, terminated or not */
+  end: () => string[]
+}
+
+export function messageSplitter(): MessageSplitter {
+  let buffered = ''
+  // non-null only while inside a bracketed paste, so '' is a started-but-empty paste
+  let pasted: string | null = null
+
+  const close = (tail: string): string => `${pasted}${tail}`.replace(/\r\n?/g, '\n').replace(/\n+$/, '')
+
+  return {
+    push(text) {
+      buffered += text
+      const out: string[] = []
+      for (;;) {
+        if (pasted !== null) {
+          const at = buffered.indexOf(PASTE_END)
+          if (at === -1) {
+            // hold back what could still be the head of a split end marker
+            const keep = Math.min(PASTE_END.length - 1, buffered.length)
+            pasted += buffered.slice(0, buffered.length - keep)
+            buffered = buffered.slice(buffered.length - keep)
+            break
+          }
+          out.push(close(buffered.slice(0, at)))
+          pasted = null
+          buffered = buffered.slice(at + PASTE_END.length)
+          // the Return that usually follows a paste is the paste's own terminator, not an
+          // empty message of its own
+          if (buffered.startsWith('\n')) buffered = buffered.slice(1)
+          continue
+        }
+
+        const start = buffered.indexOf(PASTE_START)
+        const newline = buffered.indexOf('\n')
+        if (start !== -1 && (newline === -1 || start < newline)) {
+          // anything typed before the paste on the same line belongs to the same message
+          pasted = buffered.slice(0, start)
+          buffered = buffered.slice(start + PASTE_START.length)
+          continue
+        }
+        if (newline === -1) break
+        out.push(buffered.slice(0, newline))
+        buffered = buffered.slice(newline + 1)
+      }
+      return out
+    },
+    end() {
+      const rest = pasted !== null ? close(buffered) : buffered
+      pasted = null
+      buffered = ''
+      return rest === '' ? [] : [rest]
+    },
+  }
+}
+
+/** the part of process.stdin the REPL uses, so a test can drive it without a real terminal */
+export interface InputStream {
+  on: (event: 'data' | 'end', handler: (chunk: Uint8Array) => void) => void
+  pause: () => void
+  resume: () => void
+  isTTY?: boolean | undefined
+}
+
+export function terminalIo(
+  stream: InputStream = process.stdin,
+  write: (text: string) => void = (text) => {
+    process.stdout.write(text)
+  },
+): ReplIo {
   const queue: string[] = []
   const decoder = new TextDecoder()
-  let buffered = ''
+  const split = messageSplitter()
+  const tty = Boolean(stream.isTTY)
   let ended = false
   let wake: (() => void) | undefined
   const flush = (): void => {
     wake?.()
     wake = undefined
   }
-  process.stdin.on('data', (chunk: Uint8Array) => {
-    buffered += decoder.decode(chunk, { stream: true })
-    let at: number
-    while ((at = buffered.indexOf('\n')) >= 0) {
-      queue.push(buffered.slice(0, at))
-      buffered = buffered.slice(at + 1)
-    }
+  stream.on('data', (chunk: Uint8Array) => {
+    for (const message of split.push(decoder.decode(chunk, { stream: true }))) queue.push(message)
     flush()
   })
-  process.stdin.on('end', () => {
-    if (buffered) queue.push(buffered)
+  stream.on('end', () => {
+    for (const message of split.end()) queue.push(message)
     ended = true
     flush()
   })
@@ -48,14 +130,24 @@ export function terminalIo(): ReplIo {
       else await new Promise<void>((resolve) => (wake = resolve))
     }
   }
+  // a konvoy killed by a signal must not leave the mode on in the user's shell
+  let forget: (() => void) | undefined
+  if (tty) {
+    write(PASTE_ON)
+    forget = onExit(() => write(PASTE_OFF))
+  }
   return {
     lines: lines(),
-    write: (text) => {
-      process.stdout.write(text)
+    write,
+    tty,
+    pause: () => stream.pause(),
+    resume: () => stream.resume(),
+    close: () => {
+      if (!tty) return
+      write(PASTE_OFF)
+      forget?.()
+      forget = undefined
     },
-    tty: Boolean(process.stdin.isTTY),
-    pause: () => process.stdin.pause(),
-    resume: () => process.stdin.resume(),
   }
 }
 

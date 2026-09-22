@@ -184,6 +184,7 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
     })
   } finally {
     io.pause()
+    io.close?.()
   }
 }
 

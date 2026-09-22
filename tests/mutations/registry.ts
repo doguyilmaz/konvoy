@@ -1032,4 +1032,47 @@ export const mutations: Mutation[] = [
     to: "import { join as nodeJoin } from 'node:path'\n\nexport function join(...parts: string[]): string {",
     tests: ['tests/imports.test.ts'],
   },
+  // --- bracketed paste in the REPL (src/commands/repl.ts) ---
+  {
+    name: 'a pasted block is read as one message per line again, so one paste sends several turns',
+    file: 'src/commands/repl.ts',
+    from: 'if (start !== -1 && (newline === -1 || start < newline)) {',
+    to: 'if (false) {',
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: 'the split end marker is no longer held back, so a paste cut across two reads is lost',
+    file: 'src/commands/repl.ts',
+    from: 'const keep = Math.min(PASTE_END.length - 1, buffered.length)',
+    to: 'const keep = 0',
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: "the Return that terminates a paste is read as an empty message of its own",
+    file: 'src/commands/repl.ts',
+    from: "          if (buffered.startsWith('\\n')) buffered = buffered.slice(1)\n",
+    to: '',
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: 'a paste keeps its carriage returns, which reach the agent inside the prompt',
+    file: 'src/commands/repl.ts',
+    from: ".replace(/\\r\\n?/g, '\\n')",
+    to: '',
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: 'bracketed paste is never switched on, so the terminal never brackets a paste',
+    file: 'src/commands/repl.ts',
+    from: '    write(PASTE_ON)\n',
+    to: '',
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: "closing the repl leaves bracketed paste on in the user's shell",
+    file: 'src/commands/repl.ts',
+    from: '      write(PASTE_OFF)\n',
+    to: '',
+    tests: ['tests/repl.test.ts'],
+  },
 ]
