@@ -911,4 +911,11 @@ export const mutations: Mutation[] = [
     to: "const key = `real\\u0000${agent}\\u0000${opts.model",
     tests: ['tests/detect.test.ts'],
   },
+  {
+    name: 'version prints the roster again, so a fresh directory sees a missing-session error',
+    file: 'src/cli.ts',
+    from: 'ctx.slug, { roster: false })',
+    to: 'ctx.slug, { roster: true })',
+    tests: ['tests/cli.test.ts'],
+  },
 ]
