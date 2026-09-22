@@ -247,3 +247,20 @@ test('/help is one list on one column, and no summary is mangled', () => {
   expect(replHelp()).toContain('konvoy and agent versions')
   expect(replHelp()).not.toContain('/and agent versions')
 })
+
+test('the prompt is coloured on a terminal that takes colour, and plain text everywhere else', async () => {
+  const h = harness(['x'])
+  h.io.color = true
+  await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
+  const prompts = h.out.filter((t) => t.includes('claude'))
+  expect(prompts.length).toBeGreaterThan(0)
+  for (const line of prompts) {
+    expect(line).toContain('\x1b[')
+    expect(line).toContain('claude')
+    expect(line).toContain('>')
+  }
+
+  const plain = harness(['x'])
+  await runRepl(plain.io, plain.db, plain.cfg, '/nowhere/s', plain.s, plain.run)
+  expect(plain.out.filter((t) => t.endsWith('> '))).toEqual(['s claude> ', 's claude> '])
+})

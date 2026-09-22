@@ -1258,4 +1258,11 @@ export const mutations: Mutation[] = [
     to: 'if (false) {',
     tests: ['tests/render.test.ts'],
   },
+  {
+    name: 'the prompt is written in colour even where colour is not wanted',
+    file: 'src/commands/repl.ts',
+    from: 'const p = palette(io.color ?? false)',
+    to: 'const p = palette(true)',
+    tests: ['tests/repl.test.ts'],
+  },
 ]

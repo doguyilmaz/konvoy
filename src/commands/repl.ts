@@ -4,6 +4,7 @@ import type { AgentId, Session } from '../types'
 import { onExit } from '../core/children'
 import { requireAgent } from './messages'
 import { disabledAgent, resolveAgent } from '../config/load'
+import { agentPaint, colorEnabled, palette } from '../style'
 import { sessionDir } from '../paths'
 import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal } from '../store/queries'
 import { cmdNew } from './new'
@@ -13,6 +14,8 @@ export interface ReplIo {
   lines: AsyncIterable<string>
   write: (text: string) => void
   tty: boolean
+  /** whether this io may carry colour, decided once from the environment by terminalIo */
+  color?: boolean
   /** stop reading stdin while a command runs, so a child that inherits the terminal gets every keystroke */
   pause: () => void
   resume: () => void
@@ -140,6 +143,7 @@ export function terminalIo(
     lines: lines(),
     write,
     tty,
+    color: colorEnabled(Bun.env, tty),
     pause: () => stream.pause(),
     resume: () => stream.resume(),
     close: () => {
@@ -183,8 +187,13 @@ export async function runRepl(
 ): Promise<number> {
   let session = start
   let agent: AgentId = session.lead
+  const p = palette(io.color ?? false)
+  const paintAgent = agentPaint(io.color ?? false)
+  // The session slug is context and the agent is the thing that changes, so the slug is dim and
+  // the agent carries its own colour: which agent you are talking to is readable at a glance,
+  // which is what a prompt is for.
   const prompt = (): void => {
-    if (io.tty) io.write(`${session.slug} ${agent}> `)
+    if (io.tty) io.write(`${p.dim(session.slug)} ${paintAgent(agent)(agent)}${p.bold('>')} `)
   }
   const refresh = (): boolean => {
     const fresh = listSessions(db).find((s) => s.id === session.id)
