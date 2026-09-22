@@ -6,7 +6,7 @@ import type { Adapter } from '../adapters/types'
 import { resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
 import { getAdapter } from '../adapters'
 import { clampEffort } from '../adapters/effort'
-import { detect, type Detection } from './detect'
+import { detect, type Detection, type DetectOptions } from './detect'
 import {
   acquireLock,
   clearForeignId,
@@ -71,6 +71,7 @@ export interface SendDeps {
   db: Database
   cfg: Config
   adapterFor?: (agent: AgentId) => Adapter
+  detect?: (agent: AgentId, opts: DetectOptions) => Promise<Detection>
   /** base wait between upstream retries; tests that only care about the walk pass 0 */
   upstreamBackoffMs?: number
 }
@@ -97,8 +98,9 @@ export async function send(
   if (!settings.enabled) throw new Error(`${agent} is disabled in this konvoy config`)
 
   const adapterFor = (a: AgentId): Adapter => deps.adapterFor?.(a) ?? getAdapter(a)
+  const detectFor = deps.detect ?? detect
   const adapter = adapterFor(agent)
-  const detection = await detect(agent, { model: settings.model, bin: settings.bin })
+  const detection = await detectFor(agent, { model: settings.model, bin: settings.bin })
   if (!detection.installed) throw new Error(`${agent}: not installed`)
 
   const timeoutSec = opts.timeoutSec ?? deps.cfg.policy.turnTimeoutSec
@@ -150,7 +152,7 @@ export async function send(
 
     const recipientSettings = resolveAgent(deps.cfg, recipient)
     const recipientDetection = recipientSettings.enabled
-      ? await detect(recipient, { model: recipientSettings.model, bin: recipientSettings.bin })
+      ? await detectFor(recipient, { model: recipientSettings.model, bin: recipientSettings.bin })
       : { agent: recipient, installed: false, version: null }
     // Reported, not silently dropped — the same rule the failover chain already follows for a
     // disabled or uninstalled member.
@@ -257,7 +259,7 @@ export async function send(
         currentSettings = resolveAgent(deps.cfg, current)
         currentAdapter = adapterFor(current)
         currentDetection = currentSettings.enabled
-          ? await detect(current, { model: currentSettings.model, bin: currentSettings.bin })
+          ? await detectFor(current, { model: currentSettings.model, bin: currentSettings.bin })
           : { agent: current, installed: false, version: null }
       }
       // A chain member the user hasn't actually set up can't take the handoff — skip it

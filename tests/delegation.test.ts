@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
+import { installed } from './fixtures/detect'
 import { openDb } from '../src/store/db'
 import { configSchema } from '../src/config/schema'
 import { claudeAdapter } from '../src/adapters/claude'
@@ -42,7 +43,7 @@ test('an envelope naming a role runs that role next', async () => {
   const h = harness({ codex: handsOff('reviewer', 'check the refresh path') })
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
   } finally {
     err.mockRestore()
   }
@@ -55,7 +56,7 @@ test('the recipient receives the sender own words, not a derived summary', async
   const h = harness({ codex: handsOff('reviewer', 'check the refresh path') })
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
   } finally {
     err.mockRestore()
   }
@@ -71,7 +72,7 @@ test('an envelope naming an agent directly runs that agent', async () => {
   const h = harness({ codex: handsOff('kiro', 'take it from here') })
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
   } finally {
     err.mockRestore()
   }
@@ -87,7 +88,7 @@ test('delegation does not chain: the recipient handing off again is not followed
   })
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
   } finally {
     err.mockRestore()
   }
@@ -102,7 +103,7 @@ test('an envelope naming nothing recognisable is reported and the turn stands', 
   const err = spyOn(console, 'error').mockImplementation(() => {})
   let lines: string[] = []
   try {
-    const r = await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    const r = await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
     lines = err.mock.calls.map((c) => String(c[0]))
     expect(r.final).toContain('done.')
   } finally {
@@ -117,7 +118,7 @@ test('with delegation off an envelope is left alone', async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
   const h = harness({ codex: handsOff('reviewer', 'check it') })
-  await send({ db, cfg: cfg({ delegation: { enabled: false } }), adapterFor: h.adapterFor }, s, 'codex', 'go')
+  await send({ db, cfg: cfg({ delegation: { enabled: false } }), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'go')
   expect(h.calls).toEqual(['codex'])
 })
 
@@ -127,7 +128,7 @@ test('the delegated turn is linked to the turn that handed it over', async () =>
   const h = harness({ codex: handsOff('reviewer', 'check it') })
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
   } finally {
     err.mockRestore()
   }
@@ -148,7 +149,7 @@ test('a recipient the user disabled is reported, and the original answer stands'
   try {
     // the role resolves to claude, but claude is turned off in this config
     const r = await send(
-      { db, cfg: cfg({ agents: { claude: { enabled: false } } }), adapterFor: h.adapterFor },
+      { db, cfg: cfg({ agents: { claude: { enabled: false } } }), detect: installed, adapterFor: h.adapterFor },
       s, 'codex', 'do the thing',
     )
     lines = err.mock.calls.map((c) => String(c[0]))
@@ -187,7 +188,7 @@ test('end to end: delegation reaches the command line, runs the recipient, and l
   const err = spyOn(console, 'error').mockImplementation(() => {})
   let lines: string[] = []
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'do the thing')
     lines = err.mock.calls.map((c) => String(c[0]))
   } finally {
     err.mockRestore()
@@ -228,7 +229,7 @@ test('the handoff notice is one clean line even when the task carries an escape 
   const err = spyOn(console, 'error').mockImplementation(() => {})
   let lines: string[] = []
   try {
-    await send({ db, cfg: cfg(), adapterFor: h.adapterFor }, s, 'codex', 'go')
+    await send({ db, cfg: cfg(), detect: installed, adapterFor: h.adapterFor }, s, 'codex', 'go')
     lines = err.mock.calls.map((c) => String(c[0]))
   } finally {
     err.mockRestore()

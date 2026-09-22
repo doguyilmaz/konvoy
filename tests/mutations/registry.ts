@@ -897,4 +897,18 @@ export const mutations: Mutation[] = [
     to: "    return result\n  }\n  track(proc)",
     tests: ["tests/turn.test.ts"],
   },
+  {
+    name: 'send ignores an injected detection and asks the machine instead',
+    file: 'src/core/session.ts',
+    from: 'const detectFor = deps.detect ?? detect',
+    to: 'const detectFor = detect',
+    tests: ['tests/session.test.ts'],
+  },
+  {
+    name: 'a detection with injected deps is served from the shared cache',
+    file: 'src/core/detect.ts',
+    from: '  if (opts.deps) return detectWith(opts.deps, agent, opts)\n',
+    to: '',
+    tests: ['tests/detect.test.ts'],
+  },
 ]

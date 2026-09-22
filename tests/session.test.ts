@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
+import { installed } from './fixtures/detect'
 import { openDb } from '../src/store/db'
 import { acquireLock, getBinding, lockOwner, upsertBinding, usageForSession } from '../src/store/queries'
 import { newSession, send, slugify, uniqueSlug } from '../src/core/session'
@@ -46,7 +47,7 @@ test('send binds the agent on its first turn', async () => {
     { type: 'system', subtype: 'init', session_id: 'sess-1' },
     { type: 'result', subtype: 'success', result: 'ok' },
   ])
-  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(r.final).toBe('ok')
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('sess-1')
 })
@@ -61,7 +62,7 @@ test('send runs the configured gate after a successful turn', async () => {
     { type: 'result', subtype: 'success', result: 'ok' },
   ])
   const gated = configSchema.parse({ gate: { command: 'true' } })
-  await send({ db, cfg: gated, adapterFor: () => adapter }, s, 'claude', 'hello')
+  await send({ db, cfg: gated, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   const row = usageForSession(db, s.id)[0]!
   expect(row.gateKnown).toBe(1)
   expect(row.gatePassed).toBe(1)
@@ -72,7 +73,7 @@ test('send does not gate a turn that failed', async () => {
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
   const adapter = scripted([], 1)
   const gated = configSchema.parse({ gate: { command: 'false' } })
-  await send({ db, cfg: gated, adapterFor: () => adapter }, s, 'claude', 'hello')
+  await send({ db, cfg: gated, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   const row = usageForSession(db, s.id)[0]!
   expect(row.gateKnown).toBe(0)
 })
@@ -104,7 +105,7 @@ test('a failed resume rebinds instead of failing the turn', async () => {
     },
   }
 
-  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(call).toBe(2)
   expect(r.final).toBe('recovered')
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('sess-new')
@@ -114,14 +115,14 @@ test('a session already locked by a live process refuses a second turn', async (
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
   acquireLock(db, s.id, 'someone-else')
-  expect(send({ db, cfg, adapterFor: () => scripted([]) }, s, 'claude', 'hi')).rejects.toThrow(/is busy/)
+  expect(send({ db, cfg, detect: installed, adapterFor: () => scripted([]) }, s, 'claude', 'hi')).rejects.toThrow(/is busy/)
 })
 
 test("a rejected turn leaves the existing holder's lock alone", async () => {
   const db = openDb(':memory:')
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
   acquireLock(db, s.id, 'someone-else')
-  await expect(send({ db, cfg, adapterFor: () => scripted([]) }, s, 'claude', 'hi')).rejects.toThrow(/is busy/)
+  await expect(send({ db, cfg, detect: installed, adapterFor: () => scripted([]) }, s, 'claude', 'hi')).rejects.toThrow(/is busy/)
   expect(lockOwner(db, s.id)).toBe('someone-else')
 })
 
@@ -143,7 +144,7 @@ test('a first turn that fails is not retried', async () => {
       }
     },
   }
-  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(call).toBe(1)
   expect(r.error).not.toBe(null)
 })
@@ -168,7 +169,7 @@ test('an auth failure phrased like a missing session is surfaced, not rebound', 
       }
     },
   }
-  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(call).toBe(1)
   expect(r.error?.kind).toBe('auth')
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('alive')
@@ -195,7 +196,7 @@ test('a crash after real tool work is not treated as a dead session', async () =
       }
     },
   }
-  await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(call).toBe(1)
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('alive')
 })
@@ -221,7 +222,7 @@ test('a crash with a stale-looking message but real output is not treated as a d
       }
     },
   }
-  await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(call).toBe(1)
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('alive')
 })
@@ -238,7 +239,7 @@ test('an inherited lease does not deadlock against the process that already hold
       { type: 'system', subtype: 'init', session_id: 'sess-1' },
       { type: 'result', subtype: 'success', result: 'ok' },
     ])
-    const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+    const r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
     expect(r.final).toBe('ok')
     expect(lockOwner(db, s.id)).toBe(lease)
   } finally {
@@ -259,7 +260,7 @@ test('a disabled agent is refused with a clear message', async () => {
   const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
   const disabled = configSchema.parse({ agents: { kiro: { enabled: false } } })
   expect(
-    send({ db, cfg: disabled, adapterFor: () => scripted([]) }, s, 'kiro', 'hi'),
+    send({ db, cfg: disabled, detect: installed, adapterFor: () => scripted([]) }, s, 'kiro', 'hi'),
   ).rejects.toThrow(/kiro is disabled/)
 })
 
@@ -290,11 +291,11 @@ test('the agent taking over receives what the previous one did, not a bare quest
   })
 
   const cfg = configSchema.parse({ failover: { chain: ['codex', 'claude'] } })
-  await send({ db, cfg, adapterFor }, s, 'codex', 'start with token refresh')
+  await send({ db, cfg, adapterFor, detect: installed }, s, 'codex', 'start with token refresh')
 
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await send({ db, cfg, adapterFor }, s, 'codex', 'now review it')
+    await send({ db, cfg, adapterFor, detect: installed }, s, 'codex', 'now review it')
   } finally {
     err.mockRestore()
   }
@@ -348,7 +349,7 @@ test('a kiro resume that cannot load the session rebinds instead of failing the 
   let r
   let said = ''
   try {
-    r = await send({ db, cfg, adapterFor: () => adapter }, s, 'kiro', 'hello')
+    r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'kiro', 'hello')
     said = err.mock.calls.map((c) => String(c[0])).join('\n')
   } finally {
     err.mockRestore()
@@ -399,8 +400,20 @@ test('a claude resume whose id no longer exists rebinds — the wording arrives 
     },
   }
 
-  const r = await send({ db, cfg, adapterFor: () => adapter }, s, 'claude', 'hello')
+  const r = await send({ db, cfg, detect: installed, adapterFor: () => adapter }, s, 'claude', 'hello')
   expect(call).toBe(2)
   expect(r.final).toBe('recovered')
   expect(getBinding(db, s.id, 'claude')?.foreignId).toBe('sess-new')
+})
+
+test('send trusts an injected detection over the machine', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
+  const missing = configSchema.parse({ agents: { codex: { bin: 'konvoy-test-nonexistent-binary-xyz' } } })
+  const adapter = scripted([
+    { type: 'system', subtype: 'init', session_id: 'sess-fake' },
+    { type: 'result', subtype: 'success', result: 'ok' },
+  ])
+  const r = await send({ db, cfg: missing, adapterFor: () => adapter, detect: installed }, s, 'codex', 'hi')
+  expect(r.final).toBe('ok')
 })

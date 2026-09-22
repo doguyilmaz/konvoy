@@ -288,3 +288,11 @@ test('a memoized detectAuth rejection does not stick', async () => {
   const second = await detectAuth('claude', { deps: testDeps })
   expect(second.authed).toBe(true)
 })
+
+test('a detection with injected deps is never served from the shared cache', async () => {
+  clearDetectCache()
+  const deps = (version: string) => ({ run: async () => ({ stdout: `codex-cli ${version}`, exitCode: 0 }), readText: async () => null })
+  const first = await detect('codex', { deps: deps('1.0.0') })
+  const second = await detect('codex', { deps: deps('2.0.0') })
+  expect([first.version, second.version]).toEqual(['1.0.0', '2.0.0'])
+})

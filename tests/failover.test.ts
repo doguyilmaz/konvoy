@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
+import { installed } from './fixtures/detect'
 import { openDb } from '../src/store/db'
 import { createSession } from '../src/store/queries'
 import { configSchema } from '../src/config/schema'
@@ -39,7 +40,7 @@ test('a rate limit moves to the next agent at once', async () => {
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
     const r = await send(
-      { db, cfg: cfg(), adapterFor: scripted({ codex: fails("You've hit your weekly limit · resets 7am") }, calls) },
+      { db, cfg: cfg(), detect: installed, adapterFor: scripted({ codex: fails("You've hit your weekly limit · resets 7am") }, calls) },
       s, 'codex', 'hello',
     )
     expect(r.final).toBe('claude')
@@ -55,7 +56,7 @@ test('an auth failure moves to the next agent at once', async () => {
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
     await send(
-      { db, cfg: cfg(), adapterFor: scripted({ codex: fails('Not signed in. Please run codex login.') }, calls) },
+      { db, cfg: cfg(), detect: installed, adapterFor: scripted({ codex: fails('Not signed in. Please run codex login.') }, calls) },
       s, 'codex', 'hello',
     )
     expect(calls).toEqual(['codex', 'claude'])
@@ -71,7 +72,7 @@ test('an upstream failure is retried on the same agent before the chain moves', 
   try {
     await send(
       { db, cfg: cfg({ failover: { chain: ['codex', 'claude'], upstreamRetries: 2 } }), upstreamBackoffMs: 0,
-        adapterFor: scripted({ codex: fails('503 Service Unavailable') }, calls) },
+        detect: installed, adapterFor: scripted({ codex: fails('503 Service Unavailable') }, calls) },
       s, 'codex', 'hello',
     )
     // the original attempt, two retries, then the successor
@@ -85,7 +86,7 @@ test('a crash does not move to the next agent, because the fault travels with th
   const { db, s } = seed()
   const calls: AgentId[] = []
   const r = await send(
-    { db, cfg: cfg(), adapterFor: scripted({ codex: fails('TypeError: cannot read property of undefined') }, calls) },
+    { db, cfg: cfg(), detect: installed, adapterFor: scripted({ codex: fails('TypeError: cannot read property of undefined') }, calls) },
     s, 'codex', 'hello',
   )
   expect(calls).toEqual(['codex'])
@@ -111,7 +112,7 @@ test('a bare nonzero exit (kind "crash") does not move to the next agent either'
       }
     },
   })
-  const r = await send({ db, cfg: cfg(), adapterFor }, s, 'codex', 'hello')
+  const r = await send({ db, cfg: cfg(), adapterFor, detect: installed }, s, 'codex', 'hello')
   expect(calls).toEqual(['codex'])
   expect(r.error?.kind).toBe('crash')
 })
@@ -123,7 +124,7 @@ test('the user is told which agent was blocked, what it said, and who took over'
   let lines: string[] = []
   try {
     await send(
-      { db, cfg: cfg(), adapterFor: scripted({ codex: fails("You've hit your weekly limit · resets 7am") }, calls) },
+      { db, cfg: cfg(), detect: installed, adapterFor: scripted({ codex: fails("You've hit your weekly limit · resets 7am") }, calls) },
       s, 'codex', 'hello',
     )
     lines = err.mock.calls.map((c) => String(c[0]))
@@ -142,7 +143,7 @@ test('the replacement turn points at the turn it replaced', async () => {
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
     await send(
-      { db, cfg: cfg(), adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls) },
+      { db, cfg: cfg(), detect: installed, adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls) },
       s, 'codex', 'hello',
     )
   } finally {
@@ -160,7 +161,7 @@ test('with no chain configured a block surfaces instead of moving', async () => 
   const { db, s } = seed()
   const calls: AgentId[] = []
   const r = await send(
-    { db, cfg: configSchema.parse({}), adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls) },
+    { db, cfg: configSchema.parse({}), detect: installed, adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls) },
     s, 'codex', 'hello',
   )
   expect(calls).toEqual(['codex'])
@@ -178,7 +179,7 @@ test('a chain member the user never set up is skipped out loud, not silently', a
       {
         db,
         cfg: cfg({ agents: { claude: { enabled: false } } }),
-        adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls),
+        detect: installed, adapterFor: scripted({ codex: fails("You've hit your weekly limit") }, calls),
       },
       s, 'codex', 'hello',
     )
@@ -204,7 +205,7 @@ test('the takeover notice is one clean line even when the limit message carries 
   let lines: string[] = []
   try {
     await send(
-      { db, cfg: cfg(), adapterFor: scripted({ codex: fails("You've hit your weekly limit\u001b[2K · resets 7am") }, calls) },
+      { db, cfg: cfg(), detect: installed, adapterFor: scripted({ codex: fails("You've hit your weekly limit\u001b[2K · resets 7am") }, calls) },
       s, 'codex', 'hello',
     )
     lines = err.mock.calls.map((c) => String(c[0]))
@@ -226,7 +227,7 @@ test('an upstream retry waits a real interval by default', async () => {
   const t0 = Date.now()
   try {
     await send(
-      { db, cfg: cfg({ failover: { chain: ['codex', 'claude'], upstreamRetries: 1 } }), adapterFor: scripted({ codex: fails('503 Service Unavailable') }, calls) },
+      { db, cfg: cfg({ failover: { chain: ['codex', 'claude'], upstreamRetries: 1 } }), detect: installed, adapterFor: scripted({ codex: fails('503 Service Unavailable') }, calls) },
       s, 'codex', 'hello',
     )
   } finally {

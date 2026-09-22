@@ -16,7 +16,7 @@ import type { Config } from '../src/config/schema'
 import { agentIds } from '../src/config/schema'
 import { openDb } from '../src/store/db'
 import { loadConfig, resolveAgent } from '../src/config/load'
-import { detect, detectAuth, type DetectDeps } from '../src/core/detect'
+import { detect, detectAuth, type DetectDeps, type DetectOptions } from '../src/core/detect'
 import { newSession, send } from '../src/core/session'
 import { loginHint } from '../src/commands/send'
 import { oneLine } from '../src/adapters/types'
@@ -87,7 +87,12 @@ export async function runSmoke(deps: SmokeDeps): Promise<AgentOutcome[]> {
 
     try {
       const opts = { timeoutSec: deps.timeoutSec ?? DEFAULT_TIMEOUT_SEC }
-      const sendDeps = { db: deps.db, cfg: deps.cfg, adapterFor: deps.adapterFor }
+      const sendDeps = {
+        db: deps.db,
+        cfg: deps.cfg,
+        adapterFor: deps.adapterFor,
+        detect: (a: AgentId, o: DetectOptions) => detect(a, { ...o, deps: deps.detectDeps }),
+      }
       const word = nonce()
       const first = await send(sendDeps, session, agent, storePrompt(word), opts)
 

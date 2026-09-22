@@ -190,11 +190,13 @@ export interface DetectOptions {
 }
 
 export async function detect(agent: AgentId, opts: DetectOptions = {}): Promise<Detection> {
+  if (opts.deps) return detectWith(opts.deps, agent, opts)
   const key = `${agent}\u0000${opts.model ?? ''}\u0000${opts.bin ?? ''}`
   return memo(detectCacheMap, key, () => detectWith(opts.deps ?? realDeps(), agent, opts))
 }
 
 export async function detectAuth(agent: AgentId, opts: DetectOptions = {}): Promise<AuthState> {
+  if (opts.deps) return detectAuthWith(opts.deps, agent, opts.bin)
   const key = `${agent}\u0000${opts.bin ?? ''}`
   return memo(detectAuthCacheMap, key, () => detectAuthWith(opts.deps ?? realDeps(), agent, opts.bin))
 }
