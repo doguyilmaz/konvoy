@@ -905,10 +905,10 @@ export const mutations: Mutation[] = [
     tests: ['tests/session.test.ts'],
   },
   {
-    name: 'a detection with injected deps is served from the shared cache',
+    name: 'every injected deps object shares the real detection memo',
     file: 'src/core/detect.ts',
-    from: '  if (opts.deps) return detectWith(opts.deps, agent, opts)\n',
-    to: '',
+    from: "const key = `${scope(opts.deps)}\\u0000${agent}\\u0000${opts.model",
+    to: "const key = `real\\u0000${agent}\\u0000${opts.model",
     tests: ['tests/detect.test.ts'],
   },
 ]

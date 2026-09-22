@@ -178,6 +178,17 @@ function realDeps(): DetectDeps {
 const detectCacheMap = new Map<string, Promise<Detection>>()
 const detectAuthCacheMap = new Map<string, Promise<AuthState>>()
 
+// Real detection shares one memo; each injected deps object gets its own, so a fake answering in
+// one place is never handed to another.
+const depsIds = new WeakMap<DetectDeps, number>()
+let nextDepsId = 0
+function scope(deps?: DetectDeps): string {
+  if (!deps) return 'real'
+  let id = depsIds.get(deps)
+  if (id === undefined) depsIds.set(deps, (id = ++nextDepsId))
+  return String(id)
+}
+
 export function clearDetectCache(): void {
   detectCacheMap.clear()
   detectAuthCacheMap.clear()
@@ -190,13 +201,11 @@ export interface DetectOptions {
 }
 
 export async function detect(agent: AgentId, opts: DetectOptions = {}): Promise<Detection> {
-  if (opts.deps) return detectWith(opts.deps, agent, opts)
-  const key = `${agent}\u0000${opts.model ?? ''}\u0000${opts.bin ?? ''}`
+  const key = `${scope(opts.deps)}\u0000${agent}\u0000${opts.model ?? ''}\u0000${opts.bin ?? ''}`
   return memo(detectCacheMap, key, () => detectWith(opts.deps ?? realDeps(), agent, opts))
 }
 
 export async function detectAuth(agent: AgentId, opts: DetectOptions = {}): Promise<AuthState> {
-  if (opts.deps) return detectAuthWith(opts.deps, agent, opts.bin)
-  const key = `${agent}\u0000${opts.bin ?? ''}`
+  const key = `${scope(opts.deps)}\u0000${agent}\u0000${opts.bin ?? ''}`
   return memo(detectAuthCacheMap, key, () => detectAuthWith(opts.deps ?? realDeps(), agent, opts.bin))
 }
