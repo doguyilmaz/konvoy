@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { cmdUsage } from '../src/commands/usage'
+import { NO_SESSION_HERE } from '../src/commands/messages'
 import {
   createSession,
   recordTurn,
@@ -364,7 +365,7 @@ test('usage with no session in this directory reports the standard error and exi
     err.mockRestore()
   }
   expect(code).toBe(2)
-  expect(lines).toContain('no konvoy session here - run `konvoy new "<goal>"` first')
+  expect(lines).toContain(NO_SESSION_HERE)
 })
 
 test('a turn after midnight is counted on its own local day, not the UTC one', () => {

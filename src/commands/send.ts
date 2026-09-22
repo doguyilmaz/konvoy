@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import type { AgentId } from '../types'
 import { agentIds } from '../adapters'
-import { currentSession, getSessionBySlug } from '../store/queries'
+import { requireSession } from './messages'
 import { send } from '../core/session'
 import { oneLine, safeText } from '../adapters/types'
 import type { TurnResult } from '../core/turn'
@@ -19,11 +19,8 @@ export async function cmdSend(
     console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
     return 2
   }
-  const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
-  if (!session) {
-    console.error('no konvoy session here - run `konvoy new "<goal>"` first')
-    return 2
-  }
+  const session = requireSession(db, cwd, slug)
+  if (!session) return 2
 
   let result: TurnResult
   try {

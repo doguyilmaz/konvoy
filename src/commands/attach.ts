@@ -1,7 +1,8 @@
 import type { Database } from 'bun:sqlite'
 import type { AgentId, Effort, Permission, Session, SpawnPlan } from '../types'
 import { agentIds, getAdapter } from '../adapters'
-import { currentSession, getBinding, getSessionBySlug, upsertBinding } from '../store/queries'
+import { getBinding, upsertBinding } from '../store/queries'
+import { requireSession } from './messages'
 import { oneLine } from '../adapters/types'
 import { detect } from '../core/detect'
 
@@ -55,11 +56,8 @@ export async function cmdAttach(db: Database, cwd: string, agent: string, opts: 
     console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
     return 2
   }
-  const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
-  if (!session) {
-    console.error('no konvoy session here - run `konvoy new "<goal>"` first')
-    return 2
-  }
+  const session = requireSession(db, cwd, slug)
+  if (!session) return 2
 
   const detection = await detect(agent as AgentId, { bin })
   if (!detection.installed) {

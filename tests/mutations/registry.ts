@@ -1075,4 +1075,26 @@ export const mutations: Mutation[] = [
     to: '',
     tests: ['tests/repl.test.ts'],
   },
+  // --- one source for the missing-session error (src/commands/messages.ts) ---
+  {
+    name: 'a session named on the command line is reported as an empty directory instead of by name',
+    file: 'src/commands/messages.ts',
+    from: 'console.error(slug ? noSessionNamed(slug) : NO_SESSION_HERE)',
+    to: 'console.error(NO_SESSION_HERE)',
+    tests: ['tests/session-required.test.ts'],
+  },
+  {
+    name: 'the missing-session error names only `konvoy new`, hiding that bare konvoy starts a session',
+    file: 'src/commands/messages.ts',
+    from: "'no konvoy session here - run `konvoy` to start one, or `konvoy new \"<goal>\"` to name its goal'",
+    to: "'no konvoy session here - run `konvoy new \"<goal>\"` first'",
+    tests: ['tests/session-required.test.ts'],
+  },
+  {
+    name: 'roster reports the missing session and then exits 0, so a script cannot tell it failed',
+    file: 'src/commands/roster.ts',
+    from: 'if (!session) return 2',
+    to: 'if (!session) return 0',
+    tests: ['tests/session-required.test.ts'],
+  },
 ]
