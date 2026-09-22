@@ -1134,4 +1134,19 @@ export const mutations: Mutation[] = [
     to: '  if (!session) return 0',
     tests: ['tests/session-required.test.ts'],
   },
+  // --- one wording for a disabled agent (src/config/load.ts) ---
+  {
+    name: 'the disabled-agent refusal stops naming the agent, so a four-agent config says which one only by luck',
+    file: 'src/config/load.ts',
+    from: 'export const disabledAgent = (agent: string): string => `${agent} is disabled in this konvoy config`',
+    to: "export const disabledAgent = (_agent: string): string => 'that agent is disabled in this konvoy config'",
+    tests: ['tests/agent-required.test.ts', 'tests/repl.test.ts', 'tests/session.test.ts'],
+  },
+  {
+    name: '/use switches to a disabled agent instead of refusing it',
+    file: 'src/commands/repl.ts',
+    from: 'if (next && !resolveAgent(cfg, next).enabled) {',
+    to: 'if (false) {',
+    tests: ['tests/agent-required.test.ts', 'tests/repl.test.ts'],
+  },
 ]

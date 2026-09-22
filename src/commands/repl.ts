@@ -3,7 +3,7 @@ import type { Config } from '../config/schema'
 import type { AgentId, Session } from '../types'
 import { onExit } from '../core/children'
 import { requireAgent } from './messages'
-import { resolveAgent } from '../config/load'
+import { disabledAgent, resolveAgent } from '../config/load'
 import { sessionDir } from '../paths'
 import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal } from '../store/queries'
 import { cmdNew } from './new'
@@ -221,7 +221,7 @@ export async function runRepl(
     } else if (cmd === 'use') {
       const next = requireAgent(rest[0] ?? '')
       if (next && !resolveAgent(cfg, next).enabled) {
-        console.error(`${next} is disabled in this konvoy config`)
+        console.error(disabledAgent(next))
       } else if (next) {
         agent = next
       }

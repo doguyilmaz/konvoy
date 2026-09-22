@@ -3,7 +3,7 @@ import { oneLine } from '../adapters/types'
 import type { AgentId, Session, TurnContext } from '../types'
 import type { Config } from '../config/schema'
 import type { Adapter } from '../adapters/types'
-import { resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
+import { disabledAgent, resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
 import { getAdapter } from '../adapters'
 import { clampEffort } from '../adapters/effort'
 import { detect, type Detection, type DetectOptions } from './detect'
@@ -95,7 +95,7 @@ export async function send(
   opts: TurnOptions = {},
 ): Promise<TurnResult> {
   const settings = resolveAgent(deps.cfg, agent)
-  if (!settings.enabled) throw new Error(`${agent} is disabled in this konvoy config`)
+  if (!settings.enabled) throw new Error(disabledAgent(agent))
 
   const adapterFor = (a: AgentId): Adapter => deps.adapterFor?.(a) ?? getAdapter(a)
   const detectFor = deps.detect ?? detect

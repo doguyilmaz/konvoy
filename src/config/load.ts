@@ -310,6 +310,11 @@ export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
 
 const isAgentId = (value: string): value is AgentId => (agentIds as readonly string[]).includes(value)
 
+// `enabled` is decided here, so the refusal is worded here: a turn asked of a disabled agent
+// throws it in core/session.ts and `/use` prints it, and those two drifting apart is how a user
+// ends up reading two different sentences about one setting.
+export const disabledAgent = (agent: string): string => `${agent} is disabled in this konvoy config`
+
 // An envelope's `to` is free text a model wrote, not a validated key - trimmed and
 // lower-cased before either check runs, since a model may write "Reviewer" or " claude ".
 // An agent id wins over a role of the same name: a role can be reassigned mid-session, an

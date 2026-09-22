@@ -4,6 +4,8 @@ import { configSchema } from '../src/config/schema'
 import { agentIds } from '../src/adapters'
 import { createSession } from '../src/store/queries'
 import { requireAgent, unknownAgent } from '../src/commands/messages'
+import { disabledAgent } from '../src/config/load'
+import { send } from '../src/core/session'
 import { cmdAttach } from '../src/commands/attach'
 import { cmdSend } from '../src/commands/send'
 import { runRepl, type ReplIo } from '../src/commands/repl'
@@ -54,4 +56,36 @@ test('requireAgent hands back a known agent and says nothing about it', () => {
   } finally {
     err.mockRestore()
   }
+})
+
+// The same sentence was written twice: core/session.ts throws it when a turn is asked of a
+// disabled agent, the REPL prints it when /use names one. config/load.ts is what decides
+// `enabled`, so it is what words the refusal now.
+test('a disabled agent is refused in the same words wherever it is named', async () => {
+  const db = openDb(':memory:')
+  const off = configSchema.parse({ agents: { codex: { enabled: false } } })
+  const s = createSession(db, { slug: 'd', goal: 'g', cwd: '/repo', lead: 'claude' })
+
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  let printed: string[]
+  try {
+    const io: ReplIo = {
+      lines: lines('/use codex'),
+      write: () => {},
+      tty: false,
+      pause: () => {},
+      resume: () => {},
+    }
+    await runRepl(io, db, off, '/repo', s, () => 0)
+    printed = err.mock.calls.map((c) => String(c[0]))
+  } finally {
+    err.mockRestore()
+  }
+  expect(printed).toEqual([disabledAgent('codex')])
+
+  const thrown = await send({ db, cfg: off }, s, 'codex', 'hi').then(
+    () => null,
+    (e: unknown) => (e instanceof Error ? e.message : String(e)),
+  )
+  expect(thrown).toBe(disabledAgent('codex'))
 })
