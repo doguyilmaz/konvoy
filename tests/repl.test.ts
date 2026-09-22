@@ -56,7 +56,7 @@ test('plain text is a turn against the current agent, and /use changes the agent
   const h = harness(['hello', '/use codex', 'review it'])
   expect(await h.go()).toBe(0)
   expect(h.calls).toEqual([['s', 'send', 'claude', 'hello'], ['s', 'send', 'codex', 'review it']])
-  expect(h.out.filter((t) => t.endsWith('> '))).toEqual(['s claude> ', 's claude> ', 's codex> ', 's codex> '])
+  expect(h.out.filter((t) => t.endsWith('\u203a '))).toEqual(['claude \u203a ', 'claude \u203a ', 'codex \u203a ', 'codex \u203a '])
 })
 
 test('after a turn the prompt follows the agent that actually answered', async () => {
@@ -96,7 +96,8 @@ test('/rename implies the current session and the prompt picks up the new name',
   await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
   expect(h.calls[0]).toEqual(['s', 'rename', 's', 'Fresh Name'])
   expect(h.calls[1]).toEqual(['fresh-name', 'send', 'claude', 'x'])
-  expect(h.out.at(-2)).toBe('fresh-name claude> ')
+  // the slug lives in the banner and in /roster, so a rename does not change the prompt
+  expect(h.out.at(-2)).toBe('claude \u203a ')
 })
 
 test('/goal stores the goal without leaving the loop', async () => {
@@ -257,10 +258,10 @@ test('the prompt is coloured on a terminal that takes colour, and plain text eve
   for (const line of prompts) {
     expect(line).toContain('\x1b[')
     expect(line).toContain('claude')
-    expect(line).toContain('>')
+    expect(line).toContain('\u203a')
   }
 
   const plain = harness(['x'])
   await runRepl(plain.io, plain.db, plain.cfg, '/nowhere/s', plain.s, plain.run)
-  expect(plain.out.filter((t) => t.endsWith('> '))).toEqual(['s claude> ', 's claude> '])
+  expect(plain.out.filter((t) => t.endsWith('\u203a '))).toEqual(['claude \u203a ', 'claude \u203a '])
 })

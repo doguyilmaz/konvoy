@@ -189,11 +189,11 @@ export async function runRepl(
   let agent: AgentId = session.lead
   const p = palette(io.color ?? false)
   const paintAgent = agentPaint(io.color ?? false)
-  // The session slug is context and the agent is the thing that changes, so the slug is dim and
-  // the agent carries its own colour: which agent you are talking to is readable at a glance,
-  // which is what a prompt is for.
+  // The slug is in the banner and in `/roster`; repeating it on every line is noise, and a
+  // prompt reading "test claude>" is mostly punctuation and bookkeeping. What changes turn to
+  // turn is which agent is listening, so that is what the prompt carries.
   const prompt = (): void => {
-    if (io.tty) io.write(`${p.dim(session.slug)} ${paintAgent(agent)(agent)}${p.bold('>')} `)
+    if (io.tty) io.write(`${paintAgent(agent)(agent)} ${p.dim('›')} `)
   }
   const refresh = (): boolean => {
     const fresh = listSessions(db).find((s) => s.id === session.id)

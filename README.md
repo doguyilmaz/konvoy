@@ -73,14 +73,14 @@ konvoy 0.3.2  session sinkaf-8f3a  lead claude
     konvoy config set defaults.harness inherit --global   to run it with your own setup
   ! permission edit: a tool that needs approval is refused, since a headless turn has nobody to ask
 
-sinkaf-8f3a claude> fix the token refresh
+claude › fix the token refresh
   … thinking
   ✓ Read  src/auth.ts  0.3s
   ✗ Bash  bun test  1.4s
 Switched the refresh to fire on 401 with a single in-flight retry.
   claude · 8.2s · 24.4k in / 311 out · $0.0621
-sinkaf-8f3a claude> /use codex
-sinkaf-8f3a codex> review that diff
+claude › /use codex
+codex › review that diff
 ```
 
 The answer streams as the agent produces it, each tool call says what it touched and how it

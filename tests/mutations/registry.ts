@@ -991,8 +991,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the prompt is written even when stdin is a pipe',
     file: 'src/commands/repl.ts',
-    from: 'if (io.tty) io.write(`${p.dim(session.slug)} ${paintAgent(agent)(agent)}${p.bold(\'>\')} `)',
-    to: 'io.write(`${p.dim(session.slug)} ${paintAgent(agent)(agent)}${p.bold(\'>\')} `)',
+    from: 'if (io.tty) io.write(`${paintAgent(agent)(agent)} ${p.dim(\'›\')} `)',
+    to: 'io.write(`${paintAgent(agent)(agent)} ${p.dim(\'›\')} `)',
     tests: ['tests/repl.test.ts'],
   },
   {
