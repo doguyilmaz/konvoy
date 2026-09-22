@@ -1,7 +1,10 @@
 name: release
+# A tag publishes. A manual run on a branch is the dry run: it builds, signs and notarizes
+# with the real secrets and uploads the artifacts, and publishes nothing.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -16,6 +19,7 @@ jobs:
       - run: bun test
       - run: bun run typecheck
       - name: The tag must be the package version
+        if: github.ref_type == 'tag'
         run: test "$(bun -e 'console.log(require("./package.json").version)')" = "${GITHUB_REF_NAME#v}"
 
   build-linux:
@@ -98,23 +102,30 @@ jobs:
           path: dist/release
           merge-multiple: true
       - run: cat dist/release/checksums-*.txt > dist/release/checksums.txt && cat dist/release/checksums.txt
+      - run: bun run scripts/tap-cask.ts "$(bun -e 'console.log(require("./package.json").version)')" dist/release/checksums.txt > dist/release/konvoy.rb
+      - name: Dry run — keep what a tag would have published
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run
+          path: dist/release
       - name: GitHub release
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/release/*.tar.gz dist/release/checksums.txt --title "$GITHUB_REF_NAME" --generate-notes
       - name: Update the Homebrew tap (needs a PAT with contents:write on doguyilmaz/homebrew-tap)
-        if: env.HOMEBREW_TAP_GITHUB_TOKEN != ''
+        if: github.ref_type == 'tag' && env.HOMEBREW_TAP_GITHUB_TOKEN != ''
         run: |
           set -euo pipefail
-          bun run scripts/tap-cask.ts "${GITHUB_REF_NAME#v}" dist/release/checksums.txt > konvoy.rb
           git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/doguyilmaz/homebrew-tap.git" "$RUNNER_TEMP/tap"
-          mv konvoy.rb "$RUNNER_TEMP/tap/Casks/konvoy.rb"
+          mv dist/release/konvoy.rb "$RUNNER_TEMP/tap/Casks/konvoy.rb"
           cd "$RUNNER_TEMP/tap"
           git add Casks/konvoy.rb
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${GITHUB_REF_NAME}" || echo "cask unchanged"
           git push
       - name: Publish to npm (when NPM_TOKEN is configured)
-        if: env.NPM_TOKEN != ''
+        if: github.ref_type == 'tag' && env.NPM_TOKEN != ''
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           bun publish --access public

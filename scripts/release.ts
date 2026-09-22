@@ -72,7 +72,7 @@ async function pack(): Promise<void> {
 
 function requireVersionMatch(): void {
   const tag = Bun.env.GITHUB_REF_NAME
-  if (tag && tag.replace(/^v/, '') !== pkg.version) {
+  if (Bun.env.GITHUB_REF_TYPE === 'tag' && tag && tag.replace(/^v/, '') !== pkg.version) {
     throw new Error(`tag ${tag} does not match package.json version ${pkg.version}`)
   }
 }
