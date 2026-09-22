@@ -130,3 +130,24 @@ test('a session named from another directory carries its own project config, not
     await Bun.$`rm -rf ${a} ${b} ${home}`.quiet()
   }
 })
+
+test('version in a directory with no session reports versions and says nothing on stderr', async () => {
+  const dir = tmp('version')
+  const home = tmp('version-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/marker`, '')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    let code = -1
+    await withEnv(dir, home, async () => {
+      code = await main(['version'])
+    })
+    expect(code).toBe(0)
+    expect(String(log.mock.calls[0]?.[0])).toMatch(/^konvoy \d/)
+    expect(err.mock.calls).toEqual([])
+  } finally {
+    err.mockRestore()
+    log.mockRestore()
+  }
+})

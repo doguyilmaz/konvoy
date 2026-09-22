@@ -6,7 +6,13 @@ import { detect, detectAuth } from '../core/detect'
 import { formatVersions, type AgentStatusRow } from '../format'
 import { cmdRoster } from './roster'
 
-export async function cmdStatus(db: Database, cfg: Config, cwd: string, slug?: string): Promise<number> {
+export async function cmdStatus(
+  db: Database,
+  cfg: Config,
+  cwd: string,
+  slug?: string,
+  opts: { roster?: boolean } = {},
+): Promise<number> {
   const rows: AgentStatusRow[] = await Promise.all(
     agentIds.map(async (agent) => {
       const settings = resolveAgent(cfg, agent)
@@ -24,6 +30,6 @@ export async function cmdStatus(db: Database, cfg: Config, cwd: string, slug?: s
   }
   // status reports; it does not judge. A directory with no session is not a failure of the
   // command, and cmdRoster has already said so on stderr.
-  cmdRoster(db, cfg, cwd, slug)
+  if (opts.roster !== false) cmdRoster(db, cfg, cwd, slug)
   return 0
 }

@@ -94,7 +94,7 @@ const handlers: Record<CommandName, Handler> = {
     }),
   version: (ctx) => {
     console.log(`konvoy ${VERSION}`)
-    return cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug)
+    return cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug, { roster: false })
   },
   dashboard: ({ db, cfg, cwd, args, slug }) =>
     cmdDashboard(db, cfg, cwd, {
