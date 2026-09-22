@@ -177,3 +177,53 @@ test('a session with nothing withheld gets a banner with no warnings in it', () 
   expect(lines).toHaveLength(2)
   expect(lines.join('\n')).not.toContain('!')
 })
+
+// "i dont see anything happens even when thinking": a tool that runs for ninety seconds has to
+// look alive. The frame and the elapsed time are redrawn in place, and only on a terminal.
+test('a running tool line animates in place and carries its own elapsed time', () => {
+  const h = harness({ tty: true })
+  const view = turnRender('claude', h.deps)
+  view.onEvent({ t: 'tool', name: 'Bash', status: 'start', detail: 'maestro test' })
+  const frames: string[] = []
+  for (let i = 0; i < 4; i++) {
+    h.tick(500)
+    h.err.length = 0
+    view.tick()
+    frames.push(h.err.join(''))
+  }
+  // each redraw returns to the start of the line, and no two consecutive frames look the same
+  for (const frame of frames) expect(frame.startsWith('\r')).toBe(true)
+  expect(new Set(frames.map((f) => f.replace(/[\d.]+s/, ''))).size).toBe(4)
+  expect(frames[1]).toContain('1.0s')
+  expect(frames[3]).toContain('2.0s')
+  expect(frames[3]).toContain('maestro test')
+})
+
+test('nothing animates on a pipe, and nothing animates when no tool is running', () => {
+  const piped = harness({ tty: false })
+  const plain = turnRender('claude', piped.deps)
+  plain.onEvent({ t: 'tool', name: 'Bash', status: 'start', detail: 'bun test' })
+  piped.err.length = 0
+  plain.tick()
+  expect(piped.err.join('')).toBe('')
+
+  const tty = harness({ tty: true })
+  const idle = turnRender('claude', tty.deps)
+  idle.tick()
+  expect(tty.err.join('')).toBe('')
+})
+
+test('the settled line replaces the animation, so one tool leaves exactly one line', () => {
+  const h = harness({ tty: true })
+  const view = turnRender('claude', h.deps)
+  view.onEvent({ t: 'tool', name: 'Read', status: 'start', detail: 'src/auth.ts' })
+  h.tick(200)
+  view.tick()
+  view.tick()
+  h.err.length = 0
+  view.onEvent({ t: 'tool', name: 'Read', status: 'ok' })
+  const settled = h.err.join('')
+  expect(settled.split('\n').filter((l) => l.trim() !== '')).toHaveLength(1)
+  expect(settled).toContain('✓ Read')
+  expect(settled.endsWith('\n')).toBe(true)
+})

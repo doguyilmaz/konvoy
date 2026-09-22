@@ -21,11 +21,18 @@ export interface TurnSummary {
 export interface TurnRender {
   onEvent: (event: KonvoyEvent) => void
   finish: (summary: TurnSummary) => void
+  /** redraw the running tool line one frame on: the caller owns the interval, so tests do not */
+  tick: () => void
   /** everything already written to stdout, so the caller does not print the answer twice */
   streamed: () => string
 }
 
 const CLEAR = '\r\x1b[2K'
+
+// Braille dots: one cell wide in every terminal font that has them, and a turn that sits on one
+// tool for ninety seconds has to look alive rather than hung.
+const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
+export const SPINNER_MS = 90
 
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}s`
 
@@ -48,6 +55,7 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
   let pending: { name: string; detail?: string; at: number } | null = null
   let saidThinking = false
   let streamed = ''
+  let frame = 0
 
   // A terminal gets the line the moment the tool starts and the same line rewritten when it
   // settles, so there is something moving while the agent works. A pipe gets the settled line
@@ -61,6 +69,15 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
     const line = toolLine(pending.name, pending.detail, deps.now() - pending.at, glyph)
     deps.err(`${deps.tty ? CLEAR : ''}${p.dim(line)}\n`)
     pending = null
+    frame = 0
+  }
+
+  // One frame of the running tool line. The caller drives this on an interval, so there is no
+  // timer inside the renderer and a test can step it by hand.
+  const tick = (): void => {
+    if (!deps.tty || !pending) return
+    frame = (frame + 1) % FRAMES.length
+    deps.err(`${CLEAR}${p.dim(toolLine(pending.name, pending.detail, deps.now() - pending.at, FRAMES[frame]!))}`)
   }
 
   return {
@@ -70,7 +87,7 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
           if (event.status === 'start') {
             settle('·')
             pending = { name: event.name, at: deps.now(), ...(event.detail ? { detail: event.detail } : {}) }
-            live(p.dim(toolLine(event.name, event.detail, 0, '·')))
+            live(p.dim(toolLine(event.name, event.detail, 0, FRAMES[0]!)))
             return
           }
           if (!pending) pending = { name: event.name || 'tool', at: deps.now() }
@@ -96,6 +113,8 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
     },
 
     streamed: () => streamed,
+
+    tick,
 
     // The footer carries what the turn cost and nothing else. A failure is worded once, by
     // decideOutcome in src/commands/send.ts, which also knows the exit code and the login hint.

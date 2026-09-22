@@ -1265,4 +1265,48 @@ export const mutations: Mutation[] = [
     to: 'const p = palette(true)',
     tests: ['tests/repl.test.ts'],
   },
+
+  // --- the harness driver rule and the spinner (src/config/load.ts, src/core/session.ts, src/render.ts) ---
+  {
+    name: "a turn the user typed is stripped of their own MCP servers, skills and settings again",
+    file: 'src/config/load.ts',
+    from: "return settings.harness ?? (driver === 'user' ? 'inherit' : 'minimal')",
+    to: "return settings.harness ?? 'minimal'",
+    tests: ['tests/harness.test.ts', 'tests/delegation.test.ts'],
+  },
+  {
+    name: 'a handed-over turn inherits the user setup, so konvoy pays for context it already supplied',
+    file: 'src/config/load.ts',
+    from: "return settings.harness ?? (driver === 'user' ? 'inherit' : 'minimal')",
+    to: "return settings.harness ?? 'inherit'",
+    tests: ['tests/harness.test.ts', 'tests/delegation.test.ts'],
+  },
+  {
+    name: 'an explicitly pinned harness is ignored in favour of the driver default',
+    file: 'src/config/load.ts',
+    from: 'return settings.harness ?? ',
+    to: 'return undefined ?? ',
+    tests: ['tests/harness.test.ts', 'tests/delegation.test.ts'],
+  },
+  {
+    name: 'the recipient of a handoff is driven as if the user had typed it',
+    file: 'src/core/session.ts',
+    from: "harness: effectiveHarness(recipientSettings, 'konvoy'),",
+    to: "harness: effectiveHarness(recipientSettings, 'user'),",
+    tests: ['tests/delegation.test.ts'],
+  },
+  {
+    name: 'the running tool line stops animating, so a long tool looks hung again',
+    file: 'src/render.ts',
+    from: 'if (!deps.tty || !pending) return\n    frame = (frame + 1) % FRAMES.length',
+    to: 'if (!deps.tty || !pending) return\n    frame = 0',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the spinner animates into a pipe, filling a log with frames',
+    file: 'src/render.ts',
+    from: 'if (!deps.tty || !pending) return',
+    to: 'if (!pending) return',
+    tests: ['tests/render.test.ts'],
+  },
 ]

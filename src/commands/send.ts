@@ -4,7 +4,7 @@ import type { AgentId } from '../types'
 import { requireAgent, requireSession } from './messages'
 import { send } from '../core/session'
 import { oneLine, safeText } from '../adapters/types'
-import { remainder, turnRender } from '../render'
+import { remainder, turnRender, SPINNER_MS } from '../render'
 import { colorEnabled } from '../style'
 import type { TurnResult } from '../core/turn'
 
@@ -29,11 +29,17 @@ export async function cmdSend(
     tty: Boolean(process.stderr.isTTY),
     now: () => Date.now(),
   })
+  // The renderer holds no timer of its own, so the interval lives here, next to the turn it
+  // animates. unref so a spinner can never be the reason konvoy stays alive.
+  const spinner = setInterval(() => view.tick(), SPINNER_MS)
+  spinner.unref?.()
   try {
     result = await send({ db, cfg }, session, target, prompt, { onEvent: view.onEvent })
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     return 2
+  } finally {
+    clearInterval(spinner)
   }
   view.finish(result)
 
