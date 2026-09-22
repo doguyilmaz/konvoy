@@ -995,4 +995,11 @@ export const mutations: Mutation[] = [
     to: 'if (stray.length > 1) {',
     tests: ['tests/cli.test.ts'],
   },
+  {
+    name: 'the REPL keeps reading stdin while an attached TUI owns the terminal',
+    file: 'src/commands/repl.ts',
+    from: '    io.pause()\n',
+    to: '',
+    tests: ['tests/repl.test.ts'],
+  },
 ]
