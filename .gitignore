@@ -3,3 +3,8 @@ dist
 *.db
 *.db-wal
 *.db-shm
+
+# varlock: the schema is committed, values never are
+.env
+.env.local
+.env.*.local

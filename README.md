@@ -256,6 +256,18 @@ override yet.
 Whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy. Bun 1.4+ only for the npm install or a checkout; the brew and tarball binaries carry their own runtime.
 Each authenticates itself; konvoy never handles credentials.
 
+## Releasing
+
+Bump `version` in `package.json`, then `git tag vX.Y.Z && git push --tags`. The release
+workflow builds four binaries (macOS arm64 and x64, signed and notarized; Linux amd64 and
+arm64), publishes them with checksums, updates `Casks/konvoy.rb` in `doguyilmaz/homebrew-tap`,
+and publishes to npm. It reads these repository secrets, each declared in `.env.schema`:
+`HOMEBREW_TAP_GITHUB_TOKEN`, `NPM_TOKEN`, `MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`,
+`MACOS_NOTARY_ISSUER_ID`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_KEY`. Signing, the tap push
+and the npm publish are each skipped when their secret is absent. To publish by hand, put the
+values in `.env.local` (gitignored) and run the publish through varlock so they are injected and
+redacted rather than pasted into a terminal.
+
 ## Development
 
 ```bash
