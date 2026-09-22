@@ -1,6 +1,6 @@
 {
   "name": "@doguyilmaz/konvoy",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "One session across Claude Code, Codex, Kiro CLI and opencode: bind, hand off, fail over.",
   "license": "MIT",
   "type": "module",
