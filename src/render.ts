@@ -56,16 +56,28 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
   let saidThinking = false
   let streamed = ''
   let frame = 0
+  // Three of the four CLIs say something before their first tool call, and the answer goes to
+  // stdout while the tool line goes to stderr: without this the two land on one line, which the
+  // captured streams render as "I'll read package.json now.  ✓ command_execution".
+  let midLine = false
+  const breakLine = (): void => {
+    if (!midLine) return
+    deps.out('\n')
+    midLine = false
+  }
 
   // A terminal gets the line the moment the tool starts and the same line rewritten when it
   // settles, so there is something moving while the agent works. A pipe gets the settled line
   // once: a log with half-written lines and escape codes in it is worse than no log.
   const live = (text: string): void => {
-    if (deps.tty) deps.err(`${CLEAR}${text}`)
+    if (!deps.tty) return
+    breakLine()
+    deps.err(`${CLEAR}${text}`)
   }
 
   const settle = (glyph: string): void => {
     if (!pending) return
+    breakLine()
     const line = toolLine(pending.name, pending.detail, deps.now() - pending.at, glyph)
     deps.err(`${deps.tty ? CLEAR : ''}${p.dim(line)}\n`)
     pending = null
@@ -105,6 +117,7 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
         case 'thinking': {
           if (saidThinking || streamed !== '') return
           saidThinking = true
+          breakLine()
           deps.err(`${p.dim('  … thinking')}\n`)
           return
         }
@@ -112,6 +125,7 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
           settle('·')
           if (event.text === '') return
           streamed += event.text
+          midLine = !event.text.endsWith('\n')
           deps.out(event.text)
           return
         }
@@ -128,7 +142,7 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
     // decideOutcome in src/commands/send.ts, which also knows the exit code and the login hint.
     finish(summary) {
       settle('·')
-      if (streamed !== '' && !streamed.endsWith('\n')) deps.out('\n')
+      breakLine()
       const spend =
         summary.credits > 0 ? `${summary.credits.toFixed(3)} cr` : summary.costUsd > 0 ? `$${summary.costUsd.toFixed(4)}` : null
       const parts = [paintAgent(agent), seconds(deps.now() - started)]

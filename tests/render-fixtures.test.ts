@@ -103,3 +103,22 @@ test('every captured stream renders without throwing, for every agent that has o
     expect(chrome, `${agent}/${fixture}`).toContain(agent)
   }
 })
+
+// Found by reading this suite's own output: codex and kiro both speak before their first tool
+// call, and the answer goes to stdout while the tool line goes to stderr. Without a break the two
+// arrive on one line, which read as "I'll read package.json now.  ✓ command_execution ...".
+test('an answer interrupted by a tool call keeps the tool line on its own line', async () => {
+  for (const [agent, fixture] of [['codex', 'codex'], ['kiro', 'kiro']] as [AgentId, string][]) {
+    const h = harness()
+    const view = turnRender(agent, h.deps)
+    for (const line of await capture(fixture)) for (const e of adapters[agent].parse(line)) view.onEvent(e)
+    view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+
+    // interleave the two streams the way a terminal does, then check no line holds both
+    const combined = `${h.out.join('')}`
+    expect(combined.endsWith('\n'), agent).toBe(true)
+    for (const chunk of h.out) expect(chunk.includes('✓'), agent).toBe(false)
+    // the answer's last fragment is followed by a break, so the next chrome line starts clean
+    expect(h.out.at(-1), agent).toBe('\n')
+  }
+})

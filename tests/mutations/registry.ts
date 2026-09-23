@@ -1441,4 +1441,11 @@ export const mutations: Mutation[] = [
     to: '',
     tests: ['tests/render-fixtures.test.ts'],
   },
+  {
+    name: 'a tool line lands on the same line as the answer, as it did for codex and kiro',
+    file: 'src/render.ts',
+    from: '    if (!midLine) return\n    deps.out(\'\\n\')',
+    to: '    if (!midLine) return',
+    tests: ['tests/render-fixtures.test.ts'],
+  },
 ]
