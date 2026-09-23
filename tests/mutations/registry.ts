@@ -1498,4 +1498,11 @@ export const mutations: Mutation[] = [
     to: "const GLYPH = { bad: '\u00b7', warn: '!', good: '\u2713', note: '\u00b7' } as const",
     tests: ['tests/doctor.test.ts'],
   },
+  {
+    name: 'config get goes back to a key=value run-on instead of one row per agent',
+    file: 'src/commands/config.ts',
+    from: "        ['AGENT', 'MODEL', 'EFFORT', 'FROM', 'PERMISSION', 'HARNESS', 'ENABLED'],",
+    to: "        ['AGENT'],",
+    tests: ['tests/config.test.ts'],
+  },
 ]

@@ -2,6 +2,7 @@ import type { Config } from '../config/schema'
 import { configSchema } from '../config/schema'
 import { explain, globalConfigPath, projectConfigPath, readLayer, resolveAgent } from '../config/load'
 import { agentIds } from '../adapters'
+import { table } from '../format'
 
 export function coerce(raw: string): string | number | boolean {
   if (raw === 'true') return true
@@ -73,13 +74,25 @@ export async function cmdConfig(
       console.log(typeof found === 'string' ? found : JSON.stringify(found, null, 2))
       return 0
     }
-    for (const agent of agentIds) {
-      const s = resolveAgent(cfg, agent)
-      const effort = explain(cfg, agent, 'effort')
-      console.log(
-        `${agent}: model=${s.model ?? '-'} effort=${s.effort} (${effort.source}) permission=${s.permission} enabled=${s.enabled}`,
-      )
-    }
+    // The same shape as a roster, so it reads like one: a row per agent, the source of the
+    // resolved effort in its own column rather than in parentheses inside a key=value run-on.
+    console.log(
+      table(
+        ['AGENT', 'MODEL', 'EFFORT', 'FROM', 'PERMISSION', 'HARNESS', 'ENABLED'],
+        agentIds.map((agent) => {
+          const s = resolveAgent(cfg, agent)
+          return [
+            agent,
+            s.model ?? '-',
+            s.effort,
+            explain(cfg, agent, 'effort').source,
+            s.permission,
+            s.harness ?? 'by driver',
+            s.enabled ? 'yes' : 'no',
+          ]
+        }),
+      ).trimEnd(),
+    )
     return 0
   }
 
