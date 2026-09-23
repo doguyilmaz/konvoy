@@ -296,3 +296,65 @@ test('a detection memo is scoped to its injected deps, never shared across them'
   const second = await detect('codex', { deps: deps('2.0.0') })
   expect([first.version, second.version]).toEqual(['1.0.0', '2.0.0'])
 })
+
+// T26. opencode rejects a variant a model does not have: measured 2026-09-23, `-m
+// opencode/claude-haiku-4-5#medium` answers "Variant unavailable for opencode/claude-haiku-4-5:
+// medium" and the turn produces nothing. konvoy appended `#${effort}` to every opencode model
+// regardless, so a whole class of models could not be driven at all. opencode's own cached
+// registry enumerates them, which is the only non-guessing source: models.dev data at
+// ~/.cache/opencode/models.json, where an effort-tunable model carries
+// reasoning_options: [{type: "effort", values: [...]}] and a budget-tokens model does not.
+const REGISTRY = JSON.stringify({
+  opencode: {
+    models: {
+      'claude-opus-4-8': {
+        reasoning: true,
+        reasoning_options: [{ type: 'effort', values: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+      },
+      'claude-haiku-4-5': { reasoning: true, reasoning_options: [{ type: 'budget_tokens', min: 1024 }] },
+      'some-plain-model': { reasoning: false },
+    },
+  },
+})
+
+test('opencode effort levels come from its own registry, per model', async () => {
+  const deps = {
+    run: async () => ({ stdout: 'opencode v2.0.11', exitCode: 0 }),
+    readText: async (path: string) => (path.includes('models.json') ? REGISTRY : null),
+  }
+
+  // an effort-tunable model reports exactly the variants the registry lists
+  const tunable = await detectWith(deps, 'opencode', { model: 'opencode/claude-opus-4-8' })
+  expect(tunable.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+
+  // a budget-tokens model has NO effort variant, which must be distinguishable from "unknown":
+  // an empty list is what tells the adapter to send no variant at all
+  const budget = await detectWith(deps, 'opencode', { model: 'opencode/claude-haiku-4-5' })
+  expect(budget.efforts).toEqual([])
+
+  const plain = await detectWith(deps, 'opencode', { model: 'opencode/some-plain-model' })
+  expect(plain.efforts).toEqual([])
+
+  // a model the registry has never heard of stays UNKNOWN, not "none": konvoy cannot prove
+  // anything about it, and the adapter's own default handles it
+  const stranger = await detectWith(deps, 'opencode', { model: 'opencode/who-knows' })
+  expect(stranger.efforts).toBeUndefined()
+
+  // no model configured at all is equally unknowable
+  const none = await detectWith(deps, 'opencode', {})
+  expect(none.efforts).toBeUndefined()
+})
+
+test('an unreadable or malformed opencode registry leaves effort unknown rather than guessing', async () => {
+  const missing = {
+    run: async () => ({ stdout: 'opencode v2.0.11', exitCode: 0 }),
+    readText: async () => null,
+  }
+  expect((await detectWith(missing, 'opencode', { model: 'opencode/claude-opus-4-8' })).efforts).toBeUndefined()
+
+  const garbage = {
+    run: async () => ({ stdout: 'opencode v2.0.11', exitCode: 0 }),
+    readText: async () => 'not json at all',
+  }
+  expect((await detectWith(garbage, 'opencode', { model: 'opencode/claude-opus-4-8' })).efforts).toBeUndefined()
+})

@@ -16,6 +16,7 @@ function result(over: Partial<TurnResult> = {}): TurnResult {
     exitCode: 0,
     error: null,
     events: [],
+    warnings: [],
     ...over,
   }
 }

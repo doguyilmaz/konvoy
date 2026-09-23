@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 import type { Database } from 'bun:sqlite'
 import { parseArgs, type Args } from './args'
-import { loadConfig, resolveAgent } from './config/load'
+import { effectiveHarness, loadConfig, resolveAgent } from './config/load'
 import { getSessionBySlug } from './store/queries'
 import { agentIds } from './config/schema'
 import type { Config } from './config/schema'
 import { openDb } from './store/db'
-import { dbPath } from './paths'
+import { dbPath, sessionDir } from './paths'
+import { sessionBanner } from './render'
+import { colorEnabled } from './style'
 import { cmdNew } from './commands/new'
 import { cmdSend } from './commands/send'
 import { cmdLs } from './commands/ls'
@@ -21,16 +23,24 @@ import { cmdRm } from './commands/rm'
 import { cmdRename } from './commands/rename'
 import { cmdUsage } from './commands/usage'
 import { cmdDashboard } from './commands/dashboard'
-import { formatCommandList, resolveCommandName, type CommandName } from './commands/table'
+import { commandTable, formatRows, resolveCommandName, type CommandName } from './commands/table'
+import { noSessionNamed, unknownCommand } from './commands/messages'
 import { runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
 import type { AgentId } from './types'
 import { version as VERSION } from '../package.json'
 
+// Bare `konvoy` is part of the surface, so it is rendered with the commands rather than beside
+// them: one call, one column, and the blank line put back after the first row.
+const surface = formatRows('konvoy ', [
+  { usage: '', summary: "start: resume this directory's session or create one, then talk" },
+  ...commandTable,
+]).split('\n')
+
 export const USAGE = `konvoy ${VERSION}
 
-  konvoy                                   start: resume this directory's session or create one, then talk
+${surface[0]!.trimEnd()}
 
-${formatCommandList()}
+${surface.slice(1).join('\n')}
 
 agents: ${agentIds.join(', ')}
 flags:  --session <slug>, --version (-v), --help (-h)
@@ -60,7 +70,7 @@ const handlers: Record<CommandName, Handler> = {
     }
     return cmdSend(ctx.db, ctx.cfg, ctx.cwd, agent, prompt.join(' '), ctx.slug)
   },
-  ls: (ctx) => cmdLs(ctx.db),
+  ls: (ctx) => cmdLs(ctx.db, ctx.cwd),
   roster: (ctx) => cmdRoster(ctx.db, ctx.cfg, ctx.cwd, ctx.slug),
   status: (ctx) => cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug),
   attach: (ctx, rest) => {
@@ -154,7 +164,7 @@ async function dispatch(command: string, rest: string[], cwd: string, slug: stri
 
   const name = resolveCommandName(command)
   if (!name) {
-    console.error(`unknown command "${command}"`)
+    console.error(unknownCommand(command, 'konvoy '))
     console.log(USAGE)
     return 2
   }
@@ -167,23 +177,37 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
   const cfg = await loadConfig({ cwd: (slug ? getSessionBySlug(db, slug)?.cwd : undefined) ?? cwd })
   const session = await startSession(db, cfg, cwd, slug)
   if (!session) {
-    console.error(slug ? `no konvoy session named "${slug}"` : 'could not create a session here')
+    console.error(slug ? noSessionNamed(slug) : 'could not create a session here')
     return 2
   }
   const io = given ?? terminalIo()
+  // Only for a human at a terminal: a piped run is a script, and a banner in its output is noise.
+  if (io.tty) {
+    const lead = resolveAgent(cfg, session.lead)
+    const facts = {
+      version: VERSION,
+      slug: session.slug,
+      dir: sessionDir(session.cwd, session.slug),
+      agent: session.lead,
+      harness: effectiveHarness(lead, 'user'),
+      permission: lead.permission,
+    }
+    for (const line of sessionBanner(facts, colorEnabled(Bun.env, true))) io.write(`${line}\n`)
+  }
   try {
     return await runRepl(io, db, cfg, cwd, session, (tokens, current) => {
       const a = parseArgs(tokens)
       const [cmd = '', ...r] = a._
       const name = resolveCommandName(cmd)
       if (!name) {
-        console.error(`unknown command "/${cmd}" - /help lists them`)
+        console.error(unknownCommand(cmd, '/'))
         return 2
       }
       return handlers[name]({ db, cfg, cwd, args: a, slug: current }, r)
     })
   } finally {
     io.pause()
+    io.close?.()
   }
 }
 

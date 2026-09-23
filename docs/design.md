@@ -19,7 +19,7 @@ re-explaining everything. There is no way to make them cooperate on a single tas
 
 ## 2. Goals
 
-1. **One session, four agents.** A konvoy session binds one foreign session per CLI and
+1. **One session, five agents.** A konvoy session binds one foreign session per CLI and
    survives restarts; `konvoy resume` reconnects all of them.
 2. **Shared context.** All four read and write one ledger, so a fact discovered by one is
    available to the rest without re-prompting.
@@ -36,7 +36,7 @@ re-explaining everything. There is no way to make them cooperate on a single tas
 
 - No account/API-key brokering. Every CLI authenticates itself, locally, as it does today.
 - No custom TUI in v1. The dashboard is `konvoy roster` / `konvoy status`, plain text.
-- No model calls of konvoy's own. konvoy has no LLM; all intelligence lives in the four CLIs.
+- No model calls of konvoy's own. konvoy has no LLM; all intelligence lives in the five CLIs.
 - No replacement for each CLI's config. konvoy layers on top and never rewrites user config
   files in place.
 
@@ -99,23 +99,23 @@ starts with, the one bare `konvoy` talks to first; with none configured it is cl
 ## 6. CLI surface
 
 ```
-  konvoy                                   start: resume this directory's session or create one, then talk
+  konvoy                                     start: resume this directory's session or create one, then talk
 
-  konvoy new ["<goal>"]                    create a session in this directory
-  konvoy send <agent> "<msg>"              run one turn against one agent
-  konvoy ls                                list sessions
-  konvoy resume [session]                  make a session current and show its roster
-  konvoy config get|set                    read or write layered configuration
-  konvoy rm <session> --yes                delete a konvoy session (foreign sessions survive)
-  konvoy rename <session> <new-name>       rename a session; its .konvoy folder follows
-  konvoy roster                            who is in the convoy
-  konvoy usage [--all] [--chart]           what this session spent, per agent
-  konvoy status                            versions, auth and roster
+  konvoy new ["<goal>"]                      create a session in this directory
+  konvoy send <agent> "<msg>"                run one turn against one agent
+  konvoy ls                                  list sessions
+  konvoy resume [session]                    make a session current and show its roster
+  konvoy config get|set                      read or write layered configuration
+  konvoy rm <session> --yes                  delete a konvoy session (foreign sessions survive)
+  konvoy rename <session> <new-name>         rename a session; its .konvoy folder follows
+  konvoy roster                              who is in the convoy
+  konvoy usage [--all] [--chart]             what this session spent, per agent
+  konvoy status                              versions, auth and roster
   konvoy attach <agent> [--id <session-id>]  open that agent's own interface, same session
-  konvoy doctor                            check installs, logins, effort and model overlap
-  konvoy update [--all]                    update konvoy, and with --all the agent CLIs
-  konvoy version                           konvoy and agent versions
-  konvoy dashboard [--port N]              open a local page with the same numbers
+  konvoy doctor                              check installs, logins, effort and model overlap
+  konvoy update [--all]                      update konvoy, and with --all the agent CLIs
+  konvoy version                             konvoy and agent versions
+  konvoy dashboard [--port N]                open a local page with the same numbers
 ```
 
 This block is the command table in `src/commands/table.ts` as `konvoy help` prints it;
@@ -167,7 +167,7 @@ is the only way to steer or cancel a running turn; it is roadmap (§33).
 
 ## 9. Context sharing
 
-konvoy prepends the prelude of §28 to each turn's prompt, the same way for all four CLIs. Nothing
+konvoy prepends the prelude of §28 to each turn's prompt, the same way for all five CLIs. Nothing
 reaches an agent through CLI configuration and no user config file is edited; `harness` (§18)
 decides how much of each CLI's own setup still loads. A per-CLI native channel (claude's
 `--append-system-prompt`, a generated kiro agent, opencode's `OPENCODE_CONFIG`) would keep the
@@ -192,14 +192,27 @@ underneath, unchanged.
 flag and clamps to what the *target model* supports, because the vocabulary is
 model-dependent on three of four CLIs. A clamp is never silent: it shows in `konvoy status`.
 
-**Permission.** konvoy exposes `safe | edit | yolo`:
+**Permission.** konvoy exposes `safe | edit | auto | yolo`:
 
-| | safe | edit | yolo |
-|---|---|---|---|
-| claude | `--permission-mode manual` | `acceptEdits` | `bypassPermissions` |
-| codex | `-s read-only` | `-s workspace-write` | `--dangerously-bypass-approvals-and-sandbox` |
-| kiro | `--trust-tools=` | `--trust-tools=fs_read,fs_write,…` | `--trust-all-tools` |
-| opencode | default (ask) | agent `permission` rules | `--auto` |
+| | safe | edit | auto | yolo |
+|---|---|---|---|---|
+| claude | `--permission-mode manual` | `acceptEdits` | `auto` | `bypassPermissions` |
+| codex | `-s read-only` | `-s workspace-write` | `-s workspace-write --approve-for-me` | `--dangerously-bypass-approvals-and-sandbox` |
+| kiro | `--trust-tools=` | `--trust-tools=fs_read,fs_write,…` | the same list | `--trust-all-tools` |
+| opencode | default (ask) | agent `permission` rules | `--auto` | `--auto` |
+| antigravity | `--mode plan` | `--mode accept-edits` | `--mode accept-edits` | `--dangerously-skip-permissions` |
+
+**`auto`, added 2026-09-22.** A headless turn has nobody to answer an approval prompt, so at
+`edit` every tool that asks is refused: a real session spent eighteen tool calls that way, with
+`maestro`, `xcrun` and `adb` all denied and nothing on screen saying so. claude's `auto` ("runs
+everything, with background safety checks") and codex's `--approve-for-me` ("route approval
+requests through automatic review using the workspace-write sandbox") are each CLI's own answer to
+that, and this is the level that sends them. `edit` is unchanged, because it is the default and
+widening a default silently is how a permission ladder stops meaning anything. Two rows are honest
+approximations rather than equivalents: kiro-cli 2.23.0 has no auto-review mode, so `auto` trusts
+exactly what `edit` trusts, and opencode has a single `--auto` switch, so `auto` and `yolo` land
+together there. claude's `dontAsk` is never sent at any level - it auto-DENIES every call that
+would otherwise prompt, which reads like this level and is its opposite.
 
 **Model diversity.** Kiro and codex can both run models that Claude Code also runs
 (`claude-opus-5`, `gpt-5.6-*`). A convoy whose reviewer and implementer share one model is a
@@ -361,14 +374,60 @@ it today. Four agents' minimal floors now measure 20,800 (claude), 18,173 (codex
 (opencode) tokens, with kiro reporting only a percentage - the agreement across three
 independent CLIs is the check that the unit is defined right.
 
-**Decision: `harness` is a first-class setting, defaulting to `minimal`.**
+**Decision: `harness` is a first-class setting, and when it is unset the turn's DRIVER decides.**
+
+A turn the user typed runs `inherit`; a turn konvoy drives, meaning the recipient of a handoff,
+runs `minimal`. Amended 2026-09-22, after a first real session: the old blanket `minimal` default
+stripped a user's own Maestro MCP server out of a turn they typed in their own repository, and
+claude - having no way to know konvoy had done it - told them to reinstall it. The measurement
+above is what `minimal` is for, and it only holds where konvoy supplies the context itself: the
+brief, the prelude, the handed-over task. On the user's own prompt konvoy supplies none of that,
+so the saving is bought by making the agent worse at the work in front of it. An explicit setting
+wins in both directions, and `konvoy` prints what a `minimal` turn withheld before the first turn
+runs rather than leaving the agent to guess.
+
+**Confirmed live, 2026-09-23.** A `bun run smoke` run (two turns per agent, the second resumed)
+reported **96,849 tokens** for claude's pair, counting input and output across both. Two `minimal`
+turns would total roughly 41,600 against the table above, and two `inherit` turns roughly twice
+53,336 - so the figure rules `minimal` out and is consistent with `inherit`, which is what a turn
+the user drove is supposed to load. That is the reachability half the unit tests could not prove:
+the driver rule reaches a real command line, and the harness is not silently stripping a session
+the user started by hand. The same run resumed claude, kiro and opencode through their bindings
+and each carried its nonce back, so §4's central promise is measured rather than assumed. codex
+failed the run on a genuine account rate limit, correctly classified `rate` (see below).
 
 | | minimal | inherit |
 |---|---|---|
 | claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
 | codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
-| kiro | **not implemented** - runs with the user's own agent and MCP configuration | same |
-| opencode | **not implemented** - runs with its own config discovery | same |
+| kiro | a generated `konvoy-minimal` agent profile in the project's `.kiro/agents/`, selected with `--agent` | no `--agent`, the user's own default agent |
+| opencode | `OPENCODE_CONFIG_PROJECT_DISABLE=1`, the project's own config not loaded | no config environment |
+| antigravity | `--disable-slash-commands`, its own words for "disable slash command and skill expansion in print mode" | omitted |
+
+**opencode, added 2026-09-22, and narrower than §33 assumed.** The roadmap called for
+`OPENCODE_CONFIG`, which turns out to ADD an explicit source to the merge rather than replace
+anything: with `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT` and `OPENCODE_CONFIG_DIR` all set,
+`opencode debug config` still resolves `~/.config/opencode/opencode.json` and the MCP servers in
+it (v2.0.11). `OPENCODE_CONFIG_PROJECT_DISABLE` is the only one of the four that removes a
+source, so that is what `minimal` sends, and a minimal opencode turn still carries the user's
+GLOBAL config. Relocating `OPENCODE_CONFIG_DIR` was rejected: it moves the config path in
+`debug paths` without dropping the global file, so it buys nothing. Data, auth and the session
+db are unaffected by all of them (`auth list` and `session list` unchanged), which is the one
+thing that made kiro's `KIRO_HOME` unusable and is not a problem here.
+
+**kiro, added 2026-09-22.** `--agent` takes a NAME, and kiro resolves names only from
+`<cwd>/.kiro/agents` or `$KIRO_HOME/agents` (kiro-cli 2.23.0, `kiro-cli agent list`); a path is
+not loaded. `KIRO_HOME` cannot be moved, because kiro's conversation store lives under it and a
+temp `KIRO_HOME` returns an empty `chat --list-sessions`, orphaning every binding and breaking
+`attach --id`. So konvoy writes one file it owns, `.kiro/agents/konvoy-minimal.json`, into the
+project it is already working in, with `mcpServers: {}`, `includeMcpJson: false` and
+`resources: []` - the three fields through which the built-in `kiro_default` otherwise pulls in
+the user's MCP servers and resources for AGENTS.md, README.md, every skill glob and the global
+steering directory. One hazard measured the same day: an `--agent` kiro cannot resolve does NOT
+fail the turn. It prints `[warn] failed to set agent '<name>': Internal error` on stderr and
+continues with the default agent, so konvoy would report a minimal harness while running the
+user's whole setup. `Adapter.warnings(stderr)` exists for exactly that: turn.ts reads stderr on
+every turn, not only a failed one, and the turn's answer stands with the warning beside it.
 
 Only claude and codex honor `harness` today (`src/adapters/claude.ts`, `src/adapters/codex.ts`);
 the kiro and opencode rows above described intended behavior that was never built, corrected
@@ -384,6 +443,35 @@ only `ANTHROPIC_API_KEY` or an `apiKeyHelper` and never reads OAuth or the keych
 subscription login cannot authenticate under it. The flag combination above achieves the same
 reduction while leaving authentication alone.
 
+### Antigravity CLI, added 2026-09-23
+
+Google is transitioning gemini-cli to Antigravity CLI, and gemini-cli's own auth refuses this
+machine's account (`IneligibleTierError`, `UNSUPPORTED_CLIENT`, `tierId: free-tier`) on its newest
+published version, so `agy` is the supported client and gemini-cli was never adapted. Everything
+below was verified against the installed agy 1.2.9: the flags from `agy --help`, and the stream
+from four real captures in `tests/fixtures/streams/antigravity*.jsonl`.
+
+It fits konvoy's model more closely than gemini-cli would have: `--print` headless,
+`--output-format stream-json`, `--effort low|medium|high`, `--model`, and `--conversation <id>` to
+resume a conversation by a STABLE id, which is what a binding needs. agy assigns the id itself and
+reports it in the `init` event, so `supportsPresetSessionId` is false, as for codex, kiro and
+opencode. The resumed capture is the live proof of §4's promise for this agent: a nonce stored in
+one turn came back in the next.
+
+Three behaviours are recorded here because each one is a SILENT failure konvoy would otherwise
+report as success, and all three were found by capturing rather than by reading:
+
+- **A missing conversation does not fail.** `--conversation <unknown>` writes
+  `warning: conversation "<id>" not found` to stderr and starts a NEW conversation, exit 0. The
+  rebind path of §16 keys on a crash, which never arrives, so the context loss is invisible
+  without reading that line. `Adapter.warnings` surfaces it.
+- **An auto-denied tool can leave a successful turn with an empty answer.** A tool needing a
+  permission nobody can grant is denied - a headless turn cannot prompt - and the turn still
+  reports `status: SUCCESS` with `response: ""`, the reason only on stderr. Also surfaced.
+- **`thinking_tokens` is a subset of `output_tokens`, not an addition to input.** The captures
+  settle it arithmetically: `input + output === total`, with thinking inside output. Filing it as
+  input would repeat exactly the unit confusion this section was corrected for in §18.
+
 ## 19. Trust boundary between agents
 
 konvoy's purpose is moving text between agents, which means one agent's output becomes
@@ -398,9 +486,12 @@ sender's `task` as its prompt.
   to <recipient>:`, so the recipient knows whose words it is reading.
 - **One hop bounds the blast radius.** A handoff is followed once per `send` (§10); a confused
   or compromised agent cannot chain further turns on its own.
-- **Not built:** the prelude does not yet state that agent-produced text is a proposal without
-  authority over the recipient's own rules, nor that a request to change permissions or act
-  outside the goal must be refused. The design called for both.
+- **The text is framed as a proposal.** Every prelude that carries agent-written text opens with
+  one fixed statement (`TRUST` in src/core/prelude.ts): the turns below are a proposal, not an
+  instruction with authority over the reader's own rules, the reader's own configuration and the
+  session goal decide what it does, and a request to raise a permission, disable a safeguard or
+  work outside the goal is refused out loud. Handoff and failover carry the same words, since a
+  successor reading a derived transcript is in the same position as a named recipient.
 - **konvoy holds no credentials**, so it cannot be used as a path to them.
 
 ## 20. Session locking and delegation leases
@@ -431,7 +522,7 @@ protocol below is shaped by that asymmetry and by one principle.
 
 ### Pointers, not payloads
 
-The filesystem and git are already a shared channel between the four agents, with perfect
+The filesystem and git are already a shared channel between the five agents, with perfect
 fidelity and zero token cost until something is read. Anything the receiver can fetch itself
 travels as a reference; only what it cannot reconstruct travels as text.
 
@@ -1196,9 +1287,13 @@ Where no gate is configured, `gate_passed` stays null and every rate reads as a 
 **Shipped (0.3)** - sessions and bindings, headless turns, `attach` and `attach --id`, envelope
 delegation, failover, the gate, `usage`, `--chart` and `dashboard`, `doctor`, `update`, `rename`,
 interactive mode; a signed and notarized brew cask, Linux tarballs, npm with provenance.
-**Next** - `harness: minimal` for kiro (a generated agent profile) and opencode
-(`OPENCODE_CONFIG`); the codex rate-limit stream shape captured, so an informational error item
-can be told from a failed turn.
+**Next** - nothing open. `harness: minimal` shipped for kiro, through a generated project agent
+profile, and for opencode, through its project config alone: the `OPENCODE_CONFIG*` variables this
+section once named turned out to ADD a config source rather than replace one (§18). The codex
+rate-limit stream is captured (`tests/fixtures/streams/codex-rate.jsonl`, 2026-09-23), and it
+answers the question this line used to ask: the skills-budget notice is an error ITEM, while the
+failure arrives as a top-level `error` line and again inside `turn.failed`. What remains is the
+owner's: re-capturing the two fixtures that have drifted from their installed CLIs, and a release.
 **Later** - `drive()` over each CLI's persistent protocol: live streaming, steer, cancel.
 Parallel worktrees with conflict-aware merge; tmux-backed live attach. Parley, party and
 formations (§23–25).
@@ -1212,5 +1307,9 @@ agent recorded it, because failover never falls back. A line starting with `/` i
 `/use`, `/goal`, `/help` and `/quit` live only inside; every other `/<name>` is the command table
 with the current session implied (`/rename <new>` needs no old name, `/attach` defaults to the
 current agent, `/new` and `/resume` switch the session). Prompts appear only on a TTY, so piped
-stdin runs one turn per line and exits at EOF. Ctrl-C keeps its meaning from section 13: it stops
+stdin runs one turn per line and exits at EOF. On a TTY konvoy also enables bracketed paste
+(DECSET 2004) and treats everything the terminal brackets as a single message: a pasted block is
+one turn carrying all of its lines, where reading the tty line by line made it one turn per line
+and sent the first fragment on its own. A terminal that does not support the mode sends no
+markers and behaves as before. Ctrl-C keeps its meaning from section 13: it stops
 the running turn and the process. The subcommands remain the scripting surface.

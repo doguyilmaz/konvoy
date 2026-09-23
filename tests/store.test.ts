@@ -367,3 +367,60 @@ test('a foreign id that is not an id shape is not bound, and the binding stays u
     err.mockRestore()
   }
 })
+
+// openDb shelled out to `mkdir -p` to create the store's directory, which made konvoy depend on
+// finding mkdir on PATH: a child process started with a PATH that lacks it died with
+// `Executable not found in $PATH: "mkdir"` before it could open anything. Bun.spawn resolves from
+// the PATH captured at startup and ignores a later change, so this has to be checked in a child.
+test('a store opens in a directory that does not exist yet, with no mkdir on PATH', async () => {
+  const base = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}`
+  const target = `${base}/nested/deep/konvoy.db`
+  const script = `
+    import { openDb } from '${process.cwd()}/src/store/db'
+    const db = openDb(${JSON.stringify(target)})
+    db.query('SELECT 1').get()
+    db.close()
+    console.log('opened')
+  `
+  const proc = Bun.spawn([process.execPath, '-e', script], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    // A non-empty PATH with nothing on it. An EMPTY PATH is not the same test: Bun falls back to a
+    // default search path then, which is why this defect first showed up under a real directory.
+    env: { ...process.env, PATH: '/konvoy-nonexistent-path' },
+  })
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  expect(stderr, stderr).not.toContain('not found in $PATH')
+  expect(await proc.exited).toBe(0)
+  expect(stdout.trim()).toBe('opened')
+  await Bun.$`rm -rf ${base}`.quiet().nothrow()
+})
+
+test('opening an existing store spawns no subprocess at all', async () => {
+  const dir = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}`
+  // first open creates the directory, second finds it there
+  openDb(`${dir}/konvoy.db`).close()
+  const spawned = spyOn(Bun, 'spawnSync')
+  try {
+    openDb(`${dir}/konvoy.db`).close()
+    // the steady state is every konvoy command after the first: it must cost no process
+    expect(spawned.mock.calls.length).toBe(0)
+  } finally {
+    spawned.mockRestore()
+    await Bun.$`rm -rf ${dir}`.quiet().nothrow()
+  }
+})
+
+// When the directory genuinely cannot be created, the reason belongs in the error konvoy prints.
+// Without it the user sees SQLite's "unable to open database file", which says nothing about which
+// path was refused or why - here, a regular file sitting where a directory has to go.
+test('a store directory that cannot be created fails with the reason, not a bare SQLite error', async () => {
+  const base = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}`
+  await Bun.write(`${base}/blocker`, 'a file where a directory would have to be')
+  try {
+    expect(() => openDb(`${base}/blocker/nested/konvoy.db`)).toThrow(/cannot create the konvoy store directory/)
+  } finally {
+    await Bun.$`rm -rf ${base}`.quiet().nothrow()
+  }
+})

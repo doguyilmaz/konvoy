@@ -3,7 +3,7 @@ import { oneLine } from '../adapters/types'
 import type { AgentId, Session, TurnContext } from '../types'
 import type { Config } from '../config/schema'
 import type { Adapter } from '../adapters/types'
-import { resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
+import { disabledAgent, effectiveHarness, resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
 import { getAdapter } from '../adapters'
 import { clampEffort } from '../adapters/effort'
 import { detect, type Detection, type DetectOptions } from './detect'
@@ -95,7 +95,7 @@ export async function send(
   opts: TurnOptions = {},
 ): Promise<TurnResult> {
   const settings = resolveAgent(deps.cfg, agent)
-  if (!settings.enabled) throw new Error(`${agent} is disabled in this konvoy config`)
+  if (!settings.enabled) throw new Error(disabledAgent(agent))
 
   const adapterFor = (a: AgentId): Adapter => deps.adapterFor?.(a) ?? getAdapter(a)
   const detectFor = deps.detect ?? detect
@@ -184,8 +184,11 @@ export async function send(
         binding: getBinding(deps.db, session.id, recipient),
         model: recipientSettings.model,
         effort: recipientEffort.value,
+        efforts: recipientDetection.efforts,
         permission: recipientSettings.permission,
-        harness: recipientSettings.harness,
+        // konvoy chose this turn and wrote its prompt, so it supplies the context itself: the
+        // recipient runs stripped unless the user pinned a harness explicitly (section 18).
+        harness: effectiveHarness(recipientSettings, 'konvoy'),
         bin: recipientSettings.bin,
         style: recipientSettings.style,
         delegation: deps.cfg.delegation.enabled,
@@ -295,8 +298,11 @@ export async function send(
         binding: getBinding(deps.db, session.id, current),
         model: currentSettings.model,
         effort: currentEffort.value,
+        efforts: currentDetection.efforts,
         permission: currentSettings.permission,
-        harness: currentSettings.harness,
+        // the user's own prompt, including when failover moved it to another agent: their setup
+        // is what they expect to be running against, so it is inherited unless pinned
+        harness: effectiveHarness(currentSettings, 'user'),
         bin: currentSettings.bin,
         style: currentSettings.style,
         delegation: deps.cfg.delegation.enabled,

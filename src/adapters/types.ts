@@ -8,6 +8,8 @@ export interface Adapter {
   parse(line: string): KonvoyEvent[]
   attach(binding: Binding): SpawnPlan
   prepare?(ctx: TurnContext): Promise<void>
+  /** lines a CLI wrote to stderr that the user must see even though the turn succeeded */
+  warnings?(stderr: string): string[]
 }
 
 // konvoy's own instruction, owned here rather than vendored from any installed skill - a
@@ -79,8 +81,12 @@ export function safeText(value: string): string {
 // "Login token is expired", "MCP OAuth access token is expired" - so requiring the literal
 // word "credentials" missed every real expiry. The noun must sit next to the state, or a
 // parser's "Unexpected token" and "Invalid token in JSON" read as auth failures.
+// An entitlement refusal belongs here rather than in `unknown`: captured from opencode on
+// 2026-09-23, "An active OpenCode Go subscription is required to use Go models", which no retry
+// and no other prompt can fix. `unknown` would keep a failover chain sitting on that agent. The
+// noun must sit next to the state, so ordinary prose about a subscription field stays unclassified.
 const AUTH =
-  /invalid api key|authentication failed|not authenticated|not (?:logged|signed) in|unauthorized|bad credentials|\b401\b|please run \/?login|(?:credential|token|session)s? (?:are |is |has |have )?(?:expired|revoked|invalid|missing)|token refresh failed|unable to refresh token/
+  /invalid api key|authentication failed|not authenticated|not (?:logged|signed) in|unauthorized|bad credentials|\b401\b|please run \/?login|(?:credential|token|session)s? (?:are |is |has |have )?(?:expired|revoked|invalid|missing)|token refresh failed|unable to refresh token|(?:active |valid )?subscription (?:is )?(?:required|expired|has expired|needed)|no active subscription/
 // `hit your <window> limit` and `rate_limit` are captured verbatim from Claude Code on
 // 2026-09-20: "You've hit your weekly limit · resets 7am" and "You've hit your session limit
 // · resets 12:40am", both carrying error type rate_limit / HTTP 429. The remaining

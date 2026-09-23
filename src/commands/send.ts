@@ -1,10 +1,11 @@
 import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import type { AgentId } from '../types'
-import { agentIds } from '../adapters'
-import { currentSession, getSessionBySlug } from '../store/queries'
+import { requireAgent, requireSession } from './messages'
 import { send } from '../core/session'
 import { oneLine, safeText } from '../adapters/types'
+import { remainder, turnRender, SPINNER_MS } from '../render'
+import { colorEnabled } from '../style'
 import type { TurnResult } from '../core/turn'
 
 export async function cmdSend(
@@ -15,31 +16,42 @@ export async function cmdSend(
   prompt: string,
   slug?: string,
 ): Promise<number> {
-  if (!agentIds.includes(agent as AgentId)) {
-    console.error(`unknown agent "${agent}" - expected one of ${agentIds.join(', ')}`)
-    return 2
-  }
-  const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
-  if (!session) {
-    console.error('no konvoy session here - run `konvoy new "<goal>"` first')
-    return 2
-  }
+  const target = requireAgent(agent)
+  if (!target) return 2
+  const session = requireSession(db, cwd, slug)
+  if (!session) return 2
 
   let result: TurnResult
+  const view = turnRender(target, {
+    out: (text) => process.stdout.write(text),
+    err: (text) => process.stderr.write(text),
+    color: colorEnabled(Bun.env, Boolean(process.stderr.isTTY)),
+    tty: Boolean(process.stderr.isTTY),
+    now: () => Date.now(),
+  })
+  // The renderer holds no timer of its own, so the interval lives here, next to the turn it
+  // animates. unref so a spinner can never be the reason konvoy stays alive.
+  const spinner = setInterval(() => view.tick(), SPINNER_MS)
+  spinner.unref?.()
   try {
-    result = await send({ db, cfg }, session, agent as AgentId, prompt, {
-      onEvent: (e) => {
-        if (e.t === 'tool') console.error(`  · ${oneLine(e.name, 120)}`)
-      },
-    })
+    result = await send({ db, cfg }, session, target, prompt, { onEvent: view.onEvent })
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     return 2
+  } finally {
+    clearInterval(spinner)
   }
+  view.finish(result)
 
-  const outcome = decideOutcome(agent as AgentId, result)
+  const outcome = decideOutcome(target, result)
+  // a turn that answered while konvoy was withholding something it did not manage to withhold
+  for (const warning of result.warnings) console.error(`konvoy: ${warning}`)
   for (const line of outcome.stderrLines) console.error(line)
-  if (outcome.stdout !== null) console.log(outcome.stdout)
+  // the answer was streamed as it arrived; only what the stream did not carry is printed here
+  if (outcome.stdout !== null) {
+    const rest = remainder(outcome.stdout, view.streamed())
+    if (rest.trim() !== '') console.log(rest)
+  }
   return outcome.code
 }
 
@@ -74,6 +86,7 @@ export function loginHint(agent: AgentId): string {
     codex: 'run: codex login',
     kiro: 'run: kiro-cli login',
     opencode: 'run: opencode providers',
+    antigravity: 'run: agy and sign in (it has no auth subcommand)',
   }
   return hints[agent]
 }

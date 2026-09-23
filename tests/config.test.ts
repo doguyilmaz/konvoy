@@ -1,14 +1,17 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { loadConfig, resolveAgent, explain } from '../src/config/load'
+import { agentIds } from '../src/config/schema'
 
 const tmp = (name: string) => `/tmp/konvoy-test-${name}-${Bun.nanoseconds()}`
 
-test('the harness profile defaults to minimal and is overridable per agent from the global config', async () => {
+test('a harness pinned per agent in the global config beats the driver default', async () => {
   const dir = tmp('harness')
   await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ agents: { claude: { harness: 'inherit' } } }))
   const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
   expect(resolveAgent(cfg, 'claude').harness).toBe('inherit')
-  expect(resolveAgent(cfg, 'codex').harness).toBe('minimal')
+  // unset for everyone else, so effectiveHarness() decides from who drove the turn - see
+  // tests/harness.test.ts. A default here would have taken that decision away from the caller.
+  expect(resolveAgent(cfg, 'codex').harness).toBeUndefined()
 })
 
 test('an empty setup yields built-in defaults', async () => {
@@ -177,4 +180,35 @@ test('a malformed project config names the file, not a raw SyntaxError', async (
     expect((e as Error).message).not.toContain('SyntaxError')
     expect((e as Error).name).not.toBe('SyntaxError')
   }
+})
+
+// `config get` printed `claude: model=- effort=high (defaults) permission=edit enabled=true`, a
+// key=value run-on and the last unaligned multi-agent output in the tool. It is the same shape as
+// a roster - one row per agent - so it goes through the same table, with the source of each
+// resolved value in its own column instead of in parentheses mid-line.
+test('config get prints one aligned row per agent, with where each value came from', async () => {
+  const dir = tmp('get-table')
+  await Bun.write(`${dir}/global.jsonc`, JSON.stringify({ defaults: { effort: 'medium' }, agents: { kiro: { model: 'auto' } } }))
+  const cfg = await loadConfig({ cwd: dir, globalPath: `${dir}/global.jsonc` })
+  const { cmdConfig } = await import('../src/commands/config')
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let lines: string[]
+  try {
+    expect(await cmdConfig(cfg, dir, 'get')).toBe(0)
+    lines = log.mock.calls.map((c) => String(c[0])).join('\n').trim().split('\n')
+  } finally {
+    log.mockRestore()
+  }
+
+  expect(lines[0]).toContain('AGENT')
+  expect(lines[0]).toContain('MODEL')
+  expect(lines[0]).toContain('EFFORT')
+  expect(lines[0]).toContain('PERMISSION')
+  expect(lines).toHaveLength(agentIds.length + 1)
+
+  // one column per value, so the rows line up and the source is readable
+  for (const line of lines.slice(1)) expect(line).not.toContain('=')
+  const kiro = lines.find((l) => l.startsWith('kiro'))!
+  expect(kiro).toContain('auto')
+  expect(kiro).toContain('medium')
 })

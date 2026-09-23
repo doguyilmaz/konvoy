@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite'
 import { slugify } from '../core/session'
 import { sessionDir } from '../paths'
 import { getSessionBySlug, lockOwner, renameSession } from '../store/queries'
+import { requireNamedSession } from './messages'
 
 const isDir = async (path: string): Promise<boolean> => (await Bun.$`test -d ${path}`.quiet().nothrow()).exitCode === 0
 
@@ -13,11 +14,8 @@ async function retitle(path: string, from: string, to: string): Promise<void> {
 }
 
 export async function cmdRename(db: Database, from: string, to: string): Promise<number> {
-  const session = getSessionBySlug(db, from)
-  if (!session) {
-    console.error(`no konvoy session named "${from}"`)
-    return 2
-  }
+  const session = requireNamedSession(db, from)
+  if (!session) return 2
   const busy = lockOwner(db, session.id)
   if (busy) {
     console.error(`"${from}" has a turn running (${busy}) - wait for it to finish, then retry`)

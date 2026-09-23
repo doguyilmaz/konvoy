@@ -12,6 +12,10 @@ const UNCAPTURED: Partial<Record<AgentId, Record<string, string>>> = {
     error: 'kiro fails outside the stream (stderr, exit 1) - no runFinished failure has been captured',
   },
   opencode: { thinking: 'display-only; not deterministic to trigger' },
+  antigravity: {
+    error:
+      'agy reports SUCCESS for almost everything, including an auto-denied tool and a missing conversation (both captured, both surfaced through Adapter.warnings). The one ERROR result observed came from a transient 503 on its eligibility check and cannot be forced; capture it if it recurs',
+  },
 }
 
 // This project's most expensive lesson: three of the four adapters were written from guesses

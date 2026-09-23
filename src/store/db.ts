@@ -33,14 +33,37 @@ const MIGRATIONS: string[] = [
    CREATE INDEX session_cwd_status ON session(cwd, status);`,
 ]
 
-export function openDb(path: string): Database {
-  if (path !== ':memory:') {
-    const dir = dirname(path)
-    Bun.spawnSync(['mkdir', '-p', dir])
+// SQLite refuses to create a database whose directory is missing, so konvoy has to make it. It
+// used to run `mkdir -p` up front on every open, which cost a process per command and made konvoy
+// depend on finding mkdir on PATH: a child started with a PATH that has no mkdir died with
+// `Executable not found in $PATH: "mkdir"` before opening anything. Bun 1.4.2 offers no
+// synchronous directory create (`Bun.$` is async, `node:*` imports are ruled out), so the open is
+// attempted first and the directory made only when that fails - no process in the steady state,
+// which is every command after the first - and mkdir is resolved to an absolute path so PATH
+// cannot decide whether konvoy starts. Bun.which itself falls back to a default search path.
+function ensureDirectory(dir: string): void {
+  const mkdir = Bun.which('mkdir') ?? '/bin/mkdir'
+  const made = Bun.spawnSync([mkdir, '-p', dir], { stdout: 'ignore', stderr: 'pipe' })
+  if (made.exitCode !== 0) {
+    const reason = made.stderr.toString().trim() || `exit ${made.exitCode}`
+    throw new Error(`cannot create the konvoy store directory ${dir}: ${reason}`)
   }
+}
+
+function open(path: string): Database {
+  try {
+    return new Database(path, { create: true, strict: true })
+  } catch (error) {
+    if (path === ':memory:') throw error
+    ensureDirectory(dirname(path))
+    return new Database(path, { create: true, strict: true })
+  }
+}
+
+export function openDb(path: string): Database {
   let db: Database
   try {
-    db = new Database(path, { create: true, strict: true })
+    db = open(path)
     if (path !== ':memory:') {
       // konvoy runs concurrently by design - a nested konvoy inside an agent, a dashboard beside
       // a send. Set before anything that takes a lock: switching a fresh file to WAL needs an

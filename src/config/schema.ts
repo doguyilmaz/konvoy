@@ -1,8 +1,10 @@
 import { z } from 'zod'
 
-export const agentIds = ['claude', 'codex', 'kiro', 'opencode'] as const
+export const agentIds = ['claude', 'codex', 'kiro', 'opencode', 'antigravity'] as const
 export const effortSchema = z.enum(['low', 'medium', 'high', 'max'])
-export const permissionSchema = z.enum(['safe', 'edit', 'yolo'])
+// safe -> edit -> auto -> yolo. `auto` exists because a headless turn cannot answer a prompt:
+// claude and codex both have a mode that reviews a call automatically instead of refusing it.
+export const permissionSchema = z.enum(['safe', 'edit', 'auto', 'yolo'])
 export const harnessSchema = z.enum(['minimal', 'inherit'])
 export const agentIdSchema = z.enum(agentIds)
 // konvoy's own instruction, not a model capability - `.nullish()` so a per-agent `null` can
@@ -27,7 +29,7 @@ const defaultsObjectSchema = z
   .object({
     effort: effortSchema.default('high'),
     permission: permissionSchema.default('edit'),
-    harness: harnessSchema.default('minimal'),
+    harness: harnessSchema.optional(),
     style: styleSchema.nullish(),
   })
   .strict()

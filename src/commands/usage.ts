@@ -1,7 +1,5 @@
 import type { Database } from 'bun:sqlite'
 import {
-  currentSession,
-  getSessionBySlug,
   turnsPerDay,
   turnsPerDayByAgent,
   usageAcrossSessions,
@@ -9,7 +7,8 @@ import {
   usageForSession,
   type UsageRow,
 } from '../store/queries'
-import { formatUsage } from '../format'
+import { requireSession } from './messages'
+import { formatUsage, outputColor } from '../format'
 import { agentSparklines, heatmap, shareBars } from '../chart'
 import { isPricingConfigured } from '../pricing'
 import type { Config } from '../config/schema'
@@ -35,11 +34,8 @@ export function cmdUsage(
     }
     console.log('all sessions')
   } else {
-    session = opts.slug ? getSessionBySlug(db, opts.slug) : currentSession(db, cwd)
-    if (!session) {
-      console.error('no konvoy session here - run `konvoy new "<goal>"` first')
-      return 2
-    }
+    session = requireSession(db, cwd, opts.slug)
+    if (!session) return 2
     rows = usageForSession(db, session.id)
     if (rows.length === 0) {
       console.log(`session ${session.slug} - no turns yet`)
@@ -50,7 +46,7 @@ export function cmdUsage(
 
   const sessionId = opts.all ? undefined : session?.id
 
-  console.log(formatUsage(rows, cfg.pricing, usageByAgentModel(db, sessionId)))
+  console.log(formatUsage(rows, cfg.pricing, usageByAgentModel(db, sessionId), outputColor()))
   console.log(
     isPricingConfigured(cfg.pricing)
       ? `${UNITS}; ~USD is estimated from rates configured as of ${cfg.pricing.asOf || 'an unspecified date'}`

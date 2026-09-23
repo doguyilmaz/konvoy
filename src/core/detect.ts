@@ -67,6 +67,15 @@ const AUTH_CHECK: Record<AgentId, (bin?: string) => AuthCheck> = {
       return stdout.trim().length > 0
     },
   }),
+  // agy has no auth subcommand: signing in happens in the interactive CLI. `models` is the
+  // cheapest command that still needs the server, so a working login is what makes it exit 0.
+  antigravity: (bin = 'agy') => ({
+    args: [bin, 'models'],
+    ok: (stdout, exitCode) => {
+      if (exitCode !== 0) return null
+      return stdout.trim().length > 0
+    },
+  }),
 }
 
 async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly string[] | undefined> {
@@ -107,6 +116,39 @@ function authDetail(stdout: string, exitCode: number): string {
   return stripControlChars(trimmed.split('\n')[0] ?? '')
 }
 
+// opencode's effort is a model VARIANT (`-m opencode/claude-opus-4-8#high`), and naming one a model
+// does not have refuses the turn. The only non-guessing source is opencode's own cached registry
+// (models.dev data), where an effort-tunable model carries reasoning_options of type "effort" with
+// its values enumerated, and a model tuned by thinking budget instead carries "budget_tokens".
+// Three outcomes, deliberately distinct: the values, [] for a model the registry says has none,
+// and undefined when konvoy cannot tell (no model configured, unknown model, no readable registry).
+async function opencodeEfforts(deps: DetectDeps, model?: string): Promise<readonly string[] | undefined> {
+  if (!model) return undefined
+  const home = process.env.HOME ?? ''
+  const raw = await deps.readText(`${home}/.cache/opencode/models.json`)
+  if (!raw) return undefined
+  try {
+    const registry = JSON.parse(raw) as Record<string, { models?: Record<string, unknown> }>
+    // a configured model is "provider/id", and the provider names the registry entry to look in
+    const slash = model.indexOf('/')
+    const provider = slash === -1 ? 'opencode' : model.slice(0, slash)
+    const id = slash === -1 ? model : model.slice(slash + 1)
+    const entry = registry[provider]?.models?.[id]
+    if (!entry || typeof entry !== 'object') return undefined
+    const options = (entry as { reasoning_options?: unknown }).reasoning_options
+    if (!Array.isArray(options)) return []
+    const effort = options.find(
+      (o): o is { type: string; values?: unknown } =>
+        typeof o === 'object' && o !== null && (o as { type?: unknown }).type === 'effort',
+    )
+    const values = effort?.values
+    if (!Array.isArray(values)) return []
+    return values.filter((v): v is string => typeof v === 'string')
+  } catch {
+    return undefined
+  }
+}
+
 export async function detectWith(
   deps: DetectDeps,
   agent: AgentId,
@@ -116,7 +158,13 @@ export async function detectWith(
   const result = await deps.run([opts.bin ?? adapter.bin, '--version'])
   const installed = result.exitCode === 0
   const version = installed ? parseVersion(result.stdout) : null
-  const efforts = installed && agent === 'codex' ? await codexEfforts(deps, opts.model) : undefined
+  const efforts = !installed
+    ? undefined
+    : agent === 'codex'
+      ? await codexEfforts(deps, opts.model)
+      : agent === 'opencode'
+        ? await opencodeEfforts(deps, opts.model)
+        : undefined
   return { agent, installed, version, efforts }
 }
 

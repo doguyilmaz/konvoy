@@ -83,13 +83,19 @@ test('turn.completed yields usage', () => {
 test('the captured fixture parses into session, tool call, text, notice and usage', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/codex.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => codexAdapter.parse(l))
-  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0c0d3-eeba-7a93-8999-d74b91dcd5df' })
-  expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'command_execution', status: 'ok' }])
-  expect(events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')).toBe('I’ll read package.json now.OK')
-  // codex reports its skills-context-budget notice as an item of type "error" on a turn that
-  // then completes normally; it must stay unclassified (kind unknown) so turn.ts can clear it -
-  // a notice whose wording matched RATE or AUTH would otherwise trip failover on a healthy turn
-  expect(events.filter((e) => e.t === 'error').map((e) => (e as { kind: string }).kind)).toEqual(['unknown'])
+  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0cf74-74bd-7ff0-8fd8-98fc83ffc127' })
+  // the capture holds the started/completed pair for one shell call, and both carry the command:
+  // the started item is what opens the live line, the completed one settles it with its exit code
+  expect(events.filter((e) => e.t === 'tool')).toEqual([
+    { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
+    { t: 'tool', name: 'command_execution', status: 'ok', detail: "/bin/zsh -lc 'cat package.json'" },
+  ])
+  const text = events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')
+  expect(text).toContain('package.json')
+  expect(text.trim().endsWith('1.0.0')).toBe(true)
+  // This capture carries no skills-budget notice, because `--ignore-user-config` leaves codex with
+  // no skills to shorten; the notice-on-a-healthy-turn path lives in codex-rate.jsonl, where the
+  // item error must stay unclassified so turn.ts can clear it rather than trip failover.
   expect(events.some((e) => e.t === 'usage')).toBe(true)
 })
 
@@ -112,4 +118,65 @@ test('an error item or a failed turn without a message reports an empty message,
 test('an error event says whether it came from an item or from turn.failed', () => {
   expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'notice' } }))[0]).toMatchObject({ t: 'error', source: 'item' })
   expect(codexAdapter.parse(JSON.stringify({ type: 'turn.failed', error: { message: 'boom' } }))[0]).toMatchObject({ t: 'error', source: 'turn' })
+})
+
+// From the real capture: an item.started/item.completed pair for a command_execution carries the
+// command itself. konvoy rendered the item TYPE and dropped the command, so a codex turn showed
+// "command_execution" four times over and said nothing about what it ran.
+test('a codex shell item carries the command it ran', () => {
+  const started = codexAdapter.parse(
+    JSON.stringify({
+      type: 'item.started',
+      item: { id: 'item_2', type: 'command_execution', command: "/bin/zsh -lc 'cat package.json'", status: 'in_progress' },
+    }),
+  )
+  expect(started).toEqual([
+    { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
+  ])
+
+  const completed = codexAdapter.parse(
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_2', type: 'command_execution', command: 'bun test', exit_code: 1, status: 'completed' },
+    }),
+  )
+  expect(completed).toEqual([{ t: 'tool', name: 'command_execution', status: 'error', detail: 'bun test' }])
+})
+
+// Captured on 2026-09-23 from a real exhausted codex account (design section 33 called this
+// "cannot be forced" - it happened during a smoke run and cost no quota to record). The stream
+// answers the question the roadmap asked: an INFORMATIONAL error and a TERMINAL one are different
+// lines. The skills-budget notice arrives as `item.completed` with `item.type === "error"`, while
+// the failure arrives twice, first as a top-level `{"type":"error"}` and then inside `turn.failed`.
+test('the captured rate-limit stream tells an informational error from a terminal one', async () => {
+  const lines = (await Bun.file('tests/fixtures/streams/codex-rate.jsonl').text()).trim().split('\n')
+  const events = lines.flatMap((l) => codexAdapter.parse(l))
+  const errors = events.filter((e) => e.t === 'error') as { message: string; kind: string; source?: string }[]
+
+  // the notice is an item and classifies as nothing in particular, so turn.ts can clear it
+  const notice = errors.find((e) => e.source === 'item')!
+  expect(notice.kind).toBe('unknown')
+  expect(notice.message).toContain('skills context budget')
+
+  // the failure is a rate limit, which is what moves a failover chain: a misread as `crash`
+  // would keep the convoy on an agent that cannot work for hours
+  const terminal = errors.filter((e) => e.kind === 'rate')
+  expect(terminal.length).toBeGreaterThan(0)
+  for (const e of terminal) expect(e.message).toContain('hit your usage limit')
+
+  // every line that says the account is blocked is read, including the top-level one: a stream
+  // that carried it without a turn.failed would otherwise be read as an ordinary crash
+  expect(errors.map((e) => e.source)).toContain('stream')
+  expect(errors.map((e) => e.source)).toContain('turn')
+})
+
+test('a top-level error line is read, not ignored', () => {
+  const events = codexAdapter.parse(JSON.stringify({ type: 'error', message: "You've hit your usage limit." }))
+  expect(events).toEqual([
+    { t: 'error', message: "You've hit your usage limit.", kind: 'rate', source: 'stream' },
+  ])
+  // a top-level error with no words still reports, so the turn is not read as silent success
+  expect(codexAdapter.parse(JSON.stringify({ type: 'error' }))).toEqual([
+    { t: 'error', message: '', kind: 'unknown', source: 'stream' },
+  ])
 })

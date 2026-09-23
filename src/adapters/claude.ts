@@ -1,10 +1,28 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
+import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
+// claude's own mode names, from `claude --help` and its settings reference: `auto` runs
+// everything with background safety checks, `dontAsk` would auto-DENY every call that would
+// otherwise prompt - the opposite of what a headless turn needs, so konvoy never sends it.
 const PERMISSION: Record<Permission, string> = {
   safe: 'manual',
   edit: 'acceptEdits',
+  auto: 'auto',
   yolo: 'bypassPermissions',
+}
+
+// Every tool names its subject under a different key, and the set is claude's, not konvoy's: a
+// key that is not here yields no detail rather than a guess printed as fact.
+const DETAIL_KEYS = ['file_path', 'path', 'command', 'pattern', 'url', 'notebook_path', 'description'] as const
+
+function toolDetail(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null) return undefined
+  const record = input as Record<string, unknown>
+  for (const key of DETAIL_KEYS) {
+    const value = record[key]
+    if (typeof value === 'string' && value !== '') return oneLine(value, 80)
+  }
+  return undefined
 }
 
 export const claudeAdapter: Adapter = {
@@ -40,10 +58,28 @@ export const claudeAdapter: Adapter = {
       const events: KonvoyEvent[] = []
       for (const raw of blocks) {
         if (typeof raw !== 'object' || raw === null) continue
-        const block = raw as { type?: string; text?: string; thinking?: string; name?: string }
+        const block = raw as { type?: string; text?: string; thinking?: string; name?: string; input?: unknown }
         if (block.type === 'text' && block.text) events.push({ t: 'text', text: block.text })
         if (block.type === 'thinking' && block.thinking) events.push({ t: 'thinking', text: block.thinking })
-        if (block.type === 'tool_use') events.push({ t: 'tool', name: block.name ?? 'tool', status: 'start' })
+        if (block.type === 'tool_use') {
+          const detail = toolDetail(block.input)
+          events.push({ t: 'tool', name: block.name ?? 'tool', status: 'start', ...(detail ? { detail } : {}) })
+        }
+      }
+      return events
+    }
+
+    // The outcome of a call comes back as a tool_result inside the next `user` message, which is
+    // the only place claude reports that a tool failed or was refused. The id it carries is
+    // claude's own; konvoy settles the call it has open, so it does not need to match on it.
+    if (o.type === 'user') {
+      const message = o.message as { content?: unknown[] } | undefined
+      const blocks = Array.isArray(message?.content) ? message.content : []
+      const events: KonvoyEvent[] = []
+      for (const raw of blocks) {
+        if (typeof raw !== 'object' || raw === null) continue
+        const block = raw as { type?: string; is_error?: unknown }
+        if (block.type === 'tool_result') events.push({ t: 'tool', name: '', status: block.is_error === true ? 'error' : 'ok' })
       }
       return events
     }

@@ -56,6 +56,9 @@ const BIN_CANDIDATES: Record<string, string[]> = {
   // opencode's own installer puts it here by default, off $PATH - the exact path the
   // README's config example points `bin` at.
   opencode: ['opencode', '~/.opencode/bin/opencode'],
+  // Antigravity CLI installs itself here (its installer says so), which is off $PATH for a
+  // non-login shell - the same shape as opencode's own default location.
+  agy: ['agy', '~/.local/bin/agy'],
 }
 
 function firstLine(text: string): string {
@@ -152,9 +155,9 @@ const checks: Check[] = [
 // still parses today. The list is built from the adapters' real argv across every permission,
 // harness and binding state - not kept by hand - so a flag added to an adapter is checked here
 // without anyone remembering to add it.
-const AGENT_KEY: Record<AgentId, keyof typeof BIN_CANDIDATES> = { claude: 'claude', codex: 'codex', kiro: 'kiro-cli', opencode: 'opencode' }
-const TURN_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['exec', '--help'], kiro: ['chat', '--help'], opencode: ['run', '--help'] }
-const ATTACH_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['resume', '--help'], kiro: ['chat', '--help'], opencode: ['--help'] }
+const AGENT_KEY: Record<AgentId, keyof typeof BIN_CANDIDATES> = { claude: 'claude', codex: 'codex', kiro: 'kiro-cli', opencode: 'opencode', antigravity: 'agy' }
+const TURN_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['exec', '--help'], kiro: ['chat', '--help'], opencode: ['run', '--help'], antigravity: ['--help'] }
+const ATTACH_HELP: Record<AgentId, string[]> = { claude: ['--help'], codex: ['resume', '--help'], kiro: ['chat', '--help'], opencode: ['--help'], antigravity: ['--help'] }
 
 function argvFlags(cmd: string[]): string[] {
   return cmd.map((tok) => tok.split('=')[0]!).filter((tok) => /^--?[a-z][a-z-]*$/.test(tok) && tok !== '--')
@@ -210,7 +213,8 @@ for (const id of agentIds) checks.push(flagCheck(id, 'turn'), flagCheck(id, 'att
 // The auth-status commands src/core/detect.ts runs on `konvoy status`. Running each is the
 // check: exit 127 means no binary, and a CLI that has dropped the subcommand says so in its
 // own words. Logged in or not, the subcommand existing is what konvoy depends on.
-const AUTH_ARGS: Record<AgentId, string[]> = { claude: ['auth', 'status'], codex: ['login', 'status'], kiro: ['whoami'], opencode: ['auth', 'list'] }
+// agy has no auth subcommand: `models` is the cheapest command that still needs the server.
+const AUTH_ARGS: Record<AgentId, string[]> = { claude: ['auth', 'status'], codex: ['login', 'status'], kiro: ['whoami'], opencode: ['auth', 'list'], antigravity: ['models'] }
 const UNKNOWN_SUBCOMMAND = /unrecognized subcommand|unknown (?:sub)?command|invalid (?:sub)?command|no such (?:sub)?command|is not a .*command|command not found/i
 
 function authCheck(id: AgentId): Check {

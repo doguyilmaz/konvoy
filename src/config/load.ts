@@ -18,10 +18,24 @@ export interface AgentSettings {
   model?: string
   effort: Effort
   permission: Permission
-  harness: Harness
+  /** unset unless configured, so the turn's driver decides - see effectiveHarness */
+  harness?: Harness
   bin?: string
   subagentEffort?: Effort
   style?: Style
+}
+
+/** who asked for the turn: the user at a prompt, or konvoy handing work to another agent */
+export type Driver = 'user' | 'konvoy'
+
+// `minimal` exists because konvoy supplies the context itself on a turn it drives: the brief, the
+// prelude, the handed-over task. Design section 18 measured that at 2.6x less context per turn.
+// None of that reasoning applies to a turn the user typed in their own repository, where stripping
+// their MCP servers, skills and settings only makes the agent worse at their work - and konvoy
+// did it silently, which is how "my MCP is installed" became the agent blaming the machine.
+// An explicit setting still wins, in both directions; it is privileged, so global config only.
+export function effectiveHarness(settings: AgentSettings, driver: Driver): Harness {
+  return settings.harness ?? (driver === 'user' ? 'inherit' : 'minimal')
 }
 
 export function stripJsonc(text: string): string {
@@ -309,6 +323,11 @@ export function resolveAgent(cfg: Config, agent: AgentId): AgentSettings {
 }
 
 const isAgentId = (value: string): value is AgentId => (agentIds as readonly string[]).includes(value)
+
+// `enabled` is decided here, so the refusal is worded here: a turn asked of a disabled agent
+// throws it in core/session.ts and `/use` prints it, and those two drifting apart is how a user
+// ends up reading two different sentences about one setting.
+export const disabledAgent = (agent: string): string => `${agent} is disabled in this konvoy config`
 
 // An envelope's `to` is free text a model wrote, not a validated key - trimmed and
 // lower-cased before either check runs, since a model may write "Reviewer" or " claude ".

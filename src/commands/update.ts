@@ -9,6 +9,7 @@ const COMMANDS: Record<AgentId, string[]> = {
   codex: ['codex', 'update'],
   kiro: ['kiro-cli', 'update'],
   opencode: ['opencode', 'upgrade'],
+  antigravity: ['agy', 'update'],
 }
 
 export function updateCommand(agent: AgentId, bin?: string): string[] {

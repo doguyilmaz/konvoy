@@ -12,7 +12,7 @@ export interface CommandSpec {
 export const commandTable = [
   { name: 'new', aliases: ['start'], usage: 'new ["<goal>"]', summary: 'create a session in this directory' },
   { name: 'send', aliases: [], usage: 'send <agent> "<msg>"', summary: 'run one turn against one agent' },
-  { name: 'ls', aliases: ['sessions'], usage: 'ls', summary: 'list sessions' },
+  { name: 'ls', aliases: ['sessions', 'list'], usage: 'ls', summary: 'list sessions' },
   { name: 'resume', aliases: [], usage: 'resume [session]', summary: 'make a session current and show its roster' },
   { name: 'config', aliases: [], usage: 'config get|set', summary: 'read or write layered configuration' },
   {
@@ -61,16 +61,54 @@ export function resolveCommandName(word: string): CommandName | undefined {
   return aliasToName.get(word)
 }
 
+// A user who types a word konvoy does not have is usually one letter or one habit away from the
+// one it does: /list for ls, /sessons for sessions. Naming the nearest match is the difference
+// between a dead end and a command, and it costs a table scan.
+export function nearestCommand(word: string): CommandName | undefined {
+  const target = word.toLowerCase()
+  if (target === '') return undefined
+  let best: { name: CommandName; score: number } | null = null
+  for (const candidate of aliasToName.keys()) {
+    const score = distance(target, candidate)
+    const limit = Math.max(1, Math.floor(candidate.length / 3))
+    if (score > limit) continue
+    if (!best || score < best.score) best = { name: aliasToName.get(candidate)!, score }
+  }
+  return best?.name
+}
+
+// Levenshtein, two rows. Small enough not to be worth a dependency, and the table is tiny.
+function distance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i]
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      current[j] = Math.min(current[j - 1]! + 1, previous[j]! + 1, previous[j - 1]! + cost)
+    }
+    previous = current
+  }
+  return previous[b.length]!
+}
+
+export interface CommandRow {
+  /** the invocation as a user types it, without the leading `konvoy ` or `/` */
+  usage: string
+  summary: string
+}
+
+// One two-column renderer for both listings. The REPL used to post-process USAGE's output with
+// replaceAll('  konvoy ', '  /'), which also rewrote the word "konvoy" inside a summary: the
+// `version` row read "/and agent versions". Prefix and rows are arguments now, so nothing has to
+// be edited back out afterwards, and both listings line up on one width.
+export function formatRows(prefix: string, rows: readonly CommandRow[]): string {
+  const left = rows.map((r) => `${prefix}${r.usage}`)
+  const width = Math.max(...left.map((l) => l.length)) + 2
+  return rows.map((r, i) => `  ${left[i]!.padEnd(width)}${r.summary}`).join('\n')
+}
+
 // The two-column command listing used by USAGE, generated from the table so it can't
 // drift from what dispatch actually supports.
 export function formatCommandList(): string {
-  const prefixes = commandTable.map((c) => `konvoy ${c.usage}`)
-  const width = Math.max(...prefixes.map((p) => p.length))
-  return commandTable
-    .map((c, i) => {
-      const prefix = prefixes[i]!
-      const gap = ' '.repeat(Math.max(2, width - prefix.length))
-      return `  ${prefix}${gap}${c.summary}`
-    })
-    .join('\n')
+  return formatRows('konvoy ', commandTable)
 }

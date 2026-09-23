@@ -6,7 +6,8 @@ export type KonvoyEvent =
   | { t: 'session'; foreignId: string }
   | { t: 'text'; text: string }
   | { t: 'thinking'; text: string }
-  | { t: 'tool'; name: string; status: 'start' | 'ok' | 'error' }
+  /** `detail` is what the call acted on: a path, a command. Model-controlled, so sanitized. */
+  | { t: 'tool'; name: string; status: 'start' | 'ok' | 'error'; detail?: string }
   | { t: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; credits?: number }
   | {
       t: 'error'
@@ -62,6 +63,7 @@ export interface TurnContext {
   model?: string
   effort: string
   permission: Permission
+  efforts?: readonly string[]
   harness?: 'minimal' | 'inherit'
   bin?: string
   lease?: string

@@ -4,6 +4,7 @@ import { createSession, getBinding, upsertBinding } from '../src/store/queries'
 import { runTurn, drain } from '../src/core/turn'
 import { liveCount } from '../src/core/children'
 import { claudeAdapter } from '../src/adapters/claude'
+import { kiroAdapter } from '../src/adapters/kiro'
 import type { Adapter } from '../src/adapters/types'
 import type { TurnContext } from '../src/types'
 
@@ -446,4 +447,36 @@ test('a binary that exists but cannot start still leaves a turn row with the err
   } finally {
     await Bun.$`rm -f ${file}`.quiet()
   }
+})
+
+// The reachability test for adapter warnings: turn.ts reads stderr only when the turn FAILED,
+// and kiro's "failed to set agent" warning comes with exit 0, so a warning that is parsed but
+// never read would be the same defect as every other capability this project built twice.
+test('a warning a CLI writes to stderr on a successful turn reaches the result', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 's', goal: 'g', cwd: process.cwd(), lead: 'kiro' })
+  const seen: string[] = []
+  const adapter: Adapter = {
+    ...kiroAdapter,
+    turn: () => ({
+      cmd: [
+        'bun',
+        'tests/fixtures/fake-agent.ts',
+        JSON.stringify({ type: 'runFinished', data: { status: 'success', finalText: 'done' } }),
+      ],
+      cwd: process.cwd(),
+      env: { ...(process.env as Record<string, string>), FAKE_AGENT_STDERR: "[warn] failed to set agent 'konvoy-minimal': Internal error" },
+    }),
+    warnings: (stderr) => {
+      seen.push(stderr)
+      return kiroAdapter.warnings?.(stderr) ?? []
+    },
+  }
+
+  const result = await runTurn({ db, adapter }, ctx(s.id, { prompt: 'go' }))
+  expect(result.exitCode).toBe(0)
+  expect(result.error).toBe(null)
+  expect(seen.join('')).toContain('failed to set agent')
+  expect(result.warnings).toHaveLength(1)
+  expect(result.warnings[0]).toContain('not the minimal harness')
 })

@@ -2,15 +2,13 @@ import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
 import { agentIds } from '../adapters'
 import { resolveAgent } from '../config/load'
-import { currentSession, getSessionBySlug, listBindings } from '../store/queries'
-import { duplicateModels, formatRoster, type RosterRow } from '../format'
+import { listBindings } from '../store/queries'
+import { requireSession } from './messages'
+import { duplicateModels, formatRoster, outputColor, type RosterRow } from '../format'
 
 export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string): number {
-  const session = slug ? getSessionBySlug(db, slug) : currentSession(db, cwd)
-  if (!session) {
-    console.error('no konvoy session here - run `konvoy new "<goal>"` first')
-    return 2
-  }
+  const session = requireSession(db, cwd, slug)
+  if (!session) return 2
 
   const bindings = new Map(listBindings(db, session.id).map((b) => [b.agent, b]))
   const rows: RosterRow[] = agentIds.map((agent) => {
@@ -29,7 +27,7 @@ export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string)
   })
 
   console.log(session.goal ? `session ${session.slug} - ${session.goal}` : `session ${session.slug}`)
-  console.log(formatRoster(rows))
+  console.log(formatRoster(rows, outputColor()))
   for (const model of duplicateModels(rows)) {
     console.log(`warning: ${model} is used by more than one agent - a second opinion from the same model is not one`)
   }
