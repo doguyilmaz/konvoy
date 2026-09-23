@@ -6,11 +6,14 @@ const toolDetail = (item: { command?: string }): { detail?: string } =>
   typeof item.command === 'string' && item.command !== '' ? { detail: oneLine(item.command, 80) } : {}
 
 // `--approve-for-me` is codex's own words for this: "route approval requests through automatic
-// review using the workspace-write sandbox" (codex exec --help, 0.155.1). The sandbox stays.
+// review using the workspace-write sandbox" (codex exec --help, 0.156.1). It therefore sets that
+// sandbox ITSELF and is mutually exclusive with `-s`: passing both makes codex exit 2 with
+// "the argument '--sandbox <SANDBOX_MODE>' cannot be used with '--approve-for-me'". Measured on a
+// live turn 2026-09-23; verify:claims cannot catch it, since each flag does exist on its own.
 const SANDBOX: Record<Permission, string[]> = {
   safe: ['-s', 'read-only'],
   edit: ['-s', 'workspace-write'],
-  auto: ['-s', 'workspace-write', '--approve-for-me'],
+  auto: ['--approve-for-me'],
   yolo: ['--dangerously-bypass-approvals-and-sandbox'],
 }
 

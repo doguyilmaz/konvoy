@@ -60,8 +60,8 @@ test('a real codex turn renders its shell command as a tool line and its answer 
   expect(chrome).toContain('command_execution')
   // the command itself, from the capture, not just the item type
   expect(chrome).toContain('cat package.json')
-  expect(answer).toContain('read package.json')
-  expect(answer.trim().endsWith('OK')).toBe(true)
+  expect(answer).toContain('package.json')
+  expect(answer.trim().endsWith('1.0.0')).toBe(true)
 })
 
 test('a real kiro turn renders its tool title and reports credits, not dollars', async () => {

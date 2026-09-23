@@ -83,18 +83,19 @@ test('turn.completed yields usage', () => {
 test('the captured fixture parses into session, tool call, text, notice and usage', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/codex.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => codexAdapter.parse(l))
-  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0c0d3-eeba-7a93-8999-d74b91dcd5df' })
+  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0cf74-74bd-7ff0-8fd8-98fc83ffc127' })
   // the capture holds the started/completed pair for one shell call, and both carry the command:
   // the started item is what opens the live line, the completed one settles it with its exit code
   expect(events.filter((e) => e.t === 'tool')).toEqual([
     { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
     { t: 'tool', name: 'command_execution', status: 'ok', detail: "/bin/zsh -lc 'cat package.json'" },
   ])
-  expect(events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')).toBe('I’ll read package.json now.OK')
-  // codex reports its skills-context-budget notice as an item of type "error" on a turn that
-  // then completes normally; it must stay unclassified (kind unknown) so turn.ts can clear it -
-  // a notice whose wording matched RATE or AUTH would otherwise trip failover on a healthy turn
-  expect(events.filter((e) => e.t === 'error').map((e) => (e as { kind: string }).kind)).toEqual(['unknown'])
+  const text = events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')
+  expect(text).toContain('package.json')
+  expect(text.trim().endsWith('1.0.0')).toBe(true)
+  // This capture carries no skills-budget notice, because `--ignore-user-config` leaves codex with
+  // no skills to shorten; the notice-on-a-healthy-turn path lives in codex-rate.jsonl, where the
+  // item error must stay unclassified so turn.ts can clear it rather than trip failover.
   expect(events.some((e) => e.t === 'usage')).toBe(true)
 })
 

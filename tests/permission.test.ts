@@ -31,11 +31,19 @@ test('claude auto asks for background safety checks instead of refusing what it 
   expect(line('claude', 'yolo')).toContain('--permission-mode bypassPermissions')
 })
 
-test('codex auto routes approvals through its own automatic review, still sandboxed', () => {
+// `--approve-for-me` sets the workspace-write sandbox itself and is MUTUALLY EXCLUSIVE with `-s`:
+// a live turn on codex 0.156.1 exited 2 with "the argument '--sandbox <SANDBOX_MODE>' cannot be
+// used with '--approve-for-me'". verify:claims cannot see this - both flags exist on their own -
+// so the combination is pinned here instead.
+test('codex auto routes approvals through automatic review, and never alongside -s', () => {
   const auto = line('codex', 'auto')
-  expect(auto).toContain('-s workspace-write')
   expect(auto).toContain('--approve-for-me')
+  expect(auto).not.toContain('-s ')
+  expect(auto).not.toContain('--sandbox')
+  // the levels either side keep their sandbox, which is not exclusive with anything
+  expect(line('codex', 'edit')).toContain('-s workspace-write')
   expect(line('codex', 'edit')).not.toContain('--approve-for-me')
+  expect(line('codex', 'safe')).toContain('-s read-only')
   expect(line('codex', 'yolo')).toContain('--dangerously-bypass-approvals-and-sandbox')
 })
 
