@@ -1534,4 +1534,19 @@ export const mutations: Mutation[] = [
     to: 'export const outputColor = (): boolean => false',
     tests: ['tests/table.test.ts'],
   },
+  // --- the roster's size is derived, so a fifth agent cannot be added half-way ---
+  {
+    name: "ls measures the bound count against a literal again, so the denominator lies once the roster grows",
+    file: 'src/commands/ls.ts',
+    from: '`${bound.get(s.id) ?? 0}/${agentIds.length}`',
+    to: '`${bound.get(s.id) ?? 0}/4`',
+    tests: ['tests/ls.test.ts'],
+  },
+  {
+    name: 'an agent falls back to a shared rendering instead of carrying a colour of its own',
+    file: 'src/style.ts',
+    from: "  return (agent) => p[AGENT_COLOR[agent as AgentId] ?? 'bold'] ?? identity",
+    to: "  return () => p.bold",
+    tests: ['tests/style.color.test.ts'],
+  },
 ]

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { agentPaint, colorEnabled, palette } from '../src/style'
+import { agentIds } from '../src/config/schema'
 
 // konvoy printed no colour at all, which is the difference between a wall of text and something
 // a reader can skim. Colour is a terminal capability, not a preference, so the decision is made
@@ -32,14 +33,17 @@ test('a colour palette wraps and closes every sequence it opens', () => {
   }
 })
 
+// Derived from the roster rather than a literal list: an agent added without a colour of its own
+// falls back to `bold` and becomes indistinguishable from another in a transcript, which is the
+// failure this asserts against. It fails the moment a fifth agent is added without a colour.
 test('each agent keeps one colour, so a roster or a transcript is readable at a glance', () => {
   const on = agentPaint(true)
   const seen = new Set<string>()
-  for (const agent of ['claude', 'codex', 'kiro', 'opencode'] as const) {
+  for (const agent of agentIds) {
     const out = on(agent)(agent)
     expect(out).toContain(agent)
     seen.add(out.slice(0, out.indexOf('m') + 1))
   }
-  expect(seen.size).toBe(4)
+  expect(seen.size, 'every agent needs its own colour').toBe(agentIds.length)
   expect(agentPaint(false)('claude')('claude')).toBe('claude')
 })

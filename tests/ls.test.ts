@@ -79,3 +79,26 @@ test('ls prints one aligned table, with the current session marked', () => {
   expect(lines.find((l) => l.includes('token-refresh'))!.startsWith('*')).toBe(false)
   expect(currentRow).toContain('1/4')
 })
+
+// `ls` printed the bound count against a literal `/4`. It is true only while konvoy drives exactly
+// four agents, and it is the kind of line that keeps printing confidently while being wrong: a
+// fifth agent would make every row read "1/4" out of five. The denominator is the roster's size.
+test('the bound count is measured against the roster konvoy actually drives', async () => {
+  const { agentIds } = await import('../src/config/schema')
+  const d = openDb(':memory:')
+  const s = createSession(d, { slug: 'all', goal: 'g', cwd: '/x', lead: 'claude' })
+  for (const agent of agentIds) {
+    upsertBinding(d, { sessionId: s.id, agent, foreignId: 'thread', effort: 'high', permission: 'edit' })
+  }
+
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  let out: string
+  try {
+    cmdLs(d, '/x')
+    out = log.mock.calls.map((c) => String(c[0])).join('\n')
+  } finally {
+    log.mockRestore()
+  }
+  // every agent bound reads as all of them, whatever "all" currently means
+  expect(out).toContain(`${agentIds.length}/${agentIds.length}`)
+})

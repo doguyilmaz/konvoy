@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import { boundBindingCounts, currentSession, listSessions } from '../store/queries'
 import { outputColor, table } from '../format'
+import { agentIds } from '../config/schema'
 
 export function cmdLs(db: Database, cwd = ''): number {
   const sessions = listSessions(db)
@@ -20,7 +21,7 @@ export function cmdLs(db: Database, cwd = ''): number {
         s.id === here?.id ? '*' : '',
         s.slug,
         s.lead,
-        `${bound.get(s.id) ?? 0}/4`,
+        `${bound.get(s.id) ?? 0}/${agentIds.length}`,
         s.cwd,
         s.goal,
       ]),
