@@ -18,12 +18,23 @@ test('a column whose every cell is empty is dropped, header and all', () => {
 })
 
 test('a header is dim and an agent name carries its own colour, when colour is on', () => {
-  const plain = table(['AGENT'], [['claude']], { color: false })
-  const painted = table(['AGENT'], [['claude']], { color: true })
+  const header = ['AGENT', 'STATUS', 'TURNS'] as const
+  // names of different lengths, each painted, with columns after them: if the paint is applied
+  // before the padding is measured, every column after a coloured cell shifts by the length of
+  // the escape sequence, and stripping the colour back out no longer matches the plain render.
+  const rows = [
+    ['claude', 'bound', '27'],
+    ['opencode', 'auth_required', '6'],
+  ]
+  const plain = table(header, rows, { right: [2], color: false })
+  const painted = table(header, rows, { right: [2], color: true })
+
   expect(plain).not.toContain('\x1b[')
   expect(painted).toContain('\x1b[')
-  // colour must not change the column arithmetic
   expect(painted.replace(/\x1b\[[0-9;]*m/g, '')).toBe(plain)
+  // the colour is on the things worth distinguishing, not sprayed over the table
+  expect(painted).toContain('\x1b[2mAGENT')
+  expect(painted.split('\x1b[').length).toBeGreaterThan(5)
 })
 
 test('every table konvoy prints lines its numbers up', () => {
