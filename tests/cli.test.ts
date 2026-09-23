@@ -11,6 +11,10 @@ test('USAGE lists every dispatchable command, so it cannot drift from the table'
   }
 })
 
+// HOME and cwd are redirected so a test never reads the real store or config. PATH deliberately is
+// NOT redirected: measured on Bun 1.4.2, `Bun.spawn` resolves a binary from the PATH captured when
+// the process started and ignores a later `Bun.env.PATH`, so setting it here would look like
+// isolation while changing nothing. The one test that spawns the real CLIs carries its own timeout.
 async function withEnv(cwd: string, home: string, fn: () => Promise<void>): Promise<void> {
   const prevCwd = process.cwd()
   const prevHome = Bun.env.HOME
@@ -132,26 +136,39 @@ test('a session named from another directory carries its own project config, not
   }
 })
 
-test('version in a directory with no session reports versions and says nothing on stderr', async () => {
+// `konvoy version` detects every agent, which SPAWNS each real CLI. Called in-process that put five
+// heavyweight binaries on the machine at once (claude on node, opencode's 176MB binary, agy's Go
+// runtime, and a network auth probe), and under that pressure the `bun` subprocesses the failover
+// tests rely on failed to start - konvoy read them as crashes, a crash correctly does not move the
+// chain, and eleven tests failed about one run in four. Bun.spawn ignores a mutated Bun.env.PATH,
+// so the isolation has to happen in a CHILD's explicit env: konvoy runs as its own process with no
+// PATH, every detection misses instantly, and the suite stops spawning the user's agents at all.
+test('version reports konvoy and says nothing on stderr, with no agent installed', async () => {
   const dir = tmp('version')
   const home = tmp('version-home')
   await Bun.write(`${dir}/marker`, '')
   await Bun.write(`${home}/marker`, '')
-  const err = spyOn(console, 'error').mockImplementation(() => {})
-  const log = spyOn(console, 'log').mockImplementation(() => {})
   try {
-    let code = -1
-    await withEnv(dir, home, async () => {
-      code = await main(['version'])
+    // process.execPath, because PATH is deliberately empty and `bun` could not be found on it
+    const proc = Bun.spawn([process.execPath, `${process.cwd()}/src/cli.ts`, 'version'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      // /usr/bin:/bin so the system utilities konvoy itself uses stay reachable (src/store/db.ts
+      // shells out to `mkdir -p`); what is taken away is every agent CLI, which is the point.
+      env: { ...process.env, HOME: home, PATH: '/usr/bin:/bin', NO_COLOR: '1' },
     })
-    expect(code).toBe(0)
-    expect(String(log.mock.calls[0]?.[0])).toMatch(/^konvoy \d/)
-    expect(err.mock.calls).toEqual([])
+    const stdout = await new Response(proc.stdout).text()
+    const stderr = await new Response(proc.stderr).text()
+    expect(await proc.exited).toBe(0)
+    expect(stdout.split('\n')[0]).toMatch(/^konvoy \d/)
+    // every agent is missing, and that is reported on stdout as information, never as an error
+    expect(stderr).toBe('')
+    expect(stdout).toContain('not installed')
   } finally {
-    err.mockRestore()
-    log.mockRestore()
+    await Bun.$`rm -rf ${dir} ${home}`.quiet()
   }
-})
+}, 20_000)
 
 async function* noInput(): AsyncGenerator<string> {}
 
