@@ -119,10 +119,12 @@ test('the captured fixture parses into session, tool call, text and completion',
   // behind it. The capture is also what proves the result line exists: konvoy dropped it, and a
   // turn therefore rendered as a column of tool names with no outcome beside any of them.
   expect(events.filter((e) => e.t === 'tool')).toEqual([
-    { t: 'tool', name: 'Read', status: 'start', detail: '/tmp/tmp.D8abHtQ1Qa/package.json' },
+    { t: 'tool', name: 'Read', status: 'start', detail: '/tmp/konvoy-capture/package.json' },
     { t: 'tool', name: '', status: 'ok' },
   ])
-  expect(events.find((e) => e.t === 'done')).toEqual({ t: 'done', final: 'OK' })
+  // the capture asked for a version string and got it; asserting the value keeps this honest
+  // about what the turn did without pinning the model's exact prose
+  expect(events.find((e) => e.t === 'done')).toEqual({ t: 'done', final: '1.0.0' })
 })
 
 test('attach resumes the bound session interactively', () => {

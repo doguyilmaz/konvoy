@@ -50,9 +50,9 @@ test('a real claude turn renders its tool call with a target and an outcome, the
   const { answer, chrome } = await render('claude', 'claude')
   expect(chrome).toContain('✓ Read')
   expect(chrome).toContain('package.json')
-  expect(answer.trim()).toBe('OK')
+  expect(answer.trim()).toBe('1.0.0')
   // the footer carries the whole context sent, not claude's uncached remainder
-  expect(chrome).toMatch(/claude · [\d.]+s · 40\.7k in \/ 111 out · \$0\.0621/)
+  expect(chrome).toMatch(/claude · [\d.]+s · 38\.8k in \/ 112 out · \$0\.0345/)
 })
 
 test('a real codex turn renders its shell command as a tool line and its answer as text', async () => {
@@ -67,7 +67,7 @@ test('a real codex turn renders its shell command as a tool line and its answer 
 test('a real kiro turn renders its tool title and reports credits, not dollars', async () => {
   const { answer, chrome } = await render('kiro', 'kiro')
   expect(chrome).toContain('Reading package.json')
-  expect(answer).toContain("I'll read the package.json")
+  expect(answer).toContain('1.0.0')
   expect(chrome).toMatch(/kiro · [\d.]+s .*cr/)
   expect(chrome).not.toContain('$')
 })

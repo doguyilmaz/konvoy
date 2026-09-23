@@ -103,14 +103,18 @@ test('a failed run is an error, not a completion', () => {
 test('the captured fixture parses end to end, tool call included', async () => {
   const lines = (await Bun.file('tests/fixtures/streams/kiro.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => kiroAdapter.parse(l))
-  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: 'be869d81-e85b-463b-a084-52c6b852a523' })
+  expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '86db2fac-b93f-472f-98d0-17bb389144de' })
   // tool_call then tool_call_update for the same fs_read - kiro titles them, so the name is
   // the title, and both the start and the completion carry it
   expect(events.filter((e) => e.t === 'tool')).toEqual([
     { t: 'tool', name: 'Reading package.json:1', status: 'start' },
     { t: 'tool', name: 'Reading package.json:1', status: 'ok' },
   ])
-  expect(events.find((e) => e.t === 'done')).toEqual({ t: 'done', final: "I'll read the package.json file.OK" })
+  // the streamed chunks and the final agree, which is the invariant worth pinning: kiro sends the
+  // answer as agent_message_chunks and then repeats it whole in runFinished
+  const streamed = events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')
+  expect((events.find((e) => e.t === 'done') as { final: string }).final).toBe(streamed)
+  expect(streamed).toContain('1.0.0')
   expect(events.some((e) => e.t === 'usage')).toBe(true)
 })
 

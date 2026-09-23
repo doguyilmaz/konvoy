@@ -1601,8 +1601,14 @@ export const mutations: Mutation[] = [
     tests: ['tests/adapter-antigravity.test.ts'],
   },
 
-  // --- the store's directory, without a PATH dependency (src/store/db.ts) ---
   {
+    name: 'a subscription refusal is unclassified again, so a failover chain sits on an agent that cannot work',
+    file: 'src/adapters/types.ts',
+    from: '|(?:active |valid )?subscription (?:is )?(?:required|expired|has expired|needed)|no active subscription/',
+    to: '/',
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
+  // --- the store's directory, without a PATH dependency (src/store/db.ts) ---  {
     name: 'a missing store directory is no longer created, so a first run cannot open its database',
     file: 'src/store/db.ts',
     from: '    ensureDirectory(dirname(path))\n',

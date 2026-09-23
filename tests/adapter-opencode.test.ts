@@ -146,3 +146,19 @@ test('an opencode tool part carries what it acted on', () => {
   )
   expect(bash).toEqual([{ t: 'tool', name: 'bash', status: 'error', detail: 'bun test' }])
 })
+
+// Captured from a real smoke run on 2026-09-23: opencode refused every turn with
+// "Upstream request failed: An active OpenCode Go subscription is required to use Go models."
+// konvoy classified it `unknown`, which does NOT move the failover chain - so a convoy would sit
+// on an agent that cannot work until someone pays, instead of handing the turn to another agent.
+// An entitlement refusal is the same shape as auth by design section 16's own test: the agent
+// cannot work until something outside the turn changes.
+test('a subscription or entitlement refusal is an auth failure, so the chain moves off it', () => {
+  const { classifyError } = require('../src/adapters/types') as { classifyError: (s: string) => string }
+  expect(classifyError('Upstream request failed: An active OpenCode Go subscription is required to use Go models.')).toBe('auth')
+  expect(classifyError('your subscription has expired')).toBe('auth')
+  expect(classifyError('no active subscription for this account')).toBe('auth')
+  // and the words stay narrow: ordinary prose about subscriptions is not an auth failure
+  expect(classifyError('I added a subscription field to the user model')).toBe('unknown')
+  expect(classifyError('the subscribe handler needs a test')).toBe('unknown')
+})
