@@ -991,8 +991,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the prompt is written even when stdin is a pipe',
     file: 'src/commands/repl.ts',
-    from: 'if (io.tty) io.write(`${paintAgent(agent)(agent)} ${p.dim(\'›\')} `)',
-    to: 'io.write(`${paintAgent(agent)(agent)} ${p.dim(\'›\')} `)',
+    from: '    if (!io.tty) return\n',
+    to: '',
     tests: ['tests/repl.test.ts'],
   },
   {
@@ -1254,7 +1254,7 @@ export const mutations: Mutation[] = [
   {
     name: 'the banner stops warning that an approval-needing tool cannot be approved in a headless turn',
     file: 'src/render.ts',
-    from: "if (facts.permission !== 'yolo') {",
+    from: "if (facts.permission === 'safe' || facts.permission === 'edit') {",
     to: 'if (false) {',
     tests: ['tests/render.test.ts'],
   },

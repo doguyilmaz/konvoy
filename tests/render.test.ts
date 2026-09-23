@@ -257,3 +257,22 @@ test('the status line shows only the units the agents reported', () => {
   expect(creditsOnly).toContain('0.500 cr')
   expect(creditsOnly).not.toContain('$')
 })
+
+// The gap the mutation sweep found: nothing pinned the banner at the level that fixes the very
+// problem the banner warns about, so flipping the condition back to "anything but yolo" passed.
+test('the banner does not warn about refused tools at a level that approves them', () => {
+  for (const permission of ['auto', 'yolo']) {
+    const lines = sessionBanner(
+      { version: '0.3.3', slug: 's', dir: '/d', agent: 'claude', harness: 'inherit', permission },
+      false,
+    ).join('\n')
+    expect(lines, permission).not.toContain('needs approval')
+  }
+  for (const permission of ['safe', 'edit']) {
+    const lines = sessionBanner(
+      { version: '0.3.3', slug: 's', dir: '/d', agent: 'claude', harness: 'inherit', permission },
+      false,
+    ).join('\n')
+    expect(lines, permission).toContain('needs approval')
+  }
+})
