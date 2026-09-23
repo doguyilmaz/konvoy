@@ -1536,10 +1536,10 @@ export const mutations: Mutation[] = [
   },
   // --- the roster's size is derived, so a fifth agent cannot be added half-way ---
   {
-    name: "ls measures the bound count against a literal again, so the denominator lies once the roster grows",
+    name: "ls measures the bound count against the wrong denominator, so a fully bound session reads as partial",
     file: 'src/commands/ls.ts',
     from: '`${bound.get(s.id) ?? 0}/${agentIds.length}`',
-    to: '`${bound.get(s.id) ?? 0}/4`',
+    to: '`${bound.get(s.id) ?? 0}/${agentIds.length - 1}`',
     tests: ['tests/ls.test.ts'],
   },
   {
