@@ -307,11 +307,11 @@ your MCP servers, skills, hooks and settings, the CLI exactly as you would run i
 **konvoy** drives, meaning the recipient of a handoff, runs `minimal`: claude with no MCP servers,
 no skills and no settings files, codex with `--ignore-user-config`, kiro under a generated
 `konvoy-minimal` agent profile that konvoy writes to the project's `.kiro/agents/` (kiro resolves
-`--agent` by name from there, and its own conversation store rules out relocating `KIRO_HOME`).
-That split is the point of
+`--agent` by name from there, and its own conversation store rules out relocating `KIRO_HOME`),
+and opencode with its project config switched off. That split is the point of
 `minimal` in the first place, since konvoy supplies a handed-over turn's context itself through
 the brief and the prelude, and it measured 2.6× less context per turn (docs/design.md §18).
-opencode still runs with its own configuration either way.
+opencode keeps its global config either way: it has no switch that drops it.
 
 Set it explicitly and that wins everywhere, in both directions. Privileged: the global config only.
 

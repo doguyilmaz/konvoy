@@ -15,6 +15,17 @@ export const opencodeAdapter: Adapter = {
     // explicitly denied" (opencode run --help, 2.0.11). auto and yolo therefore land together.
     if (ctx.permission === 'auto' || ctx.permission === 'yolo') cmd.push('--auto')
     cmd.push('--', withPrelude(ctx))
+    // The only config source opencode lets konvoy remove. OPENCODE_CONFIG, _CONTENT and _DIR all
+    // ADD a source instead: with every one of them set, `opencode debug config` still resolves
+    // ~/.config/opencode/opencode.json, so a minimal opencode turn keeps the user's global
+    // config and its MCP servers. Measured against 2.0.11 on 2026-09-22; see design section 18.
+    if ((ctx.harness ?? 'minimal') === 'minimal') {
+      return {
+        cmd,
+        cwd: ctx.cwd,
+        env: { ...(process.env as Record<string, string>), OPENCODE_CONFIG_PROJECT_DISABLE: '1' },
+      }
+    }
     return { cmd, cwd: ctx.cwd }
   },
 

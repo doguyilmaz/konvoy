@@ -106,3 +106,23 @@ test('the captured v2 success stream parses into session, text, usage and cost',
 test('an error event without a message reports an empty message, not a placeholder', () => {
   expect(opencodeAdapter.parse(JSON.stringify({ type: 'error', error: {} }))).toEqual([{ t: 'error', message: '', kind: 'unknown' }])
 })
+
+// Probed against opencode v2.0.11 on 2026-09-22. The binary reads OPENCODE_CONFIG (an explicit
+// file), OPENCODE_CONFIG_CONTENT (inline), OPENCODE_CONFIG_DIR (the config directory) and
+// OPENCODE_CONFIG_PROJECT_DISABLE. Only the last one removes a source: with the other three set
+// every way round, `opencode debug config` still resolves ~/.config/opencode/opencode.json, so
+// the explicit ones ADD a source to the merge rather than replacing the global config. `minimal`
+// therefore means what it can mean here - the project's own config is not loaded - and konvoy
+// must not claim more. Data, auth and the session db are untouched by all of them (`auth list`
+// and `session list` unchanged), which is why relocating the config dir is not worth doing.
+test('a minimal opencode turn stops the project config from loading', () => {
+  const plan = opencodeAdapter.turn(ctx({ harness: 'minimal' }))
+  expect(plan.env?.OPENCODE_CONFIG_PROJECT_DISABLE).toBe('1')
+  // inherited, or the turn loses PATH and the credentials opencode resolves for itself
+  expect(plan.env?.PATH).toBe(process.env.PATH)
+})
+
+test('an inherited opencode turn is handed no config environment at all', () => {
+  const plan = opencodeAdapter.turn(ctx({ harness: 'inherit' }))
+  expect(plan.env?.OPENCODE_CONFIG_PROJECT_DISABLE).toBeUndefined()
+})

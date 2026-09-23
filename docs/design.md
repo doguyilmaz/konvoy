@@ -390,7 +390,18 @@ runs rather than leaving the agent to guess.
 | claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
 | codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
 | kiro | a generated `konvoy-minimal` agent profile in the project's `.kiro/agents/`, selected with `--agent` | no `--agent`, the user's own default agent |
-| opencode | **not implemented** - runs with its own config discovery | same |
+| opencode | `OPENCODE_CONFIG_PROJECT_DISABLE=1`, the project's own config not loaded | no config environment |
+
+**opencode, added 2026-09-22, and narrower than §33 assumed.** The roadmap called for
+`OPENCODE_CONFIG`, which turns out to ADD an explicit source to the merge rather than replace
+anything: with `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT` and `OPENCODE_CONFIG_DIR` all set,
+`opencode debug config` still resolves `~/.config/opencode/opencode.json` and the MCP servers in
+it (v2.0.11). `OPENCODE_CONFIG_PROJECT_DISABLE` is the only one of the four that removes a
+source, so that is what `minimal` sends, and a minimal opencode turn still carries the user's
+GLOBAL config. Relocating `OPENCODE_CONFIG_DIR` was rejected: it moves the config path in
+`debug paths` without dropping the global file, so it buys nothing. Data, auth and the session
+db are unaffected by all of them (`auth list` and `session list` unchanged), which is the one
+thing that made kiro's `KIRO_HOME` unusable and is not a problem here.
 
 **kiro, added 2026-09-22.** `--agent` takes a NAME, and kiro resolves names only from
 `<cwd>/.kiro/agents` or `$KIRO_HOME/agents` (kiro-cli 2.23.0, `kiro-cli agent list`); a path is

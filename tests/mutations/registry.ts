@@ -1397,4 +1397,18 @@ export const mutations: Mutation[] = [
     to: "if (status !== '') {",
     tests: ['tests/repl.test.ts'],
   },
+  {
+    name: "an opencode minimal turn loads the project's own config after all",
+    file: 'src/adapters/opencode.ts',
+    from: "OPENCODE_CONFIG_PROJECT_DISABLE: '1'",
+    to: "OPENCODE_CONFIG_PROJECT_DISABLE: ''",
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
+  {
+    name: 'an opencode turn is handed a bare environment, losing PATH and the credentials it resolves',
+    file: 'src/adapters/opencode.ts',
+    from: "env: { ...(process.env as Record<string, string>), OPENCODE_CONFIG_PROJECT_DISABLE: '1' },",
+    to: "env: { OPENCODE_CONFIG_PROJECT_DISABLE: '1' },",
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
 ]
