@@ -1,5 +1,18 @@
 import type { Binding, KonvoyEvent, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
+import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
+
+// opencode puts a call's arguments in `state.input`; the keys are its own, so one konvoy does
+// not recognise yields no detail rather than a guess rendered as fact.
+const DETAIL_KEYS = ['path', 'filePath', 'command', 'pattern', 'url'] as const
+
+function toolDetail(input: Record<string, unknown> | undefined): { detail?: string } {
+  if (!input) return {}
+  for (const key of DETAIL_KEYS) {
+    const value = input[key]
+    if (typeof value === 'string' && value !== '') return { detail: oneLine(value, 80) }
+  }
+  return {}
+}
 
 export const opencodeAdapter: Adapter = {
   id: 'opencode',
@@ -35,7 +48,9 @@ export const opencodeAdapter: Adapter = {
     const events: KonvoyEvent[] = []
     if (typeof o.sessionID === 'string') events.push({ t: 'session', foreignId: stripControlChars(o.sessionID) })
 
-    const part = o.part as { text?: string; tool?: string; state?: { status?: string } } | undefined
+    const part = o.part as
+      | { text?: string; tool?: string; state?: { status?: string; input?: Record<string, unknown> } }
+      | undefined
     switch (o.type) {
       case 'text':
         if (part?.text) events.push({ t: 'text', text: part.text })
@@ -44,7 +59,12 @@ export const opencodeAdapter: Adapter = {
         if (part?.text) events.push({ t: 'thinking', text: part.text })
         break
       case 'tool_use':
-        events.push({ t: 'tool', name: part?.tool ?? 'tool', status: part?.state?.status === 'error' ? 'error' : 'ok' })
+        events.push({
+          t: 'tool',
+          name: part?.tool ?? 'tool',
+          status: part?.state?.status === 'error' ? 'error' : 'ok',
+          ...toolDetail(part?.state?.input),
+        })
         break
       case 'step_finish': {
         const step = o.part as

@@ -126,3 +126,23 @@ test('an inherited opencode turn is handed no config environment at all', () => 
   const plan = opencodeAdapter.turn(ctx({ harness: 'inherit' }))
   expect(plan.env?.OPENCODE_CONFIG_PROJECT_DISABLE).toBeUndefined()
 })
+
+// From the real capture: a tool part carries `state.input`, which is the path or command the call
+// acted on. Without it an opencode turn renders "read" with no indication of what it read.
+test('an opencode tool part carries what it acted on', () => {
+  const events = opencodeAdapter.parse(
+    JSON.stringify({
+      type: 'tool_use',
+      part: { type: 'tool', tool: 'read', state: { status: 'completed', input: { path: 'package.json' } } },
+    }),
+  )
+  expect(events).toEqual([{ t: 'tool', name: 'read', status: 'ok', detail: 'package.json' }])
+
+  const bash = opencodeAdapter.parse(
+    JSON.stringify({
+      type: 'tool_use',
+      part: { type: 'tool', tool: 'bash', state: { status: 'error', input: { command: 'bun test' } } },
+    }),
+  )
+  expect(bash).toEqual([{ t: 'tool', name: 'bash', status: 'error', detail: 'bun test' }])
+})

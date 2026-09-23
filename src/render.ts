@@ -90,7 +90,15 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
             live(p.dim(toolLine(event.name, event.detail, 0, FRAMES[0]!)))
             return
           }
-          if (!pending) pending = { name: event.name || 'tool', at: deps.now() }
+          // opencode reports a call once, already completed, so there is no open line to settle:
+          // seed one from this event - including its detail, or the target is dropped.
+          if (!pending) {
+            pending = {
+              name: event.name || 'tool',
+              at: deps.now(),
+              ...(event.detail ? { detail: event.detail } : {}),
+            }
+          }
           settle(event.status === 'error' ? p.red('✗') : p.green('✓'))
           return
         }

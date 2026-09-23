@@ -1411,4 +1411,34 @@ export const mutations: Mutation[] = [
     to: "env: { OPENCODE_CONFIG_PROJECT_DISABLE: '1' },",
     tests: ['tests/adapter-opencode.test.ts'],
   },
+
+  // --- tool targets from the other three CLIs (found by running the real captures) ---
+  {
+    name: 'a codex shell item renders as its item type with the command dropped',
+    file: 'src/adapters/codex.ts',
+    from: "typeof item.command === 'string' && item.command !== '' ? { detail: oneLine(item.command, 80) } : {}",
+    to: '{}',
+    tests: ['tests/adapter-codex.test.ts', 'tests/render-fixtures.test.ts'],
+  },
+  {
+    name: 'a codex command that exited non-zero is reported as a success',
+    file: 'src/adapters/codex.ts',
+    from: "const failed = typeof item.exit_code === 'number' && item.exit_code !== 0",
+    to: 'const failed = false',
+    tests: ['tests/adapter-codex.test.ts'],
+  },
+  {
+    name: 'an opencode tool call loses the path or command it acted on',
+    file: 'src/adapters/opencode.ts',
+    from: "    if (typeof value === 'string' && value !== '') return { detail: oneLine(value, 80) }",
+    to: '    if (false) return { detail: oneLine(String(value), 80) }',
+    tests: ['tests/adapter-opencode.test.ts', 'tests/render-fixtures.test.ts'],
+  },
+  {
+    name: 'a tool reported only as completed is rendered without its target, as opencode used to be',
+    file: 'src/render.ts',
+    from: '              ...(event.detail ? { detail: event.detail } : {}),\n',
+    to: '',
+    tests: ['tests/render-fixtures.test.ts'],
+  },
 ]

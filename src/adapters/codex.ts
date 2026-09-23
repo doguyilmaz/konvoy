@@ -1,5 +1,9 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
+import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
+
+// codex names the subject of a shell item in `command`; model-controlled, so sanitized.
+const toolDetail = (item: { command?: string }): { detail?: string } =>
+  typeof item.command === 'string' && item.command !== '' ? { detail: oneLine(item.command, 80) } : {}
 
 // `--approve-for-me` is codex's own words for this: "route approval requests through automatic
 // review using the workspace-write sandbox" (codex exec --help, 0.155.1). The sandbox stays.
@@ -36,16 +40,27 @@ export const codexAdapter: Adapter = {
       return [{ t: 'session', foreignId: stripControlChars(o.thread_id) }]
     }
 
-    if (o.type === 'item.completed') {
-      const item = o.item as { type?: string; text?: string; message?: string } | undefined
+    if (o.type === 'item.started' || o.type === 'item.completed') {
+      const item = o.item as
+        | { type?: string; text?: string; message?: string; command?: string; exit_code?: number | null }
+        | undefined
       if (!item?.type) return []
+      // a started item is only ever a tool: text and reasoning arrive completed
+      if (o.type === 'item.started') {
+        return item.type === 'agent_message' || item.type === 'reasoning' || item.type === 'error'
+          ? []
+          : [{ t: 'tool', name: item.type, status: 'start', ...toolDetail(item) }]
+      }
       if (item.type === 'agent_message') return item.text ? [{ t: 'text', text: item.text }] : []
       if (item.type === 'reasoning') return item.text ? [{ t: 'thinking', text: item.text }] : []
       if (item.type === 'error') {
         const message = item.message ?? ''
         return [{ t: 'error', message, kind: classifyError(message), source: 'item' }]
       }
-      return [{ t: 'tool', name: item.type, status: 'ok' }]
+      // the capture carries exit_code on a completed command_execution: a non-zero one is the
+      // difference between "it ran" and "it failed", which the tool line now shows
+      const failed = typeof item.exit_code === 'number' && item.exit_code !== 0
+      return [{ t: 'tool', name: item.type, status: failed ? 'error' : 'ok', ...toolDetail(item) }]
     }
 
     if (o.type === 'turn.completed') {

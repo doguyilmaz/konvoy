@@ -84,7 +84,12 @@ test('the captured fixture parses into session, tool call, text, notice and usag
   const lines = (await Bun.file('tests/fixtures/streams/codex.jsonl').text()).trim().split('\n')
   const events = lines.flatMap((l) => codexAdapter.parse(l))
   expect(events.find((e) => e.t === 'session')).toEqual({ t: 'session', foreignId: '01a0c0d3-eeba-7a93-8999-d74b91dcd5df' })
-  expect(events.filter((e) => e.t === 'tool')).toEqual([{ t: 'tool', name: 'command_execution', status: 'ok' }])
+  // the capture holds the started/completed pair for one shell call, and both carry the command:
+  // the started item is what opens the live line, the completed one settles it with its exit code
+  expect(events.filter((e) => e.t === 'tool')).toEqual([
+    { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
+    { t: 'tool', name: 'command_execution', status: 'ok', detail: "/bin/zsh -lc 'cat package.json'" },
+  ])
   expect(events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')).toBe('I’ll read package.json now.OK')
   // codex reports its skills-context-budget notice as an item of type "error" on a turn that
   // then completes normally; it must stay unclassified (kind unknown) so turn.ts can clear it -
@@ -112,4 +117,27 @@ test('an error item or a failed turn without a message reports an empty message,
 test('an error event says whether it came from an item or from turn.failed', () => {
   expect(codexAdapter.parse(JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'notice' } }))[0]).toMatchObject({ t: 'error', source: 'item' })
   expect(codexAdapter.parse(JSON.stringify({ type: 'turn.failed', error: { message: 'boom' } }))[0]).toMatchObject({ t: 'error', source: 'turn' })
+})
+
+// From the real capture: an item.started/item.completed pair for a command_execution carries the
+// command itself. konvoy rendered the item TYPE and dropped the command, so a codex turn showed
+// "command_execution" four times over and said nothing about what it ran.
+test('a codex shell item carries the command it ran', () => {
+  const started = codexAdapter.parse(
+    JSON.stringify({
+      type: 'item.started',
+      item: { id: 'item_2', type: 'command_execution', command: "/bin/zsh -lc 'cat package.json'", status: 'in_progress' },
+    }),
+  )
+  expect(started).toEqual([
+    { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
+  ])
+
+  const completed = codexAdapter.parse(
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_2', type: 'command_execution', command: 'bun test', exit_code: 1, status: 'completed' },
+    }),
+  )
+  expect(completed).toEqual([{ t: 'tool', name: 'command_execution', status: 'error', detail: 'bun test' }])
 })
