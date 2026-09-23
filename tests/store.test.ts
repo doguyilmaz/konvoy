@@ -409,3 +409,16 @@ test('opening an existing store spawns no subprocess at all', () => {
     spawned.mockRestore()
   }
 })
+
+// When the directory genuinely cannot be created, the reason belongs in the error konvoy prints.
+// Without it the user sees SQLite's "unable to open database file", which says nothing about which
+// path was refused or why - here, a regular file sitting where a directory has to go.
+test('a store directory that cannot be created fails with the reason, not a bare SQLite error', async () => {
+  const base = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}`
+  await Bun.write(`${base}/blocker`, 'a file where a directory would have to be')
+  try {
+    expect(() => openDb(`${base}/blocker/nested/konvoy.db`)).toThrow(/cannot create the konvoy store directory/)
+  } finally {
+    await Bun.$`rm -rf ${base}`.quiet().nothrow()
+  }
+})
