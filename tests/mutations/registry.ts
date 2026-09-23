@@ -1477,4 +1477,11 @@ export const mutations: Mutation[] = [
     to: '      String(r.inputTokens),\n      String(r.outputTokens),',
     tests: ['tests/table.test.ts'],
   },
+  {
+    name: 'ls stops marking the session a bare konvoy would resume here',
+    file: 'src/commands/ls.ts',
+    from: "s.id === here?.id ? '*' : ''",
+    to: "''",
+    tests: ['tests/ls.test.ts'],
+  },
 ]

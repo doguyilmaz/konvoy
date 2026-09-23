@@ -70,7 +70,7 @@ const handlers: Record<CommandName, Handler> = {
     }
     return cmdSend(ctx.db, ctx.cfg, ctx.cwd, agent, prompt.join(' '), ctx.slug)
   },
-  ls: (ctx) => cmdLs(ctx.db),
+  ls: (ctx) => cmdLs(ctx.db, ctx.cwd),
   roster: (ctx) => cmdRoster(ctx.db, ctx.cfg, ctx.cwd, ctx.slug),
   status: (ctx) => cmdStatus(ctx.db, ctx.cfg, ctx.cwd, ctx.slug),
   attach: (ctx, rest) => {
