@@ -39,7 +39,12 @@ export const opencodeAdapter: Adapter = {
     const cmd = [ctx.bin ?? 'opencode', 'run', '--standalone', '--format', 'json']
     if (ctx.binding?.foreignId) cmd.push('-s', ctx.binding.foreignId)
     else cmd.push('--title', `konvoy:${ctx.slug}`)
-    if (ctx.model) cmd.push('-m', `${ctx.model}#${ctx.effort}`)
+    // `#<effort>` is opencode's variant syntax, and a model WITHOUT the named variant refuses the
+    // whole turn: "Variant unavailable for opencode/claude-haiku-4-5: medium" (measured 2026-09-23).
+    // So the variant is sent only where detection proved it exists. An empty list means the
+    // registry says the model has none, an absent one means konvoy could not tell - both send a
+    // bare model, which runs at its own default effort. A refused turn is the worse failure.
+    if (ctx.model) cmd.push('-m', ctx.efforts && ctx.efforts.length > 0 ? `${ctx.model}#${ctx.effort}` : ctx.model)
     // opencode has one approval switch, `--auto`: "auto-approve permissions that are not
     // explicitly denied" (opencode run --help, 2.0.11). auto and yolo therefore land together.
     if (ctx.permission === 'auto' || ctx.permission === 'yolo') cmd.push('--auto')

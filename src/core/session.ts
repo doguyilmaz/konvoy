@@ -184,6 +184,7 @@ export async function send(
         binding: getBinding(deps.db, session.id, recipient),
         model: recipientSettings.model,
         effort: recipientEffort.value,
+        efforts: recipientDetection.efforts,
         permission: recipientSettings.permission,
         // konvoy chose this turn and wrote its prompt, so it supplies the context itself: the
         // recipient runs stripped unless the user pinned a harness explicitly (section 18).
@@ -297,6 +298,7 @@ export async function send(
         binding: getBinding(deps.db, session.id, current),
         model: currentSettings.model,
         effort: currentEffort.value,
+        efforts: currentDetection.efforts,
         permission: currentSettings.permission,
         // the user's own prompt, including when failover moved it to another agent: their setup
         // is what they expect to be running against, so it is inherited unless pinned

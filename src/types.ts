@@ -63,6 +63,7 @@ export interface TurnContext {
   model?: string
   effort: string
   permission: Permission
+  efforts?: readonly string[]
   harness?: 'minimal' | 'inherit'
   bin?: string
   lease?: string

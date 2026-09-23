@@ -1355,6 +1355,42 @@ export const mutations: Mutation[] = [
     to: "  auto: 'acceptEdits',",
     tests: ['tests/permission.test.ts'],
   },
+  // --- T26 opencode effort variants (src/adapters/opencode.ts, src/core/detect.ts) ---
+  {
+    name: 'opencode sends an effort variant for a model that has none, which refuses the whole turn',
+    file: 'src/adapters/opencode.ts',
+    from: "    if (ctx.model) cmd.push('-m', ctx.efforts && ctx.efforts.length > 0 ? `${ctx.model}#${ctx.effort}` : ctx.model)",
+    to: "    if (ctx.model) cmd.push('-m', `${ctx.model}#${ctx.effort}`)",
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
+  {
+    name: 'opencode stops sending the variant even where the registry proved it exists, so effort is ignored',
+    file: 'src/adapters/opencode.ts',
+    from: "    if (ctx.model) cmd.push('-m', ctx.efforts && ctx.efforts.length > 0 ? `${ctx.model}#${ctx.effort}` : ctx.model)",
+    to: "    if (ctx.model) cmd.push('-m', ctx.model)",
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
+  {
+    name: "a model missing from opencode's registry is reported as having no efforts instead of unknown",
+    file: 'src/core/detect.ts',
+    from: "    if (!entry || typeof entry !== 'object') return undefined",
+    to: "    if (!entry || typeof entry !== 'object') return []",
+    tests: ['tests/detect.test.ts'],
+  },
+  {
+    name: 'a budget-tokens model is reported effort-unknown, so a variant it cannot take is sent anyway',
+    file: 'src/core/detect.ts',
+    from: '    if (!Array.isArray(values)) return []',
+    to: '    if (!Array.isArray(values)) return undefined',
+    tests: ['tests/detect.test.ts'],
+  },
+  {
+    name: 'opencode effort detection is dropped, putting every opencode model back on an unproven variant',
+    file: 'src/core/detect.ts',
+    from: '        ? await opencodeEfforts(deps, opts.model)',
+    to: '        ? undefined',
+    tests: ['tests/detect.test.ts'],
+  },
   {
     name: 'codex auto stops routing approvals through automatic review, so a headless tool call is blocked',
     file: 'src/adapters/codex.ts',

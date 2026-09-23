@@ -25,9 +25,13 @@ test('a later turn continues the session and drops the title', () => {
   expect(cmd).not.toContain('--title')
 })
 
+// v2 removed `--variant`, so effort rides on the model reference instead. It is sent only for a
+// model whose variants detection proved (see the T26 test below): this one names them explicitly.
 test('effort rides on the model reference, because v2 removed --variant', () => {
-  const cmd = opencodeAdapter.turn(ctx({ effort: 'max', model: 'opencode/claude-haiku-4-5' })).cmd
-  expect(cmd[cmd.indexOf('-m') + 1]).toBe('opencode/claude-haiku-4-5#max')
+  const cmd = opencodeAdapter.turn(
+    ctx({ effort: 'max', model: 'opencode/claude-opus-4-8', efforts: ['high', 'max'] }),
+  ).cmd
+  expect(cmd[cmd.indexOf('-m') + 1]).toBe('opencode/claude-opus-4-8#max')
   expect(cmd).not.toContain('--variant')
 })
 
@@ -193,4 +197,29 @@ test('an error that names its own kind is classified from that field, not from i
   expect(kindOf(JSON.stringify({ type: 'error', error: { type: 'provider.weird', message: 'something new', status: 500 } }))).toBe('upstream')
   // and a plain message with no fields still goes through the prose classifier
   expect(kindOf(JSON.stringify({ type: 'error', error: { message: 'not logged in' } }))).toBe('auth')
+})
+
+// T26. The variant is opencode's own syntax for effort (`-m provider/model#high`) and a model that
+// does not have the named variant refuses the turn outright. konvoy therefore sends one only where
+// the registry proved it exists; `efforts` carries that proof, and its three states are distinct.
+test('the effort variant is sent only for a model known to have it', () => {
+  const withVariants = opencodeAdapter.turn(
+    ctx({ model: 'opencode/claude-opus-4-8', effort: 'high', efforts: ['low', 'medium', 'high'] }),
+  ).cmd
+  expect(withVariants.join(' ')).toContain('-m opencode/claude-opus-4-8#high')
+
+  // known to have NONE: the model still runs, at its own default effort, which beats a refusal
+  const noVariants = opencodeAdapter.turn(
+    ctx({ model: 'opencode/claude-haiku-4-5', effort: 'high', efforts: [] }),
+  ).cmd
+  expect(noVariants.join(' ')).toContain('-m opencode/claude-haiku-4-5')
+  expect(noVariants.join(' ')).not.toContain('#')
+
+  // unknown is treated like none, because appending an unproven variant is what broke the turn
+  const unknown = opencodeAdapter.turn(ctx({ model: 'opencode/who-knows', effort: 'high' })).cmd
+  expect(unknown.join(' ')).toContain('-m opencode/who-knows')
+  expect(unknown.join(' ')).not.toContain('#')
+
+  // and with no model at all konvoy names neither a model nor a variant
+  expect(opencodeAdapter.turn(ctx({ effort: 'high' })).cmd).not.toContain('-m')
 })
