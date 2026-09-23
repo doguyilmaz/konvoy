@@ -1356,10 +1356,17 @@ export const mutations: Mutation[] = [
     tests: ['tests/permission.test.ts'],
   },
   {
-    name: 'codex auto stops routing approvals through automatic review',
+    name: 'codex auto stops routing approvals through automatic review, so a headless tool call is blocked',
     file: 'src/adapters/codex.ts',
-    from: "  auto: ['-s', 'workspace-write', '--approve-for-me'],",
+    from: "  auto: ['--approve-for-me'],",
     to: "  auto: ['-s', 'workspace-write'],",
+    tests: ['tests/permission.test.ts'],
+  },
+  {
+    name: "codex auto passes -s alongside --approve-for-me, which codex refuses outright with exit 2",
+    file: 'src/adapters/codex.ts',
+    from: "  auto: ['--approve-for-me'],",
+    to: "  auto: ['-s', 'workspace-write', '--approve-for-me'],",
     tests: ['tests/permission.test.ts'],
   },
   {
