@@ -154,9 +154,10 @@ test('version reports konvoy and says nothing on stderr, with no agent installed
       cwd: dir,
       stdout: 'pipe',
       stderr: 'pipe',
-      // /usr/bin:/bin so the system utilities konvoy itself uses stay reachable (src/store/db.ts
-      // shells out to `mkdir -p`); what is taken away is every agent CLI, which is the point.
-      env: { ...process.env, HOME: home, PATH: '/usr/bin:/bin', NO_COLOR: '1' },
+      // A PATH with nothing on it: no agent CLI, and no system utilities either. This passes only
+      // because openDb resolves mkdir absolutely (src/store/db.ts) - it used to die here with
+      // `Executable not found in $PATH: "mkdir"` before printing a thing.
+      env: { ...process.env, HOME: home, PATH: '/konvoy-nonexistent-path', NO_COLOR: '1' },
     })
     const stdout = await new Response(proc.stdout).text()
     const stderr = await new Response(proc.stderr).text()

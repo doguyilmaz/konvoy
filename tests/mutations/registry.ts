@@ -1600,4 +1600,27 @@ export const mutations: Mutation[] = [
     to: '      if (true) {',
     tests: ['tests/adapter-antigravity.test.ts'],
   },
+
+  // --- the store's directory, without a PATH dependency (src/store/db.ts) ---
+  {
+    name: 'a missing store directory is no longer created, so a first run cannot open its database',
+    file: 'src/store/db.ts',
+    from: '    ensureDirectory(dirname(path))\n',
+    to: '',
+    tests: ['tests/store.test.ts'],
+  },
+  {
+    name: 'mkdir is resolved off PATH again, so konvoy cannot start where PATH lacks it',
+    file: 'src/store/db.ts',
+    from: "const mkdir = Bun.which('mkdir') ?? '/bin/mkdir'",
+    to: "const mkdir = 'mkdir'",
+    tests: ['tests/store.test.ts'],
+  },
+  {
+    name: 'a store directory that could not be created is ignored, so the failure surfaces later and vaguer',
+    file: 'src/store/db.ts',
+    from: '  if (made.exitCode !== 0) {',
+    to: '  if (false) {',
+    tests: ['tests/store.test.ts'],
+  },
 ]
