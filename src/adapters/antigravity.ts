@@ -58,14 +58,17 @@ export const antigravityAdapter: Adapter = {
   supportsPresetSessionId: false,
 
   turn(ctx: TurnContext): SpawnPlan {
-    const cmd = [ctx.bin ?? 'agy', '--print', '--output-format', 'stream-json']
+    const cmd = [ctx.bin ?? 'agy', '--output-format', 'stream-json']
     if (ctx.binding?.foreignId) cmd.push('--conversation', ctx.binding.foreignId)
     if (ctx.model) cmd.push('--model', ctx.model)
     cmd.push('--effort', ctx.effort)
     cmd.push(...MODE[ctx.permission])
     // agy's own words for this: "Disable slash command and skill expansion in print mode"
     if ((ctx.harness ?? 'minimal') === 'minimal') cmd.push('--disable-slash-commands')
-    cmd.push(withPrelude(ctx))
+    // ATTACHED, not a bare flag with the prompt after it: a live turn proved `--print` takes the
+    // next token as its value, so `--print --output-format stream-json` sent "--output-format" as
+    // the prompt and silently dropped the real one. agy's own error names this exact fix.
+    cmd.push(`--print=${withPrelude(ctx)}`)
     return { cmd, cwd: ctx.cwd }
   },
 

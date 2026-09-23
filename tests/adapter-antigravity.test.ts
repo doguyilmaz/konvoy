@@ -26,12 +26,26 @@ const bound = (id: string): Binding => ({
 test('a first turn runs agy headless with a streaming json output', () => {
   const cmd = antigravityAdapter.turn(ctx()).cmd
   expect(cmd[0]).toBe('agy')
-  expect(cmd).toContain('--print')
   expect(cmd.join(' ')).toContain('--output-format stream-json')
   // agy assigns its own conversation id, so konvoy cannot preset one
   expect(antigravityAdapter.supportsPresetSessionId).toBe(false)
   expect(cmd.join(' ')).not.toContain('--conversation')
-  expect(cmd[cmd.length - 1]).toBe('THEPROMPT')
+})
+
+// Learned from a live turn, which 558 unit tests could not see: `agy --print` takes the NEXT TOKEN
+// as its value, so `--print --output-format stream-json` made "--output-format" the prompt and
+// dropped the real one. agy says so itself - "Attach the prompt to the flag (--print='your
+// prompt')" - so the prompt travels attached, as one argv element, and never as a bare positional.
+test('the prompt is attached to --print, because a bare --print swallows the next flag', () => {
+  const cmd = antigravityAdapter.turn(ctx()).cmd
+  expect(cmd).toContain('--print=THEPROMPT')
+  expect(cmd).not.toContain('--print')
+  // nothing trails it that agy could mistake for the prompt
+  expect(cmd[cmd.length - 1]).toBe('--print=THEPROMPT')
+
+  // a prompt that opens with a dash is still safe, since it is inside the flag's own value
+  const dashed = antigravityAdapter.turn(ctx({ prompt: '--force the refactor' })).cmd
+  expect(dashed[dashed.length - 1]).toBe('--print=--force the refactor')
 })
 
 test('a later turn resumes the conversation by the id konvoy captured', () => {
