@@ -166,6 +166,7 @@ test('a minimal kiro turn writes a project agent profile and runs under it', asy
   const at = cmd.indexOf('--agent')
   expect(at).toBeGreaterThan(-1)
   expect(cmd[at + 1]).toBe('konvoy-minimal')
+  await Bun.$`rm -rf ${dir}`.quiet().nothrow()
 })
 
 test('an inherited kiro turn writes nothing and names no agent, so the user own setup loads', async () => {
@@ -174,6 +175,7 @@ test('an inherited kiro turn writes nothing and names no agent, so the user own 
   await kiroAdapter.prepare?.(inherited)
   expect(await Bun.file(`${dir}/.kiro/agents/konvoy-minimal.json`).exists()).toBe(false)
   expect(kiroAdapter.turn(inherited).cmd).not.toContain('--agent')
+  await Bun.$`rm -rf ${dir}`.quiet().nothrow()
 })
 
 // kiro does NOT fail when --agent cannot be resolved: measured 2026-09-22, it prints

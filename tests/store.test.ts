@@ -373,7 +373,8 @@ test('a foreign id that is not an id shape is not bound, and the binding stays u
 // `Executable not found in $PATH: "mkdir"` before it could open anything. Bun.spawn resolves from
 // the PATH captured at startup and ignores a later change, so this has to be checked in a child.
 test('a store opens in a directory that does not exist yet, with no mkdir on PATH', async () => {
-  const target = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}/nested/deep/konvoy.db`
+  const base = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}`
+  const target = `${base}/nested/deep/konvoy.db`
   const script = `
     import { openDb } from '${process.cwd()}/src/store/db'
     const db = openDb(${JSON.stringify(target)})
@@ -393,10 +394,10 @@ test('a store opens in a directory that does not exist yet, with no mkdir on PAT
   expect(stderr, stderr).not.toContain('not found in $PATH')
   expect(await proc.exited).toBe(0)
   expect(stdout.trim()).toBe('opened')
-  await Bun.$`rm -rf ${target}/../../..`.quiet().nothrow()
+  await Bun.$`rm -rf ${base}`.quiet().nothrow()
 })
 
-test('opening an existing store spawns no subprocess at all', () => {
+test('opening an existing store spawns no subprocess at all', async () => {
   const dir = `${process.env.TMPDIR ?? '/tmp'}/konvoy-store-${Bun.nanoseconds()}`
   // first open creates the directory, second finds it there
   openDb(`${dir}/konvoy.db`).close()
@@ -407,6 +408,7 @@ test('opening an existing store spawns no subprocess at all', () => {
     expect(spawned.mock.calls.length).toBe(0)
   } finally {
     spawned.mockRestore()
+    await Bun.$`rm -rf ${dir}`.quiet().nothrow()
   }
 })
 
