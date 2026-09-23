@@ -1182,8 +1182,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the answer stops streaming and appears only when the turn ends',
     file: 'src/render.ts',
-    from: '          streamed += event.text\n          deps.out(event.text)',
-    to: '          streamed += event.text',
+    from: '          deps.out(event.text)\n',
+    to: '',
     tests: ['tests/render.test.ts'],
   },
   {
@@ -1196,8 +1196,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the live rewrite is written to a pipe as well, so a log fills with carriage returns',
     file: 'src/render.ts',
-    from: 'if (deps.tty) deps.err(`${CLEAR}${text}`)',
-    to: 'deps.err(`${CLEAR}${text}`)',
+    from: '    if (!deps.tty) return\n    breakLine()',
+    to: '    breakLine()',
     tests: ['tests/render.test.ts'],
   },
   {
