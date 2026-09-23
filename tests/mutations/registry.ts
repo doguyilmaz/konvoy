@@ -1505,4 +1505,19 @@ export const mutations: Mutation[] = [
     to: "        ['AGENT'],",
     tests: ['tests/config.test.ts'],
   },
+  // --- the codex rate-limit stream, captured live 2026-09-23 ---
+  {
+    name: 'a top-level codex error line is ignored again, so a rate limit can read as a crash and the chain never moves',
+    file: 'src/adapters/codex.ts',
+    from: "    if (o.type === 'error') {",
+    to: "    if (o.type === 'never_emitted') {",
+    tests: ['tests/adapter-codex.test.ts'],
+  },
+  {
+    name: 'the informational skills notice is reported with the same source as a terminal failure',
+    file: 'src/adapters/codex.ts',
+    from: "        return [{ t: 'error', message, kind: classifyError(message), source: 'item' }]",
+    to: "        return [{ t: 'error', message, kind: classifyError(message), source: 'turn' }]",
+    tests: ['tests/adapter-codex.test.ts'],
+  },
 ]

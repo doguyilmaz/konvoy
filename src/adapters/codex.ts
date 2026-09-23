@@ -75,6 +75,16 @@ export const codexAdapter: Adapter = {
       return [{ t: 'error', message, kind: classifyError(message), source: 'turn' }]
     }
 
+    // A bare top-level error line. The 2026-09-23 rate-limit capture carries it immediately before
+    // turn.failed with the same wording, so reading it changes nothing there - but a stream that
+    // ever sends it WITHOUT turn.failed would otherwise be read as a wordless non-zero exit, which
+    // turn.ts classifies as a crash. A crash keeps the failover chain on an agent that is rate
+    // limited for hours, so the line that says why is worth reading.
+    if (o.type === 'error') {
+      const message = typeof o.message === 'string' ? o.message : ''
+      return [{ t: 'error', message, kind: classifyError(message), source: 'stream' }]
+    }
+
     return []
   },
 

@@ -141,3 +141,41 @@ test('a codex shell item carries the command it ran', () => {
   )
   expect(completed).toEqual([{ t: 'tool', name: 'command_execution', status: 'error', detail: 'bun test' }])
 })
+
+// Captured on 2026-09-23 from a real exhausted codex account (design section 33 called this
+// "cannot be forced" - it happened during a smoke run and cost no quota to record). The stream
+// answers the question the roadmap asked: an INFORMATIONAL error and a TERMINAL one are different
+// lines. The skills-budget notice arrives as `item.completed` with `item.type === "error"`, while
+// the failure arrives twice, first as a top-level `{"type":"error"}` and then inside `turn.failed`.
+test('the captured rate-limit stream tells an informational error from a terminal one', async () => {
+  const lines = (await Bun.file('tests/fixtures/streams/codex-rate.jsonl').text()).trim().split('\n')
+  const events = lines.flatMap((l) => codexAdapter.parse(l))
+  const errors = events.filter((e) => e.t === 'error') as { message: string; kind: string; source?: string }[]
+
+  // the notice is an item and classifies as nothing in particular, so turn.ts can clear it
+  const notice = errors.find((e) => e.source === 'item')!
+  expect(notice.kind).toBe('unknown')
+  expect(notice.message).toContain('skills context budget')
+
+  // the failure is a rate limit, which is what moves a failover chain: a misread as `crash`
+  // would keep the convoy on an agent that cannot work for hours
+  const terminal = errors.filter((e) => e.kind === 'rate')
+  expect(terminal.length).toBeGreaterThan(0)
+  for (const e of terminal) expect(e.message).toContain('hit your usage limit')
+
+  // every line that says the account is blocked is read, including the top-level one: a stream
+  // that carried it without a turn.failed would otherwise be read as an ordinary crash
+  expect(errors.map((e) => e.source)).toContain('stream')
+  expect(errors.map((e) => e.source)).toContain('turn')
+})
+
+test('a top-level error line is read, not ignored', () => {
+  const events = codexAdapter.parse(JSON.stringify({ type: 'error', message: "You've hit your usage limit." }))
+  expect(events).toEqual([
+    { t: 'error', message: "You've hit your usage limit.", kind: 'rate', source: 'stream' },
+  ])
+  // a top-level error with no words still reports, so the turn is not read as silent success
+  expect(codexAdapter.parse(JSON.stringify({ type: 'error' }))).toEqual([
+    { t: 'error', message: '', kind: 'unknown', source: 'stream' },
+  ])
+})
