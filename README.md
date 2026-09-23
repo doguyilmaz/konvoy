@@ -113,11 +113,11 @@ Captured by running konvoy against a scratch database, not copied from a real pr
 
 ```text
 all sessions
-AGENT     TURNS  IN     OUT   SPEND     GATE
-claude    27     25560  5040  $6.18     -
-codex     17     14800  2850  $1.39     -
-kiro      6      4920   930   0.190 cr  -
-opencode  3      2400   450   -         -
+AGENT     TURNS     IN   OUT     SPEND  GATE
+claude       27  25.6k  5.0k     $6.18  -
+codex        17  14.8k  2.9k     $1.39  -
+kiro          6   4.9k   930  0.190 cr  -
+opencode      3   2.4k   450         -  -
 
 spend is in each agent's own unit; a dash means the CLI reported none
 

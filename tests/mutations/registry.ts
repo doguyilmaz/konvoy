@@ -1448,4 +1448,33 @@ export const mutations: Mutation[] = [
     to: '    if (!midLine) return',
     tests: ['tests/render-fixtures.test.ts'],
   },
+  // --- one aligned, coloured table for every command (src/format.ts) ---
+  {
+    name: 'numeric columns go back to being padded like words, so nothing lines up',
+    file: 'src/format.ts',
+    from: 'return right.has(col) ? `${pad}${painted}` : `${painted}${pad}`',
+    to: 'return `${painted}${pad}`',
+    tests: ['tests/table.test.ts'],
+  },
+  {
+    name: 'a column that is empty in every row is kept, leaving a header with nothing under it',
+    file: 'src/format.ts',
+    from: "const keep = header.map((_, i) => rows.length === 0 || rows.some((r) => (r[i] ?? '') !== ''))",
+    to: 'const keep = header.map(() => true)',
+    tests: ['tests/table.test.ts'],
+  },
+  {
+    name: 'colour is applied before padding, so an escape sequence shifts every column after it',
+    file: 'src/format.ts',
+    from: '        const pad = \' \'.repeat(Math.max(0, widths[slot]! - raw.length))\n        const painted = paintCell(raw, col)',
+    to: '        const painted = paintCell(raw, col)\n        const pad = \' \'.repeat(Math.max(0, widths[slot]! - painted.length))',
+    tests: ['tests/table.test.ts'],
+  },
+  {
+    name: 'usage prints raw token counts again, disagreeing with every other surface',
+    file: 'src/format.ts',
+    from: '      tokens(r.inputTokens),\n      tokens(r.outputTokens),',
+    to: '      String(r.inputTokens),\n      String(r.outputTokens),',
+    tests: ['tests/table.test.ts'],
+  },
 ]
