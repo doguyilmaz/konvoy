@@ -19,7 +19,7 @@ re-explaining everything. There is no way to make them cooperate on a single tas
 
 ## 2. Goals
 
-1. **One session, four agents.** A konvoy session binds one foreign session per CLI and
+1. **One session, five agents.** A konvoy session binds one foreign session per CLI and
    survives restarts; `konvoy resume` reconnects all of them.
 2. **Shared context.** All four read and write one ledger, so a fact discovered by one is
    available to the rest without re-prompting.
@@ -36,7 +36,7 @@ re-explaining everything. There is no way to make them cooperate on a single tas
 
 - No account/API-key brokering. Every CLI authenticates itself, locally, as it does today.
 - No custom TUI in v1. The dashboard is `konvoy roster` / `konvoy status`, plain text.
-- No model calls of konvoy's own. konvoy has no LLM; all intelligence lives in the four CLIs.
+- No model calls of konvoy's own. konvoy has no LLM; all intelligence lives in the five CLIs.
 - No replacement for each CLI's config. konvoy layers on top and never rewrites user config
   files in place.
 
@@ -167,7 +167,7 @@ is the only way to steer or cancel a running turn; it is roadmap (§33).
 
 ## 9. Context sharing
 
-konvoy prepends the prelude of §28 to each turn's prompt, the same way for all four CLIs. Nothing
+konvoy prepends the prelude of §28 to each turn's prompt, the same way for all five CLIs. Nothing
 reaches an agent through CLI configuration and no user config file is edited; `harness` (§18)
 decides how much of each CLI's own setup still loads. A per-CLI native channel (claude's
 `--append-system-prompt`, a generated kiro agent, opencode's `OPENCODE_CONFIG`) would keep the
@@ -200,6 +200,7 @@ model-dependent on three of four CLIs. A clamp is never silent: it shows in `kon
 | codex | `-s read-only` | `-s workspace-write` | `-s workspace-write --approve-for-me` | `--dangerously-bypass-approvals-and-sandbox` |
 | kiro | `--trust-tools=` | `--trust-tools=fs_read,fs_write,…` | the same list | `--trust-all-tools` |
 | opencode | default (ask) | agent `permission` rules | `--auto` | `--auto` |
+| antigravity | `--mode plan` | `--mode accept-edits` | `--mode accept-edits` | `--dangerously-skip-permissions` |
 
 **`auto`, added 2026-09-22.** A headless turn has nobody to answer an approval prompt, so at
 `edit` every tool that asks is refused: a real session spent eighteen tool calls that way, with
@@ -401,6 +402,7 @@ failed the run on a genuine account rate limit, correctly classified `rate` (see
 | codex | `--ignore-user-config` (auth still resolves through `CODEX_HOME`, verified) | omitted |
 | kiro | a generated `konvoy-minimal` agent profile in the project's `.kiro/agents/`, selected with `--agent` | no `--agent`, the user's own default agent |
 | opencode | `OPENCODE_CONFIG_PROJECT_DISABLE=1`, the project's own config not loaded | no config environment |
+| antigravity | `--disable-slash-commands`, its own words for "disable slash command and skill expansion in print mode" | omitted |
 
 **opencode, added 2026-09-22, and narrower than §33 assumed.** The roadmap called for
 `OPENCODE_CONFIG`, which turns out to ADD an explicit source to the merge rather than replace
@@ -440,6 +442,35 @@ for sessions that genuinely need the user's skills and hooks, at the measured pr
 only `ANTHROPIC_API_KEY` or an `apiKeyHelper` and never reads OAuth or the keychain, so a
 subscription login cannot authenticate under it. The flag combination above achieves the same
 reduction while leaving authentication alone.
+
+### Antigravity CLI, added 2026-09-23
+
+Google is transitioning gemini-cli to Antigravity CLI, and gemini-cli's own auth refuses this
+machine's account (`IneligibleTierError`, `UNSUPPORTED_CLIENT`, `tierId: free-tier`) on its newest
+published version, so `agy` is the supported client and gemini-cli was never adapted. Everything
+below was verified against the installed agy 1.2.9: the flags from `agy --help`, and the stream
+from four real captures in `tests/fixtures/streams/antigravity*.jsonl`.
+
+It fits konvoy's model more closely than gemini-cli would have: `--print` headless,
+`--output-format stream-json`, `--effort low|medium|high`, `--model`, and `--conversation <id>` to
+resume a conversation by a STABLE id, which is what a binding needs. agy assigns the id itself and
+reports it in the `init` event, so `supportsPresetSessionId` is false, as for codex, kiro and
+opencode. The resumed capture is the live proof of §4's promise for this agent: a nonce stored in
+one turn came back in the next.
+
+Three behaviours are recorded here because each one is a SILENT failure konvoy would otherwise
+report as success, and all three were found by capturing rather than by reading:
+
+- **A missing conversation does not fail.** `--conversation <unknown>` writes
+  `warning: conversation "<id>" not found` to stderr and starts a NEW conversation, exit 0. The
+  rebind path of §16 keys on a crash, which never arrives, so the context loss is invisible
+  without reading that line. `Adapter.warnings` surfaces it.
+- **An auto-denied tool can leave a successful turn with an empty answer.** A tool needing a
+  permission nobody can grant is denied - a headless turn cannot prompt - and the turn still
+  reports `status: SUCCESS` with `response: ""`, the reason only on stderr. Also surfaced.
+- **`thinking_tokens` is a subset of `output_tokens`, not an addition to input.** The captures
+  settle it arithmetically: `input + output === total`, with thinking inside output. Filing it as
+  input would repeat exactly the unit confusion this section was corrected for in §18.
 
 ## 19. Trust boundary between agents
 
@@ -491,7 +522,7 @@ protocol below is shaped by that asymmetry and by one principle.
 
 ### Pointers, not payloads
 
-The filesystem and git are already a shared channel between the four agents, with perfect
+The filesystem and git are already a shared channel between the five agents, with perfect
 fidelity and zero token cost until something is read. Anything the receiver can fetch itself
 travels as a reference; only what it cannot reconstruct travels as text.
 

@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test'
 import { loadConfig, resolveAgent, explain } from '../src/config/load'
+import { agentIds } from '../src/config/schema'
 
 const tmp = (name: string) => `/tmp/konvoy-test-${name}-${Bun.nanoseconds()}`
 
@@ -203,7 +204,7 @@ test('config get prints one aligned row per agent, with where each value came fr
   expect(lines[0]).toContain('MODEL')
   expect(lines[0]).toContain('EFFORT')
   expect(lines[0]).toContain('PERMISSION')
-  expect(lines).toHaveLength(5)
+  expect(lines).toHaveLength(agentIds.length + 1)
 
   // one column per value, so the rows line up and the source is readable
   for (const line of lines.slice(1)) expect(line).not.toContain('=')

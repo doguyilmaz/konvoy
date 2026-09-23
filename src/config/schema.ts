@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const agentIds = ['claude', 'codex', 'kiro', 'opencode'] as const
+export const agentIds = ['claude', 'codex', 'kiro', 'opencode', 'antigravity'] as const
 export const effortSchema = z.enum(['low', 'medium', 'high', 'max'])
 // safe -> edit -> auto -> yolo. `auto` exists because a headless turn cannot answer a prompt:
 // claude and codex both have a mode that reviews a call automatically instead of refusing it.

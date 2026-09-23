@@ -52,6 +52,7 @@ const AGENT_COLOR: Record<AgentId, keyof Palette> = {
   codex: 'green',
   kiro: 'magenta',
   opencode: 'yellow',
+  antigravity: 'blue',
 }
 
 export function agentPaint(on: boolean): (agent: string) => Paint {

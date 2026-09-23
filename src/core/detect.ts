@@ -67,6 +67,15 @@ const AUTH_CHECK: Record<AgentId, (bin?: string) => AuthCheck> = {
       return stdout.trim().length > 0
     },
   }),
+  // agy has no auth subcommand: signing in happens in the interactive CLI. `models` is the
+  // cheapest command that still needs the server, so a working login is what makes it exit 0.
+  antigravity: (bin = 'agy') => ({
+    args: [bin, 'models'],
+    ok: (stdout, exitCode) => {
+      if (exitCode !== 0) return null
+      return stdout.trim().length > 0
+    },
+  }),
 }
 
 async function codexEfforts(deps: DetectDeps, model?: string): Promise<readonly string[] | undefined> {

@@ -28,6 +28,7 @@ test('update skips a disabled agent, runs a configured one, and forwards the con
         claude: { enabled: false },
         codex: { enabled: false },
         kiro: { enabled: false },
+        antigravity: { enabled: false },
         opencode: { bin: '/custom/opencode' },
       },
     }),
@@ -79,10 +80,11 @@ test('a non-zero spawn exit is reported, counted as a failure, and does not stop
     )
     const lines = log.mock.calls.map((c) => String(c[0]))
     expect(code).toBe(1)
-    // claude fails but the loop still reaches opencode, which comes after it in agentIds
+    // claude fails but the loop still reaches every agent after it in agentIds
     expect(ran).toEqual([
       ['claude', 'update'],
       ['/custom/opencode', 'upgrade'],
+      ['agy', 'update'],
     ])
     expect(lines).toContain('! claude: update exited with 1')
     expect(lines).toContain('ok opencode: 2.0.10 -> 2.0.10')

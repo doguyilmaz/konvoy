@@ -1,6 +1,6 @@
 # konvoy
 
-One session across Claude Code, Codex, Kiro CLI and opencode. konvoy binds a foreign
+One session across Claude Code, Codex, Kiro CLI, opencode and Antigravity CLI. konvoy binds a foreign
 session per CLI, keeps them on one shared brief, and lets you move between them without
 re-explaining anything.
 
@@ -91,7 +91,7 @@ The two `!` lines appear only when konvoy is actually withholding something: `ha
 strips claude's and codex's own MCP servers, skills and settings, and `permission: safe` or
 `edit` means a tool that asks for approval is refused, because a headless turn has nobody to ask.
 
-`permission` is one scale over four CLIs, `safe | edit | auto | yolo`:
+`permission` is one scale over five CLIs, `safe | edit | auto | yolo`:
 
 | | safe | edit | auto | yolo |
 |---|---|---|---|---|
@@ -99,6 +99,7 @@ strips claude's and codex's own MCP servers, skills and settings, and `permissio
 | codex | `-s read-only` | `-s workspace-write` | `-s workspace-write --approve-for-me` | `--dangerously-bypass-approvals-and-sandbox` |
 | kiro | `--trust-tools=` | a fixed tool list | the same list: kiro has no auto-review mode | `--trust-all-tools` |
 | opencode | no flag | no flag | `--auto` | `--auto`, its only approval switch |
+| antigravity | `--mode plan` | `--mode accept-edits` | the same mode: agy has no auto-review either | `--dangerously-skip-permissions` |
 
 `auto` is the level for unattended work: claude and codex both review a call automatically
 rather than refusing it, which is what a headless turn needs, and `edit` keeps its old meaning so
@@ -210,11 +211,13 @@ flowchart LR
   session --> bCodex["binding: codex"]
   session --> bKiro["binding: kiro"]
   session --> bOpencode["binding: opencode"]
+  session --> bAntigravity["binding: antigravity"]
 
   bClaude -->|"via --session-id or --resume<br/>← session_id"| claudeCli(["claude session"])
   bCodex -->|"resume &lt;id&gt; subcommand<br/>← thread_id"| codexCli(["codex thread"])
   bKiro -->|"via --resume-id<br/>← sessionId"| kiroCli(["kiro-cli session"])
   bOpencode -->|"via --session<br/>← sessionID"| opencodeCli(["opencode session"])
+  bAntigravity -->|"via --conversation<br/>← conversation_id"| agyCli(["agy conversation"])
 ```
 
 ## Configure
@@ -308,7 +311,8 @@ your MCP servers, skills, hooks and settings, the CLI exactly as you would run i
 no skills and no settings files, codex with `--ignore-user-config`, kiro under a generated
 `konvoy-minimal` agent profile that konvoy writes to the project's `.kiro/agents/` (kiro resolves
 `--agent` by name from there, and its own conversation store rules out relocating `KIRO_HOME`),
-and opencode with its project config switched off. That split is the point of
+opencode with its project config switched off, and antigravity with `--disable-slash-commands`.
+That split is the point of
 `minimal` in the first place, since konvoy supplies a handed-over turn's context itself through
 the brief and the prelude, and it measured 2.6× less context per turn (docs/design.md §18).
 opencode keeps its global config either way: it has no switch that drops it.
@@ -326,7 +330,7 @@ override yet.
 
 ## Requirements
 
-Whichever of `claude`, `codex`, `kiro-cli`, `opencode` you want in the convoy. Bun 1.4+ only for the npm install or a checkout; the brew and tarball binaries carry their own runtime.
+Whichever of `claude`, `codex`, `kiro-cli`, `opencode`, `agy` you want in the convoy. Bun 1.4+ only for the npm install or a checkout; the brew and tarball binaries carry their own runtime.
 Each authenticates itself; konvoy never handles credentials.
 
 ## Releasing
@@ -348,7 +352,7 @@ which injects and redacts them instead of having them pasted into a terminal.
 bun test
 bun run typecheck
 bun run mutate         # mutation coverage of src/
-bun run verify:claims  # checks konvoy's own claims about the four CLIs against what --help says here
+bun run verify:claims  # checks konvoy's own claims about the five CLIs against what --help says here
 bun run smoke          # two real turns per installed, authenticated agent, the second resumed; spends quota
 ```
 

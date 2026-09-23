@@ -86,6 +86,7 @@ export function loginHint(agent: AgentId): string {
     codex: 'run: codex login',
     kiro: 'run: kiro-cli login',
     opencode: 'run: opencode providers',
+    antigravity: 'run: agy and sign in (it has no auth subcommand)',
   }
   return hints[agent]
 }

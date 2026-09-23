@@ -5,5 +5,7 @@
   "codex": { "cliVersion": "0.155.1", "capturedAt": "2026-09-21", "note": "one tool-using turn (command_execution); carries codex's skills-budget notice as an error item on a successful turn" },
   "codex-rate": { "cliVersion": "0.155.1", "capturedAt": "2026-09-23", "note": "a real exhausted-quota refusal, recorded during a smoke run and costing no quota: the skills-budget notice arrives as an error ITEM, then the failure arrives twice, as a top-level error line and inside turn.failed. Design §33 had this as uncapturable because a rate limit cannot be forced" },
   "kiro": { "cliVersion": "2.22.1", "capturedAt": "2026-09-21", "note": "one tool-using turn (fs_read), v2 engine; the scratch cwd redacted to /tmp" },
-  "opencode": { "cliVersion": "2.0.11", "capturedAt": "2026-09-21", "note": "one tool-using turn (read); re-captured after the CLI moved from 2.0.10 during the audit" }
+  "opencode": { "cliVersion": "2.0.11", "capturedAt": "2026-09-21", "note": "one tool-using turn (read); re-captured after the CLI moved from 2.0.10 during the audit" },
+  "antigravity": { "cliVersion": "1.2.9", "capturedAt": "2026-09-23", "note": "a real first turn through agy: init carries the conversation_id konvoy binds to, the answer arrives as agent_response text deltas, and result carries the final text plus usage" },
+  "antigravity-resumed": { "cliVersion": "1.2.9", "capturedAt": "2026-09-23", "note": "the same conversation resumed with --conversation <id>, which returned the nonce stored in the first turn: the live proof that an antigravity binding carries its context. num_turns 2 and the usage is cumulative for the conversation" }
 }

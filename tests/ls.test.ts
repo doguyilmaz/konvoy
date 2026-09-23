@@ -2,6 +2,7 @@ import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { createSession, upsertBinding } from '../src/store/queries'
 import { cmdLs } from '../src/commands/ls'
+import { agentIds } from '../src/config/schema'
 
 test('cmdLs issues one bindings query regardless of session count', () => {
   const d = openDb(':memory:')
@@ -34,12 +35,13 @@ test('cmdLs still reports the right bound count per session', () => {
   try {
     cmdLs(d)
     // one table, printed once: the counts are cells now, not a "2/4 bound" phrase per line. With
-    // no cwd given nothing is current, so the marker column is empty everywhere and dropped.
+    // no cwd given nothing is current, so the marker column is empty everywhere and dropped. The
+    // denominator is the roster's size, so this reads the same when konvoy gains an agent.
     const out = log.mock.calls.map((c) => String(c[0])).join('\n')
     const rows = out.trim().split('\n')
     expect(rows[0]!.startsWith('SESSION')).toBe(true)
-    expect(rows.find((l) => /^a\s/.test(l))).toContain('2/4')
-    expect(rows.find((l) => /^b\s/.test(l))).toContain('0/4')
+    expect(rows.find((l) => /^a\s/.test(l))).toContain(`2/${agentIds.length}`)
+    expect(rows.find((l) => /^b\s/.test(l))).toContain(`0/${agentIds.length}`)
   } finally {
     log.mockRestore()
   }
@@ -77,7 +79,7 @@ test('ls prints one aligned table, with the current session marked', () => {
   const currentRow = lines.find((l) => l.includes('sinkaf-8f3a'))!
   expect(currentRow.startsWith('*')).toBe(true)
   expect(lines.find((l) => l.includes('token-refresh'))!.startsWith('*')).toBe(false)
-  expect(currentRow).toContain('1/4')
+  expect(currentRow).toContain(`1/${agentIds.length}`)
 })
 
 // `ls` printed the bound count against a literal `/4`. It is true only while konvoy drives exactly

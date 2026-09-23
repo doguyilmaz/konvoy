@@ -1549,4 +1549,55 @@ export const mutations: Mutation[] = [
     to: "  return () => p.bold",
     tests: ['tests/style.color.test.ts'],
   },
+
+  // --- antigravity, the fifth agent (src/adapters/antigravity.ts) ---
+  {
+    name: 'antigravity never resumes, so every turn starts a conversation and no context carries',
+    file: 'src/adapters/antigravity.ts',
+    from: "if (ctx.binding?.foreignId) cmd.push('--conversation', ctx.binding.foreignId)\n",
+    to: '',
+    tests: ['tests/adapter-antigravity.test.ts'],
+  },
+  {
+    name: 'antigravity auto is promoted to skipping every permission, so one agent of five means yolo',
+    file: 'src/adapters/antigravity.ts',
+    from: "  auto: ['--mode', 'accept-edits'],",
+    to: "  auto: ['--dangerously-skip-permissions'],",
+    tests: ['tests/adapter-antigravity.test.ts'],
+  },
+  {
+    name: 'antigravity files thinking tokens as context sent, double-counting model output as input',
+    file: 'src/adapters/antigravity.ts',
+    from: 'const input = (usage.input_tokens ?? 0) + (usage.cache_read_tokens ?? 0)',
+    to: 'const input = (usage.input_tokens ?? 0) + (usage.thinking_tokens ?? 0) + (usage.cache_read_tokens ?? 0)',
+    tests: ['tests/adapter-antigravity.test.ts', 'tests/provider-contract.test.ts'],
+  },
+  {
+    name: 'a user_input step is echoed back, duplicating konvoy own prompt into the answer',
+    file: 'src/adapters/antigravity.ts',
+    from: "      if (step.step_type === 'agent_response' && step.text_delta) {",
+    to: '      if (step.text_delta) {',
+    tests: ['tests/adapter-antigravity.test.ts'],
+  },
+  {
+    name: 'a lost antigravity conversation is silent again, so a turn with no memory reads as normal',
+    file: 'src/adapters/antigravity.ts',
+    from: '    const gone = CONVERSATION_GONE.exec(stderr)',
+    to: '    const gone = null',
+    tests: ['tests/adapter-antigravity.test.ts'],
+  },
+  {
+    name: 'an auto-denied antigravity tool is silent, so an empty answer reads as a successful turn',
+    file: 'src/adapters/antigravity.ts',
+    from: '    const denied = DENIED_TOOL.exec(stderr)',
+    to: '    const denied = null',
+    tests: ['tests/adapter-antigravity.test.ts'],
+  },
+  {
+    name: 'an antigravity ERROR result is reported as a completed answer',
+    file: 'src/adapters/antigravity.ts',
+    from: "      if (result.status === 'SUCCESS') {",
+    to: '      if (true) {',
+    tests: ['tests/adapter-antigravity.test.ts'],
+  },
 ]

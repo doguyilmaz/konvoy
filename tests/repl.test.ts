@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { configSchema } from '../src/config/schema'
+import { agentIds } from '../src/config/schema'
 import { createSession, getSessionBySlug, recordTurn, renameSession } from '../src/store/queries'
 import { runRepl, replHelp, messageSplitter, terminalIo, PASTE_ON, PASTE_OFF, type ReplIo, type InputStream } from '../src/commands/repl'
 import type { Session } from '../src/types'
@@ -78,7 +79,7 @@ test('/use rejects an unknown or disabled agent and keeps the current one', asyn
     await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
     expect(h.calls).toEqual([['s', 'send', 'claude', 'x']])
     expect(err.mock.calls.map((c) => String(c[0]))).toEqual([
-      'unknown agent "bogus" - expected one of claude, codex, kiro, opencode',
+      `unknown agent "bogus" - expected one of ${agentIds.join(', ')}`,
       'codex is disabled in this konvoy config',
     ])
   } finally {
