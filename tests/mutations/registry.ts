@@ -1484,4 +1484,18 @@ export const mutations: Mutation[] = [
     to: "''",
     tests: ['tests/ls.test.ts'],
   },
+  {
+    name: 'doctor goes back to mixing glyph styles, so its report has no column to read down',
+    file: 'src/commands/doctor.ts',
+    from: "  return (kind, text) => console.log(`${paint[kind](GLYPH[kind])}  ${text}`)",
+    to: '  return (kind, text) => console.log(`${kind} ${text}`)',
+    tests: ['tests/doctor.test.ts'],
+  },
+  {
+    name: 'a doctor problem is painted like a note, so a failure reads as an aside',
+    file: 'src/commands/doctor.ts',
+    from: "const GLYPH = { bad: '\u2717', warn: '!', good: '\u2713', note: '\u00b7' } as const",
+    to: "const GLYPH = { bad: '\u00b7', warn: '!', good: '\u2713', note: '\u00b7' } as const",
+    tests: ['tests/doctor.test.ts'],
+  },
 ]
