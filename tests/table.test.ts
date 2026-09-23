@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { formatRoster, formatUsage, formatVersions, table } from '../src/format'
+import { formatRoster, formatUsage, formatVersions, outputColor, table } from '../src/format'
 
 // Every command's output goes through one `table()`, so alignment, colour and empty columns are
 // decided once. Before this, numbers were padded like words - `27` and `6` started at the same
@@ -92,4 +92,34 @@ test('a formatter with no colour decision is plain, however the process was star
 
   // and the colour is still available to whoever asks for it explicitly
   expect(formatRoster(rows, true)).toContain('\x1b[')
+})
+
+// The two invariants above need to be observable, and the suite's own preload sets NO_COLOR, which
+// would make a formatter that reads the terminal look identical to one that does not. FORCE_COLOR
+// short-circuits the TTY check (src/style.ts), so these pin both halves without depending on how
+// the process was started: the formatter must stay plain even where colour is available, and the
+// edge helper must be the thing that says yes.
+test('a formatter stays plain even where colour is available, and the edge helper is what says yes', () => {
+  const before = { no: Bun.env.NO_COLOR, force: Bun.env.FORCE_COLOR }
+  try {
+    delete Bun.env.NO_COLOR
+    Bun.env.FORCE_COLOR = '1'
+    // the formatter asked for no colour, so it gets none, whatever the environment offers
+    expect(table(['AGENT'], [['claude']])).not.toContain('\x1b[')
+    expect(formatRoster([
+      { agent: 'claude', status: 'bound', model: 'opus', effort: 'high', foreignId: 'abc', turns: 1, costUsd: 0.1, credits: 0 },
+    ])).not.toContain('\x1b[')
+    // and the command edge resolves the environment's answer, which here is yes
+    expect(outputColor()).toBe(true)
+    expect(table(['AGENT'], [['claude']], { color: outputColor() })).toContain('\x1b[')
+
+    // NO_COLOR outranks it, which is what a user who turned colour off expects
+    Bun.env.NO_COLOR = '1'
+    expect(outputColor()).toBe(false)
+  } finally {
+    if (before.no === undefined) delete Bun.env.NO_COLOR
+    else Bun.env.NO_COLOR = before.no
+    if (before.force === undefined) delete Bun.env.FORCE_COLOR
+    else Bun.env.FORCE_COLOR = before.force
+  }
 })
