@@ -80,11 +80,21 @@ test('an agent response arrives as text deltas, and a user_input step is not ech
   )
   expect(text).toEqual([{ t: 'text', text: 'stored' }])
 
-  // konvoy already holds the prompt; echoing it back would duplicate it into the transcript
+  // konvoy already holds the prompt; the captures show a user_input step with no text_delta at
+  // all, and this guard is what keeps that true if one ever arrives carrying the prompt back.
   expect(
     antigravityAdapter.parse(
       JSON.stringify({ event: 'step_update', step_update: { step_index: 0, state: 'DONE', step_type: 'user_input' } }),
     ),
+  ).toEqual([])
+  expect(
+    antigravityAdapter.parse(
+      JSON.stringify({
+        event: 'step_update',
+        step_update: { step_index: 0, state: 'DONE', step_type: 'user_input', text_delta: 'THEPROMPT' },
+      }),
+    ),
+    'only an agent_response is the answer',
   ).toEqual([])
 })
 
