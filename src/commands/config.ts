@@ -2,7 +2,7 @@ import type { Config } from '../config/schema'
 import { configSchema } from '../config/schema'
 import { explain, globalConfigPath, projectConfigPath, readLayer, resolveAgent } from '../config/load'
 import { agentIds } from '../adapters'
-import { table } from '../format'
+import { outputColor, table } from '../format'
 
 export function coerce(raw: string): string | number | boolean {
   if (raw === 'true') return true
@@ -91,6 +91,7 @@ export async function cmdConfig(
             s.enabled ? 'yes' : 'no',
           ]
         }),
+        { color: outputColor() },
       ).trimEnd(),
     )
     return 0

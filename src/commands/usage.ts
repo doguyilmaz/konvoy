@@ -8,7 +8,7 @@ import {
   type UsageRow,
 } from '../store/queries'
 import { requireSession } from './messages'
-import { formatUsage } from '../format'
+import { formatUsage, outputColor } from '../format'
 import { agentSparklines, heatmap, shareBars } from '../chart'
 import { isPricingConfigured } from '../pricing'
 import type { Config } from '../config/schema'
@@ -46,7 +46,7 @@ export function cmdUsage(
 
   const sessionId = opts.all ? undefined : session?.id
 
-  console.log(formatUsage(rows, cfg.pricing, usageByAgentModel(db, sessionId)))
+  console.log(formatUsage(rows, cfg.pricing, usageByAgentModel(db, sessionId), outputColor()))
   console.log(
     isPricingConfigured(cfg.pricing)
       ? `${UNITS}; ~USD is estimated from rates configured as of ${cfg.pricing.asOf || 'an unspecified date'}`

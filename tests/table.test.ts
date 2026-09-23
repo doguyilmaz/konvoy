@@ -70,3 +70,26 @@ test('a status table drops its DETAIL column when nothing has a detail to show',
   expect(withDetail).toContain('DETAIL')
   expect(withDetail).toContain('model overlap with codex')
 })
+
+// A formatter is a pure function and must not read the terminal: `table()` defaulted its colour to
+// `process.stdout.isTTY`, so the bytes formatRoster returned depended on how the process was
+// started - the same call plain under a pipe and coloured under a terminal. Tests then pass or
+// fail by invocation (this one fails under a pty and passes piped, before the fix), and any future
+// caller that forgets the argument gets escape codes it never asked for. The decision belongs at
+// the edge: each command resolves it from the environment and passes it in.
+test('a formatter with no colour decision is plain, however the process was started', () => {
+  const rows = [
+    { agent: 'claude' as const, status: 'bound', model: 'opus', effort: 'high', foreignId: 'abc', turns: 27, costUsd: 6.18, credits: 0 },
+  ]
+  for (const out of [
+    formatRoster(rows),
+    formatUsage([{ agent: 'claude' as const, turns: 1, inputTokens: 10, outputTokens: 2, costUsd: 0.1, credits: 0, gatePassed: 0, gateKnown: 0 }]),
+    formatVersions([{ agent: 'claude' as const, installed: true, version: '2.1.204', authed: true }]),
+    table(['AGENT'], [['claude']]),
+  ]) {
+    expect(out).not.toContain('\x1b[')
+  }
+
+  // and the colour is still available to whoever asks for it explicitly
+  expect(formatRoster(rows, true)).toContain('\x1b[')
+})

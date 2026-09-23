@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import { boundBindingCounts, currentSession, listSessions } from '../store/queries'
-import { table } from '../format'
+import { outputColor, table } from '../format'
 
 export function cmdLs(db: Database, cwd = ''): number {
   const sessions = listSessions(db)
@@ -24,7 +24,7 @@ export function cmdLs(db: Database, cwd = ''): number {
         s.cwd,
         s.goal,
       ]),
-      { right: [3] },
+      { right: [3], color: outputColor() },
     ).trimEnd(),
   )
   return 0

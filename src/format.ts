@@ -15,9 +15,15 @@ export interface RosterRow {
   credits: number
 }
 
+// The terminal decision, made once at a command's edge and passed down: a formatter never reads
+// it, so the same arguments always produce the same bytes. stdout, because that is where a table
+// goes and `konvoy usage > file` must hold plain text.
+export const outputColor = (): boolean => colorEnabled(Bun.env, Boolean(process.stdout.isTTY))
+
 export interface TableOptions {
   /** indexes of columns holding numbers: padded on the left, so they end on one column */
   right?: readonly number[]
+  /** default false: a formatter is pure, so the terminal decision is made by the caller */
   color?: boolean
 }
 
@@ -36,7 +42,7 @@ const STATUS_COLOR: Record<string, keyof ReturnType<typeof palette>> = {
 // applied after padding, so colour can never shift a column. A column that is empty in every row
 // is dropped rather than left as a header with nothing under it.
 export function table(header: readonly string[], rows: readonly string[][], opts: TableOptions = {}): string {
-  const color = opts.color ?? colorEnabled(Bun.env, Boolean(process.stdout.isTTY))
+  const color = opts.color ?? false
   const p = palette(color)
   const paintAgent = agentPaint(color)
   const keep = header.map((_, i) => rows.length === 0 || rows.some((r) => (r[i] ?? '') !== ''))
@@ -66,11 +72,11 @@ export function table(header: readonly string[], rows: readonly string[][], opts
   return [head, ...rows.map((r) => line(r, paint))].join('\n') + '\n'
 }
 
-export function formatRoster(rows: RosterRow[]): string {
+export function formatRoster(rows: RosterRow[], color = false): string {
   return table(
     ['AGENT', 'STATUS', 'MODEL', 'EFFORT', 'SESSION', 'TURNS', 'COST'],
     rows.map((r) => [r.agent, r.status, r.model || '-', r.effort, r.foreignId ?? '-', String(r.turns), cost(r)]),
-    { right: [5, 6] },
+    { right: [5, 6], color },
   )
 }
 
@@ -99,7 +105,7 @@ function usdCell(row: UsageRow, modelRows: ModelUsage[], pricing: Pricing): stri
   return row.costUsd > 0 ? `$${est.toFixed(2)}` : `$${est.toFixed(3)}`
 }
 
-export function formatUsage(rows: UsageRow[], pricing?: Pricing, modelRows: ModelUsage[] = []): string {
+export function formatUsage(rows: UsageRow[], pricing?: Pricing, modelRows: ModelUsage[] = [], color = false): string {
   const showUsd = pricing !== undefined && isPricingConfigured(pricing)
   const header = ['AGENT', 'TURNS', 'IN', 'OUT', 'SPEND', ...(showUsd ? ['~USD'] : []), 'GATE']
   return table(
@@ -114,7 +120,7 @@ export function formatUsage(rows: UsageRow[], pricing?: Pricing, modelRows: Mode
       r.gateKnown > 0 ? `${r.gatePassed}/${r.gateKnown}` : '-',
     ]),
     // turns, in, out and both spend columns are numbers: they end on one column
-    { right: showUsd ? [1, 2, 3, 4, 5] : [1, 2, 3, 4] },
+    { right: showUsd ? [1, 2, 3, 4, 5] : [1, 2, 3, 4], color },
   )
 }
 
@@ -135,7 +141,7 @@ export interface AgentStatusRow {
   detail?: string
 }
 
-export function formatVersions(rows: AgentStatusRow[]): string {
+export function formatVersions(rows: AgentStatusRow[], color = false): string {
   return table(
     ['AGENT', 'VERSION', 'AUTH', 'DETAIL'],
     rows.map((r) => [
@@ -144,5 +150,6 @@ export function formatVersions(rows: AgentStatusRow[]): string {
       r.authed === null ? 'unknown' : r.authed ? 'ok' : 'login required',
       r.detail ?? '',
     ]),
+    { color },
   )
 }

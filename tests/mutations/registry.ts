@@ -1520,4 +1520,18 @@ export const mutations: Mutation[] = [
     to: "        return [{ t: 'error', message, kind: classifyError(message), source: 'turn' }]",
     tests: ['tests/adapter-codex.test.ts'],
   },
+  {
+    name: 'a formatter reads the terminal again, so its bytes depend on how the process was started',
+    file: 'src/format.ts',
+    from: '  const color = opts.color ?? false',
+    to: '  const color = opts.color ?? colorEnabled(Bun.env, Boolean(process.stdout.isTTY))',
+    tests: ['tests/table.test.ts'],
+  },
+  {
+    name: 'a command stops resolving colour at its edge, so roster is plain even in a terminal',
+    file: 'src/format.ts',
+    from: 'export const outputColor = (): boolean => colorEnabled(Bun.env, Boolean(process.stdout.isTTY))',
+    to: 'export const outputColor = (): boolean => false',
+    tests: ['tests/table.test.ts'],
+  },
 ]
