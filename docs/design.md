@@ -192,14 +192,26 @@ underneath, unchanged.
 flag and clamps to what the *target model* supports, because the vocabulary is
 model-dependent on three of four CLIs. A clamp is never silent: it shows in `konvoy status`.
 
-**Permission.** konvoy exposes `safe | edit | yolo`:
+**Permission.** konvoy exposes `safe | edit | auto | yolo`:
 
-| | safe | edit | yolo |
-|---|---|---|---|
-| claude | `--permission-mode manual` | `acceptEdits` | `bypassPermissions` |
-| codex | `-s read-only` | `-s workspace-write` | `--dangerously-bypass-approvals-and-sandbox` |
-| kiro | `--trust-tools=` | `--trust-tools=fs_read,fs_write,…` | `--trust-all-tools` |
-| opencode | default (ask) | agent `permission` rules | `--auto` |
+| | safe | edit | auto | yolo |
+|---|---|---|---|---|
+| claude | `--permission-mode manual` | `acceptEdits` | `auto` | `bypassPermissions` |
+| codex | `-s read-only` | `-s workspace-write` | `-s workspace-write --approve-for-me` | `--dangerously-bypass-approvals-and-sandbox` |
+| kiro | `--trust-tools=` | `--trust-tools=fs_read,fs_write,…` | the same list | `--trust-all-tools` |
+| opencode | default (ask) | agent `permission` rules | `--auto` | `--auto` |
+
+**`auto`, added 2026-09-22.** A headless turn has nobody to answer an approval prompt, so at
+`edit` every tool that asks is refused: a real session spent eighteen tool calls that way, with
+`maestro`, `xcrun` and `adb` all denied and nothing on screen saying so. claude's `auto` ("runs
+everything, with background safety checks") and codex's `--approve-for-me` ("route approval
+requests through automatic review using the workspace-write sandbox") are each CLI's own answer to
+that, and this is the level that sends them. `edit` is unchanged, because it is the default and
+widening a default silently is how a permission ladder stops meaning anything. Two rows are honest
+approximations rather than equivalents: kiro-cli 2.23.0 has no auto-review mode, so `auto` trusts
+exactly what `edit` trusts, and opencode has a single `--auto` switch, so `auto` and `yolo` land
+together there. claude's `dontAsk` is never sent at any level - it auto-DENIES every call that
+would otherwise prompt, which reads like this level and is its opposite.
 
 **Model diversity.** Kiro and codex can both run models that Claude Code also runs
 (`claude-opus-5`, `gpt-5.6-*`). A convoy whose reviewer and implementer share one model is a

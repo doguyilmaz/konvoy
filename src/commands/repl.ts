@@ -5,8 +5,9 @@ import { onExit } from '../core/children'
 import { requireAgent } from './messages'
 import { disabledAgent, resolveAgent } from '../config/load'
 import { agentPaint, colorEnabled, palette } from '../style'
+import { statusLine } from '../render'
 import { sessionDir } from '../paths'
-import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal } from '../store/queries'
+import { currentSession, getSessionBySlug, lastTurnAgent, listSessions, setGoal, usageForSession } from '../store/queries'
 import { cmdNew } from './new'
 import { commandTable, formatRows, type CommandRow } from './table'
 
@@ -192,8 +193,17 @@ export async function runRepl(
   // The slug is in the banner and in `/roster`; repeating it on every line is noise, and a
   // prompt reading "test claude>" is mostly punctuation and bookkeeping. What changes turn to
   // turn is which agent is listening, so that is what the prompt carries.
+  // The session total is only worth printing when it has changed, which is after a turn and not
+  // after `/help`: a line that reprints itself every prompt is another thing scrolling past.
+  let lastStatus = ''
   const prompt = (): void => {
-    if (io.tty) io.write(`${paintAgent(agent)(agent)} ${p.dim('›')} `)
+    if (!io.tty) return
+    const status = statusLine(session.slug, usageForSession(db, session.id), io.color ?? false)
+    if (status !== '' && status !== lastStatus) {
+      io.write(`${status}\n`)
+      lastStatus = status
+    }
+    io.write(`${paintAgent(agent)(agent)} ${p.dim('›')} `)
   }
   const refresh = (): boolean => {
     const fresh = listSessions(db).find((s) => s.id === session.id)

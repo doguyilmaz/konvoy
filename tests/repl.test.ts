@@ -265,3 +265,29 @@ test('the prompt is coloured on a terminal that takes colour, and plain text eve
   await runRepl(plain.io, plain.db, plain.cfg, '/nowhere/s', plain.s, plain.run)
   expect(plain.out.filter((t) => t.endsWith('\u203a '))).toEqual(['claude \u203a ', 'claude \u203a '])
 })
+
+test('the status line appears once a turn has been recorded, and not again until it changes', async () => {
+  const h = harness(['hello', '/help', 'again'])
+  h.io.tty = true
+  let turns = 0
+  h.run = (tokens, slug) => {
+    h.calls.push([slug, ...tokens])
+    if (tokens[0] === 'send') {
+      turns++
+      recordTurn(h.db, {
+        sessionId: h.s.id, agent: 'claude', prompt: 'p', final: 'f', exitCode: 0,
+        costUsd: 0.01 * turns, inputTokens: 1000 * turns, outputTokens: 10,
+      })
+    }
+    return 0
+  }
+  await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
+
+  const status = h.out.filter((t) => t.startsWith('  s · '))
+  // one after the first turn, one after the second - /help in between changed nothing, so it
+  // printed nothing
+  expect(status).toHaveLength(2)
+  expect(status[0]).toContain('1 turn ·')
+  expect(status[1]).toContain('2 turns ·')
+  expect(status[1]).toContain('$0.03')
+})

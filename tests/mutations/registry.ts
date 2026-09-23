@@ -1346,4 +1346,55 @@ export const mutations: Mutation[] = [
     to: 'void adapter.warnings',
     tests: ['tests/turn.test.ts'],
   },
+
+  // --- the auto permission level and the status line ---
+  {
+    name: 'claude auto falls back to acceptEdits, so a headless turn refuses what it cannot ask about',
+    file: 'src/adapters/claude.ts',
+    from: "  auto: 'auto',",
+    to: "  auto: 'acceptEdits',",
+    tests: ['tests/permission.test.ts'],
+  },
+  {
+    name: 'codex auto stops routing approvals through automatic review',
+    file: 'src/adapters/codex.ts',
+    from: "  auto: ['-s', 'workspace-write', '--approve-for-me'],",
+    to: "  auto: ['-s', 'workspace-write'],",
+    tests: ['tests/permission.test.ts'],
+  },
+  {
+    name: 'kiro auto quietly becomes trust-all-tools, so one agent of four treats auto as yolo',
+    file: 'src/adapters/kiro.ts',
+    from: "  auto: '--trust-tools=fs_read,fs_write,grep,glob,execute_bash',",
+    to: "  auto: '--trust-all-tools',",
+    tests: ['tests/permission.test.ts'],
+  },
+  {
+    name: 'opencode never auto-approves at the auto level, so the level does nothing there',
+    file: 'src/adapters/opencode.ts',
+    from: "if (ctx.permission === 'auto' || ctx.permission === 'yolo') cmd.push('--auto')",
+    to: "if (ctx.permission === 'yolo') cmd.push('--auto')",
+    tests: ['tests/permission.test.ts'],
+  },
+  {
+    name: 'the banner warns about refused tools even at a level that approves them',
+    file: 'src/render.ts',
+    from: "if (facts.permission === 'safe' || facts.permission === 'edit') {",
+    to: "if (facts.permission !== 'yolo') {",
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'dollars and credits are added together in the status line, as if they were one unit',
+    file: 'src/render.ts',
+    from: "  if (total.costUsd > 0) parts.push(`$${total.costUsd.toFixed(4)}`)\n  if (total.credits > 0) parts.push(`${total.credits.toFixed(3)} cr`)",
+    to: "  if (total.costUsd + total.credits > 0) parts.push(`$${(total.costUsd + total.credits).toFixed(4)}`)",
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'the status line reprints itself on every prompt, scrolling the session away',
+    file: 'src/commands/repl.ts',
+    from: "if (status !== '' && status !== lastStatus) {",
+    to: "if (status !== '') {",
+    tests: ['tests/repl.test.ts'],
+  },
 ]

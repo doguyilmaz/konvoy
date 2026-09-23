@@ -1,9 +1,12 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
 import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
+// `--approve-for-me` is codex's own words for this: "route approval requests through automatic
+// review using the workspace-write sandbox" (codex exec --help, 0.155.1). The sandbox stays.
 const SANDBOX: Record<Permission, string[]> = {
   safe: ['-s', 'read-only'],
   edit: ['-s', 'workspace-write'],
+  auto: ['-s', 'workspace-write', '--approve-for-me'],
   yolo: ['--dangerously-bypass-approvals-and-sandbox'],
 }
 

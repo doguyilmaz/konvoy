@@ -1,9 +1,13 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
 import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
+// kiro-cli 2.23.0 `chat --help` has only `--trust-tools=<list>` and `--trust-all-tools`: no
+// automatic-review mode to map `auto` onto. It therefore trusts exactly what `edit` trusts -
+// promoting it to `--trust-all-tools` would make `auto` mean yolo on one agent out of four.
 const TRUST: Record<Permission, string> = {
   safe: '--trust-tools=',
   edit: '--trust-tools=fs_read,fs_write,grep,glob,execute_bash',
+  auto: '--trust-tools=fs_read,fs_write,grep,glob,execute_bash',
   yolo: '--trust-all-tools',
 }
 

@@ -1,9 +1,13 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
 import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
+// claude's own mode names, from `claude --help` and its settings reference: `auto` runs
+// everything with background safety checks, `dontAsk` would auto-DENY every call that would
+// otherwise prompt - the opposite of what a headless turn needs, so konvoy never sends it.
 const PERMISSION: Record<Permission, string> = {
   safe: 'manual',
   edit: 'acceptEdits',
+  auto: 'auto',
   yolo: 'bypassPermissions',
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { remainder, sessionBanner, turnRender, type RenderDeps } from '../src/render'
+import { remainder, sessionBanner, statusLine, turnRender, type RenderDeps } from '../src/render'
 import type { KonvoyEvent } from '../src/types'
 
 // What a user saw before this: eighteen lines of "  · Bash" with no target, no outcome and no
@@ -226,4 +226,34 @@ test('the settled line replaces the animation, so one tool leaves exactly one li
   expect(settled.split('\n').filter((l) => l.trim() !== '')).toHaveLength(1)
   expect(settled).toContain('✓ Read')
   expect(settled.endsWith('\n')).toBe(true)
+})
+
+// A REPL that shows a turn's own cost and nothing else leaves the session total invisible until
+// you stop and run `konvoy usage`. This is the same numbers, above the prompt, only when they
+// have changed - the whole point is that it costs nothing to read and never scrolls on its own.
+test('the status line carries the session total, in each unit that was actually reported', () => {
+  expect(
+    statusLine('token-refresh', [
+      { turns: 8, inputTokens: 141200, outputTokens: 3100, costUsd: 1.2412, credits: 0 },
+      { turns: 4, inputTokens: 7000, outputTokens: 900, costUsd: 0, credits: 0.19 },
+    ], false),
+  ).toBe('  token-refresh · 12 turns · 148.2k in / 4.0k out · $1.2412 · 0.190 cr')
+})
+
+test('a session with no turns yet has no status line to show', () => {
+  expect(statusLine('s', [], false)).toBe('')
+})
+
+test('the status line shows only the units the agents reported', () => {
+  const dollarsOnly = statusLine('s', [
+    { turns: 1, inputTokens: 900, outputTokens: 20, costUsd: 0.02, credits: 0 },
+  ], false)
+  expect(dollarsOnly).toBe('  s · 1 turn · 900 in / 20 out · $0.0200')
+  expect(dollarsOnly).not.toContain('cr')
+
+  const creditsOnly = statusLine('s', [
+    { turns: 2, inputTokens: 100, outputTokens: 5, costUsd: 0, credits: 0.5 },
+  ], false)
+  expect(creditsOnly).toContain('0.500 cr')
+  expect(creditsOnly).not.toContain('$')
 })

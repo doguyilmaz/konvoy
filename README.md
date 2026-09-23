@@ -88,8 +88,22 @@ ended, and the footer carries the turn's time, context and spend. On a terminal 
 and each agent keeps its own colour; piped or with `NO_COLOR` set, the same run writes plain text
 and only the answer goes to stdout, so `konvoy send … > file` still holds exactly the answer.
 The two `!` lines appear only when konvoy is actually withholding something: `harness: minimal`
-strips claude's and codex's own MCP servers, skills and settings, and any `permission` short of
-`yolo` means a tool that asks for approval is refused, because a headless turn has nobody to ask.
+strips claude's and codex's own MCP servers, skills and settings, and `permission: safe` or
+`edit` means a tool that asks for approval is refused, because a headless turn has nobody to ask.
+
+`permission` is one scale over four CLIs, `safe | edit | auto | yolo`:
+
+| | safe | edit | auto | yolo |
+|---|---|---|---|---|
+| claude | `manual` | `acceptEdits` | `auto`, background safety checks | `bypassPermissions` |
+| codex | `-s read-only` | `-s workspace-write` | `-s workspace-write --approve-for-me` | `--dangerously-bypass-approvals-and-sandbox` |
+| kiro | `--trust-tools=` | a fixed tool list | the same list: kiro has no auto-review mode | `--trust-all-tools` |
+| opencode | no flag | no flag | `--auto` | `--auto`, its only approval switch |
+
+`auto` is the level for unattended work: claude and codex both review a call automatically
+rather than refusing it, which is what a headless turn needs, and `edit` keeps its old meaning so
+nothing widens under anyone who did not ask for it. claude's `dontAsk` mode is deliberately never
+sent: it auto-DENIES everything that would otherwise prompt, the opposite of what it sounds like.
 
 ## Sample output
 

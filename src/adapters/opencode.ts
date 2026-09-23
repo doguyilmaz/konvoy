@@ -11,7 +11,9 @@ export const opencodeAdapter: Adapter = {
     if (ctx.binding?.foreignId) cmd.push('-s', ctx.binding.foreignId)
     else cmd.push('--title', `konvoy:${ctx.slug}`)
     if (ctx.model) cmd.push('-m', `${ctx.model}#${ctx.effort}`)
-    if (ctx.permission === 'yolo') cmd.push('--auto')
+    // opencode has one approval switch, `--auto`: "auto-approve permissions that are not
+    // explicitly denied" (opencode run --help, 2.0.11). auto and yolo therefore land together.
+    if (ctx.permission === 'auto' || ctx.permission === 'yolo') cmd.push('--auto')
     cmd.push('--', withPrelude(ctx))
     return { cmd, cwd: ctx.cwd }
   },

@@ -144,8 +144,40 @@ export function remainder(final: string, alreadyStreamed: string): string {
   return final
 }
 
-export interface BannerFacts {
-  version: string
+export interface StatusRow {
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  credits: number
+}
+
+// The session total, one dim line above the prompt. A turn's own footer says what that turn
+// cost; this says what the session has cost, which is otherwise invisible until you stop and run
+// `konvoy usage`. Spend stays in each agent's own unit - dollars and credits are not addable.
+export function statusLine(slug: string, rows: readonly StatusRow[], color: boolean): string {
+  const total = rows.reduce(
+    (acc, r) => ({
+      turns: acc.turns + r.turns,
+      inputTokens: acc.inputTokens + r.inputTokens,
+      outputTokens: acc.outputTokens + r.outputTokens,
+      costUsd: acc.costUsd + r.costUsd,
+      credits: acc.credits + r.credits,
+    }),
+    { turns: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 },
+  )
+  if (total.turns === 0) return ''
+
+  const parts = [slug, `${total.turns} turn${total.turns === 1 ? '' : 's'}`]
+  if (total.inputTokens > 0 || total.outputTokens > 0) {
+    parts.push(`${tokens(total.inputTokens)} in / ${tokens(total.outputTokens)} out`)
+  }
+  if (total.costUsd > 0) parts.push(`$${total.costUsd.toFixed(4)}`)
+  if (total.credits > 0) parts.push(`${total.credits.toFixed(3)} cr`)
+  return palette(color).dim(`  ${parts.join(' · ')}`)
+}
+
+export interface BannerFacts {  version: string
   slug: string
   dir: string
   agent: string
@@ -173,7 +205,7 @@ export function sessionBanner(facts: BannerFacts, color: boolean): string[] {
     lines.push(`${p.yellow('  !')} ${p.dim(`harness minimal: ${facts.agent} runs without your MCP servers, skills or settings files`)}`)
     lines.push(p.dim('    konvoy config set defaults.harness inherit --global   to run it with your own setup'))
   }
-  if (facts.permission !== 'yolo') {
+  if (facts.permission === 'safe' || facts.permission === 'edit') {
     lines.push(
       `${p.yellow('  !')} ${p.dim(`permission ${facts.permission}: a tool that needs approval is refused, since a headless turn has nobody to ask`)}`,
     )
