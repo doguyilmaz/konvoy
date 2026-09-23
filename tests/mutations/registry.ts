@@ -1608,6 +1608,20 @@ export const mutations: Mutation[] = [
     to: '/',
     tests: ['tests/adapter-opencode.test.ts'],
   },
+  {
+    name: "opencode's own error kind is ignored in favour of reading its prose, which only matches wording somebody saw",
+    file: 'src/adapters/opencode.ts',
+    from: "  if (kind.endsWith('.auth') || status === 401 || status === 403) return 'auth'",
+    to: '  if (false) return \'auth\'',
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
+  {
+    name: 'an opencode 429 is no longer a rate limit, so the failover chain does not move off a throttled agent',
+    file: 'src/adapters/opencode.ts',
+    from: "  if (kind.endsWith('.rate') || status === 429) return 'rate'",
+    to: '  if (false) return \'rate\'',
+    tests: ['tests/adapter-opencode.test.ts'],
+  },
   // --- the store's directory, without a PATH dependency (src/store/db.ts) ---
   {
     name: 'a missing store directory is no longer created, so a first run cannot open its database',

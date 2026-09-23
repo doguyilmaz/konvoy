@@ -162,3 +162,35 @@ test('a subscription or entitlement refusal is an auth failure, so the chain mov
   expect(classifyError('I added a subscription field to the user model')).toBe('unknown')
   expect(classifyError('the subscribe handler needs a test')).toBe('unknown')
 })
+
+// Captured live on 2026-09-23: opencode's error object names its own kind and HTTP status, which is
+// authoritative where konvoy's prose matching is a guess. The message regex added for this case
+// works, but only for this wording - `provider.auth` and 403 hold for any refusal opencode files
+// that way, including ones nobody has written a pattern for yet.
+test('an error that names its own kind is classified from that field, not from its prose', () => {
+  const line = JSON.stringify({
+    type: 'error',
+    sessionID: 'ses_x',
+    error: {
+      type: 'provider.auth',
+      message: 'Upstream request failed: An active OpenCode Go subscription is required to use Go models.',
+      status: 403,
+    },
+  })
+  // a line carrying a sessionID emits the session event first, so find the error rather than
+  // assuming its position
+  const errorOf = (l: string) => opencodeAdapter.parse(l).find((e) => e.t === 'error')
+  const kindOf = (l: string): string => {
+    const e = errorOf(l)
+    return e && e.t === 'error' ? e.kind : 'no error event'
+  }
+  const event = errorOf(line)
+  expect(event && event.t === 'error' ? event.kind : null).toBe('auth')
+  expect(event && event.t === 'error' ? event.message : '').toContain('subscription is required')
+
+  // a 429 is a rate limit whatever the prose says, and an unrecognised field falls back to the text
+  expect(kindOf(JSON.stringify({ type: 'error', error: { type: 'provider.rate', message: 'slow down please', status: 429 } }))).toBe('rate')
+  expect(kindOf(JSON.stringify({ type: 'error', error: { type: 'provider.weird', message: 'something new', status: 500 } }))).toBe('upstream')
+  // and a plain message with no fields still goes through the prose classifier
+  expect(kindOf(JSON.stringify({ type: 'error', error: { message: 'not logged in' } }))).toBe('auth')
+})

@@ -14,6 +14,22 @@ function toolDetail(input: Record<string, unknown> | undefined): { detail?: stri
   return {}
 }
 
+// opencode's own words for what went wrong, preferred over reading its prose. `provider.auth` and
+// 403 both mean the agent cannot work until something outside the turn changes, which is what
+// konvoy's `auth` kind is for; 429 is the rate window. Anything else it files as a provider problem
+// is upstream - reachable but refusing - and a message with no fields falls back to the classifier.
+function opencodeErrorKind(
+  error: { type?: string; status?: number } | undefined,
+  message: string,
+): 'auth' | 'rate' | 'upstream' | 'crash' | 'timeout' | 'interrupted' | 'unknown' {
+  const kind = error?.type ?? ''
+  const status = error?.status
+  if (kind.endsWith('.auth') || status === 401 || status === 403) return 'auth'
+  if (kind.endsWith('.rate') || status === 429) return 'rate'
+  if (kind.startsWith('provider.') || (typeof status === 'number' && status >= 500)) return 'upstream'
+  return classifyError(message)
+}
+
 export const opencodeAdapter: Adapter = {
   id: 'opencode',
   bin: 'opencode',
@@ -81,9 +97,16 @@ export const opencodeAdapter: Adapter = {
         break
       }
       case 'error': {
-        const error = o.error as { message?: string; data?: { message?: string } } | undefined
+        const error = o.error as
+          | { type?: string; status?: number; message?: string; data?: { message?: string } }
+          | undefined
         const message = error?.data?.message ?? error?.message ?? ''
-        events.push({ t: 'error', message, kind: classifyError(message) })
+        // opencode names the kind itself (`provider.auth`) and carries the HTTP status. Both are
+        // authoritative where konvoy's prose matching is inference: captured 2026-09-23 as
+        // `{type: "provider.auth", status: 403}` on a subscription refusal, which a message regex
+        // catches only for the exact wording somebody happened to see. The field holds for the
+        // refusals nobody has written a pattern for yet, so it decides when it is present.
+        events.push({ t: 'error', message, kind: opencodeErrorKind(error, message) })
         break
       }
     }
