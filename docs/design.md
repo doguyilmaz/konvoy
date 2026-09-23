@@ -385,6 +385,16 @@ so the saving is bought by making the agent worse at the work in front of it. An
 wins in both directions, and `konvoy` prints what a `minimal` turn withheld before the first turn
 runs rather than leaving the agent to guess.
 
+**Confirmed live, 2026-09-23.** A `bun run smoke` run (two turns per agent, the second resumed)
+reported **96,849 tokens** for claude's pair, counting input and output across both. Two `minimal`
+turns would total roughly 41,600 against the table above, and two `inherit` turns roughly twice
+53,336 - so the figure rules `minimal` out and is consistent with `inherit`, which is what a turn
+the user drove is supposed to load. That is the reachability half the unit tests could not prove:
+the driver rule reaches a real command line, and the harness is not silently stripping a session
+the user started by hand. The same run resumed claude, kiro and opencode through their bindings
+and each carried its nonce back, so §4's central promise is measured rather than assumed. codex
+failed the run on a genuine account rate limit, correctly classified `rate` (see below).
+
 | | minimal | inherit |
 |---|---|---|
 | claude | `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --setting-sources ''` | no extra flags |
@@ -1246,9 +1256,13 @@ Where no gate is configured, `gate_passed` stays null and every rate reads as a 
 **Shipped (0.3)** - sessions and bindings, headless turns, `attach` and `attach --id`, envelope
 delegation, failover, the gate, `usage`, `--chart` and `dashboard`, `doctor`, `update`, `rename`,
 interactive mode; a signed and notarized brew cask, Linux tarballs, npm with provenance.
-**Next** - `harness: minimal` for kiro (a generated agent profile) and opencode
-(`OPENCODE_CONFIG`); the codex rate-limit stream shape captured, so an informational error item
-can be told from a failed turn.
+**Next** - nothing open. `harness: minimal` shipped for kiro, through a generated project agent
+profile, and for opencode, through its project config alone: the `OPENCODE_CONFIG*` variables this
+section once named turned out to ADD a config source rather than replace one (§18). The codex
+rate-limit stream is captured (`tests/fixtures/streams/codex-rate.jsonl`, 2026-09-23), and it
+answers the question this line used to ask: the skills-budget notice is an error ITEM, while the
+failure arrives as a top-level `error` line and again inside `turn.failed`. What remains is the
+owner's: re-capturing the two fixtures that have drifted from their installed CLIs, and a release.
 **Later** - `drive()` over each CLI's persistent protocol: live streaming, steer, cancel.
 Parallel worktrees with conflict-aware merge; tmux-backed live attach. Parley, party and
 formations (§23–25).
