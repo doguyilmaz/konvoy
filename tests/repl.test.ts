@@ -3,7 +3,7 @@ import { openDb } from '../src/store/db'
 import { configSchema } from '../src/config/schema'
 import { agentIds } from '../src/config/schema'
 import { createSession, getSessionBySlug, recordTurn, renameSession } from '../src/store/queries'
-import { runRepl, replHelp, messageSplitter, terminalIo, PASTE_ON, PASTE_OFF, type ReplIo, type InputStream } from '../src/commands/repl'
+import { runRepl, replHelp, messageSplitter, terminalIo, PASTE_ON, PASTE_OFF, type ReplIo, type InputStream, type RunExtras } from '../src/commands/repl'
 import type { Session } from '../src/types'
 
 const START = '\x1b[200~'
@@ -234,8 +234,12 @@ test('the REPL sends one turn for a pasted block, with every line of it', async 
 // post-processing the CLI listing with replaceAll('  konvoy ', '  /'), which also rewrote the
 // word "konvoy" inside a summary: the version row read "/and agent versions" to a real user.
 test('/help is one list on one column, and no summary is mangled', () => {
-  const lines = replHelp().trimEnd().split('\n')
+  // the commands, then a blank line, then the keys and prefixes
+  const [commands, keys] = replHelp().trimEnd().split('\n\n')
+  const lines = commands!.split('\n')
   expect(lines.length).toBeGreaterThan(15)
+  expect(keys).toContain('@agent <msg>')
+  expect(keys).toContain('esc')
 
   const starts = new Set<number>()
   for (const line of lines) {
@@ -291,4 +295,85 @@ test('the status line appears once a turn has been recorded, and not again until
   expect(status[0]).toContain('1 turn ·')
   expect(status[1]).toContain('2 turns ·')
   expect(status[1]).toContain('$0.03')
+})
+
+// The REPL's own words beyond the table. Each keeps the conversation where it is unless it says
+// otherwise: a mention asks once, a retry repeats, a model or effort change lasts until you leave.
+test('@agent asks another agent once and the prompt stays with the current one', async () => {
+  const h = harness(['@codex review the diff', 'next', '@kiro'])
+  await h.go()
+  expect(h.calls).toEqual([['s', 'send', 'codex', 'review the diff'], ['s', 'send', 'claude', 'next']])
+  // a bare mention switches, like /use
+  expect(h.out.at(-2)).toBe('kiro \u203a ')
+})
+
+test('/model and /effort change the current agent for this REPL, and only this one', async () => {
+  const seen: (string | undefined)[][] = []
+  const h = harness(['/model opus', '/effort low', 'go', '/use codex', 'then', '/model default', '/model -dangerous'])
+  h.run = (tokens: string[], slug: string, extras?: RunExtras) => {
+    h.calls.push([slug, ...tokens])
+    const c = extras?.cfg?.agents
+    seen.push([tokens[1], c?.claude?.model, c?.claude?.effort, c?.codex?.model])
+    return 0
+  }
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
+    expect(seen).toEqual([
+      ['claude', 'opus', 'low', undefined],
+      ['codex', 'opus', 'low', undefined],
+    ])
+    // a model string that would read as a flag on a command line is refused
+    expect(err.mock.calls.some((c) => String(c[0]).includes('-dangerous'))).toBe(true)
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('/retry sends the last prompt again, to the current agent or the one named', async () => {
+  const h = harness(['/retry', 'first try', '/retry', '/retry codex'])
+  h.run = (tokens, slug) => {
+    h.calls.push([slug, ...tokens])
+    if (tokens[0] === 'send') recordTurn(h.db, { sessionId: h.s.id, agent: tokens[1] as 'claude', prompt: tokens[2]!, final: 'f', exitCode: 0, costUsd: 0 })
+    return 0
+  }
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
+  } finally {
+    err.mockRestore()
+  }
+  expect(h.calls).toEqual([
+    ['s', 'send', 'claude', 'first try'],
+    ['s', 'send', 'claude', 'first try'],
+    ['s', 'send', 'codex', 'first try'],
+  ])
+})
+
+test('a reopened session picks the conversation up with the agent it was last talking to', async () => {
+  const h = harness(['hi'])
+  recordTurn(h.db, { sessionId: h.s.id, agent: 'opencode', prompt: 'p', final: 'f', exitCode: 0, costUsd: 0 })
+  await h.go()
+  expect(h.calls).toEqual([['s', 'send', 'opencode', 'hi']])
+})
+
+test('!command runs in the session directory with the terminal handed over, and is not a turn', async () => {
+  const dir = `/tmp/konvoy-test-shell-${Bun.nanoseconds()}`
+  await Bun.write(`${dir}/marker`, '')
+  const db = openDb(':memory:')
+  const cfg = configSchema.parse({})
+  const s = createSession(db, { slug: 's', goal: '', cwd: dir, lead: 'claude' })
+  const events: string[] = []
+  const io: ReplIo = {
+    lines: lines('!touch shelled'),
+    write: () => {},
+    tty: false,
+    pause: () => events.push('pause'),
+    resume: () => events.push('resume'),
+  }
+  const calls: string[][] = []
+  await runRepl(io, db, cfg, dir, s, (tokens) => (calls.push(tokens), 0))
+  expect(await Bun.file(`${dir}/shelled`).exists()).toBe(true)
+  expect(calls).toEqual([])
+  expect(events).toEqual(['pause', 'resume'])
 })

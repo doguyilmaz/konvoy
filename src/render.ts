@@ -433,6 +433,8 @@ export interface BannerFacts {
   goal?: string
   /** who is riding along: installed agents are filled, missing ones hollow */
   roster?: readonly { agent: string; ready: boolean }[]
+  /** a session reopened: who answered last, how long ago, and what they were asked */
+  last?: { agent: string; ago: string; prompt: string }
   columns?: number
 }
 
@@ -463,6 +465,7 @@ export function sessionBanner(facts: BannerFacts, color: boolean | ColorLevel): 
     ])
   }
   rows.push(['dir', p.dim(facts.dir)])
+  if (facts.last) rows.push(['last', `${paint(facts.last.agent)(facts.last.agent)} ${p.dim(`${facts.last.ago} ›`)} ${facts.last.prompt}`])
 
   const title = `${paint(facts.agent)('✻')} ${p.bold('konvoy')} ${p.dim(facts.version)}`
   const body = [title, '', ...rows.map(([k, v]) => `  ${p.dim(k.padEnd(8))}${v}`)]

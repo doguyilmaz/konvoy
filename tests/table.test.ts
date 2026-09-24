@@ -110,12 +110,12 @@ test('a formatter stays plain even where colour is available, and the edge helpe
       { agent: 'claude', status: 'bound', model: 'opus', effort: 'high', foreignId: 'abc', turns: 1, costUsd: 0.1, credits: 0 },
     ])).not.toContain('\x1b[')
     // and the command edge resolves the environment's answer, which here is yes
-    expect(outputColor()).toBe(true)
+    expect(outputColor()).toBeGreaterThan(0)
     expect(table(['AGENT'], [['claude']], { color: outputColor() })).toContain('\x1b[')
 
     // NO_COLOR outranks it, which is what a user who turned colour off expects
     Bun.env.NO_COLOR = '1'
-    expect(outputColor()).toBe(false)
+    expect(outputColor()).toBe(0)
   } finally {
     if (before.no === undefined) delete Bun.env.NO_COLOR
     else Bun.env.NO_COLOR = before.no

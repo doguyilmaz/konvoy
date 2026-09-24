@@ -101,26 +101,31 @@ starts with, the one bare `konvoy` talks to first; with none configured it is cl
 ```
   konvoy                                     start: resume this directory's session or create one, then talk
 
-  konvoy new ["<goal>"]                      create a session in this directory
-  konvoy send <agent> "<msg>"                run one turn against one agent
-  konvoy ls                                  list sessions
+  konvoy new ["<goal>"] [--lead <agent>]     create a session in this directory
+  konvoy send <agent> "<msg>"                run one turn against one agent (- reads stdin)
+  konvoy ls [--json]                         list sessions
   konvoy resume [session]                    make a session current and show its roster
-  konvoy config get|set                      read or write layered configuration
+  konvoy log [--limit N] [--json]            recent turns: who, what, how each ended
+  konvoy show [N]                            print a turn in full, the latest by default
+  konvoy config get|set|unset|path           read or write layered configuration
   konvoy rm <session> --yes                  delete a konvoy session (foreign sessions survive)
   konvoy rename <session> <new-name>         rename a session; its .konvoy folder follows
-  konvoy roster                              who is in the convoy
-  konvoy usage [--all] [--chart]             what this session spent, per agent
+  konvoy roster [--json]                     who is in the convoy
+  konvoy usage [--all] [--chart] [--json]    what this session spent, per agent
   konvoy status                              versions, auth and roster
   konvoy attach <agent> [--id <session-id>]  open that agent's own interface, same session
   konvoy doctor                              check installs, logins, effort and model overlap
   konvoy update [--all]                      update konvoy, and with --all the agent CLIs
   konvoy version                             konvoy and agent versions
-  konvoy dashboard [--port N]                open a local page with the same numbers
+  konvoy dashboard [--port N] [--no-open]    open a local page with the same numbers
+  konvoy completion bash|zsh|fish            print a shell completion script
 ```
 
 This block is the command table in `src/commands/table.ts` as `konvoy help` prints it;
 `tests/docs.test.ts` fails when the two drift. Every command takes `--session <slug>`; without
-it the session bound to the current directory is used. `konvoy start` is an alias of `new`.
+it the session bound to the current directory is used. Aliases: `start` for `new`, `history` for
+`log`, `last` for `show`, `agents` for `roster`, `cost` for `usage`, `sessions` and `list` for `ls`. A flag a
+command does not read is refused by name, with the nearest one it does, rather than ignored.
 
 ## 7. Architecture
 
@@ -130,6 +135,11 @@ src/
   args.ts         argument parsing
   commands/       one file per command; table.ts is the one list the CLI, usage and doc checks
                   derive from; repl.ts is interactive mode (§34)
+  editor.ts       the REPL's raw-mode line editor: keys, editing, history, popup (§34)
+  render.ts       a turn on screen: the live region, tool lines, the footer (§35)
+  markdown.ts     an answer rendered a line at a time, for a terminal only
+  style.ts term.ts  colour depth and agent colours; terminal cell widths
+  history.ts      the prompt's per-project history
   core/
     session.ts    send(): lock, prelude, turn, handoff, failover
     turn.ts       one turn: spawn, stream, normalize, persist
@@ -1138,6 +1148,21 @@ at most the three most recent turns, each truncated. When turns are dropped, the
 many - a receiver that knows it is seeing a window behaves differently from one that believes it
 is seeing everything.
 
+### Only what the reader lacks (2026-09-24)
+
+A prelude used to quote the session's last three turns to every turn, including to an agent
+resuming its own session, whose own transcript already held them. That paid for a full prelude on
+every turn of a single-agent session and told the reader nothing new; and because the goal only
+travelled inside a prelude, and a session's first turn had none, the first agent of every session
+never received the goal at all. The window is now relative to its reader (`buildPrelude`'s `for`):
+only turns after the reader's own last one are quoted, a reader with no turn in the session yet is
+given the goal on first contact, and an agent continuing its own session receives its prompt alone.
+The git facts beside the turns are gathered only when turns are quoted, so that last case also
+spawns no git. A failover successor reads the window as it stood before the send began (`upTo`), so
+the blocked attempt at the same question is never quoted back to the agent taking it over; a handoff
+recipient reads it after the sender's turn, with facts taken then rather than before it. A turn that
+failed is named as unfinished instead of quoted as an empty answer.
+
 ## 29. Machine facts travel as a table
 
 konvoy computes the facts it supplies - changed files, commit range, per-agent turns and spend -
@@ -1301,15 +1326,55 @@ formations (§23–25).
 ## 34. Interactive mode
 
 Bare `konvoy` resumes the session bound to the current directory, or creates one named
-`<directory>-<4 hex>` with an empty goal, and reads stdin line by line. Plain text runs a turn
-against the current agent, the lead at first; after a turn the current agent becomes whichever
-agent recorded it, because failover never falls back. A line starting with `/` is a command:
-`/use`, `/goal`, `/help` and `/quit` live only inside; every other `/<name>` is the command table
-with the current session implied (`/rename <new>` needs no old name, `/attach` defaults to the
-current agent, `/new` and `/resume` switch the session). Prompts appear only on a TTY, so piped
-stdin runs one turn per line and exits at EOF. On a TTY konvoy also enables bracketed paste
-(DECSET 2004) and treats everything the terminal brackets as a single message: a pasted block is
-one turn carrying all of its lines, where reading the tty line by line made it one turn per line
-and sent the first fragment on its own. A terminal that does not support the mode sends no
-markers and behaves as before. Ctrl-C keeps its meaning from section 13: it stops
-the running turn and the process. The subcommands remain the scripting surface.
+`<directory>-<4 hex>` with an empty goal, and talks to the agent that answered last in it (the lead
+for a session with no turns). Plain text runs a turn against the current agent; after a turn the
+current agent becomes whichever agent recorded it, because failover never falls back. A line
+starting with `/` is a command: `/use`, `/model`, `/effort`, `/retry`, `/goal`, `/clear`, `/help` and
+`/quit` live only inside; every other `/<name>` is the command table with the current session
+implied (`/rename <new>` needs no old name, `/attach` defaults to the current agent, `/new` and
+`/resume` switch the session, and a session in another directory brings its own config).
+`@codex <msg>` asks another agent once without switching to it, and `!<command>` runs a shell
+command in the session's directory with the terminal handed over.
+
+**The line editor, added 2026-09-24.** On a terminal konvoy puts stdin in raw mode and draws its
+own prompt the way the agent CLIs draw theirs (measured from their sources and binaries: Claude
+Code, codex-rs/tui, opencode's TUI, the kiro-cli and agy bundles): the input between two rules, a
+footer under it with the session's total and the agent's model, effort and permission, and a popup
+while a `/` word, an `@` mention or a command's argument is being typed. Up and Down walk the
+project's own history (`~/.local/share/konvoy/history.jsonl`, per directory), Ctrl-R searches it,
+`\`+Enter, Alt+Enter, Ctrl-J and a Shift+Enter the terminal reports (kitty protocol or
+modifyOtherKeys) insert a newline, Shift-Tab moves to the next enabled agent, and `?` on an empty
+line lists the keys. A bracketed paste lands in the line instead of being sent; one longer than four
+lines or 600 characters is held under a `[Pasted text #n +L lines]` placeholder that the submitted
+line expands again and that Backspace removes whole.
+
+Ctrl-C clears the line, and on an empty line arms an exit that a second Ctrl-C takes; Ctrl-D leaves
+from an empty line. During a turn the keyboard stays watched: Esc or Ctrl-C stops the agent
+(SIGTERM, SIGKILL after the same grace a timeout gets), records the turn as `interrupted` - the kind
+that never moves a failover chain and is never gated - and returns to the prompt with konvoy still
+running, which section 13's "Ctrl-C stops the process" could not offer. Anything else typed meanwhile
+is kept and appears in the next prompt. An attached TUI, a `!` command and every other command get
+the terminal back in cooked mode with stdin left alone.
+
+Without a terminal - piped stdin, a script, a stream that cannot go raw - konvoy reads a line at a
+time exactly as before: no prompt, one turn per line, EOF ends it, and bracketed paste (DECSET 2004)
+still turns a pasted block into one message. The subcommands remain the scripting surface.
+
+## 35. A turn on screen
+
+The renderer (`src/render.ts`) owns a live region on stderr: a status line while the agent works or
+thinks (a turning star, the elapsed seconds, how to interrupt, and the title of a thought when the
+CLI names one), the running tool's line, and the line of the answer still being written. Every
+permanent write - a settled tool line, a completed line of the answer, the footer - erases the
+region first and redraws it after, inside one DEC 2026 synchronized-output frame, so nothing is left
+behind and a terminal that supports the mode never shows a half-drawn frame. The region is capped
+well inside the screen, since a redraw has to move back up over it.
+
+On a terminal the answer is held a line at a time and rendered as Markdown (headings, lists, emphasis,
+code spans and fences, quotes, rules, tables); to a pipe or a file it is the agent's exact bytes, as
+it always was, so `konvoy send ... > file` still holds exactly the answer. claude streams token by
+token with `--include-partial-messages`: each text block arrives as deltas and is then repeated whole
+in the message that closes it, so the adapter's per-turn parser (`Adapter.parser`) skips the complete
+message for exactly the blocks whose deltas it saw. Tool lines share one vocabulary across the five
+CLIs (codex's `command_execution` is `Shell`, its login-shell wrapper unwrapped; kiro reads ACP kind
+and location), and claude's `rate_limit_event` names a quota window near its edge after the footer.

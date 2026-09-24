@@ -32,4 +32,5 @@ export function home(): string {
 export const configDir = (): string => join(home(), '.config', 'konvoy')
 const dataDir = (): string => join(home(), '.local', 'share', 'konvoy')
 export const dbPath = (): string => join(dataDir(), 'konvoy.db')
+export const historyPath = (): string => join(dataDir(), 'history.jsonl')
 export const sessionDir = (cwd: string, slug: string): string => join(cwd, '.konvoy', slug)

@@ -83,7 +83,14 @@ export const mutations: Mutation[] = [
     from: ["  assertSafe(dotted)", "  const keys = dotted.split('.')"].join('\n'),
     to: "  const keys = dotted.split('.')",
     tests: ['tests/config-write.test.ts'],
+  },  {
+    name: 'unsetPath skips the reserved-key guard, so `config unset __proto__.x` walks onto Object.prototype',
+    file: 'src/commands/config.ts',
+    from: ["  assertSafe(dotted)", "  const keys: string[] = dotted.split('.')"].join('\n'),
+    to: "  const keys: string[] = dotted.split('.')",
+    tests: ['tests/config-write.test.ts'],
   },
+
 
   // --- the error-kind exemption (src/core/turn.ts, src/cli.ts, src/core/session.ts, src/commands/attach.ts) ---
   {
@@ -350,6 +357,7 @@ export const mutations: Mutation[] = [
       '    aliases: [],',
       "    usage: 'rm <session> --yes',",
       "    summary: 'delete a konvoy session (foreign sessions survive)',",
+      "    flags: ['yes'],",
       '  },',
     ].join('\n'),
     to: '',
@@ -970,8 +978,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the prompt keeps the agent the user chose even after failover moved the turn',
     file: 'src/commands/repl.ts',
-    from: 'if (moved && moved !== agent) agent = moved',
-    to: 'if (moved && moved === agent) agent = moved',
+    from: 'if (follow && moved && moved !== agent) agent = moved',
+    to: 'if (follow && moved && moved === agent) agent = moved',
     tests: ['tests/repl.test.ts'],
   },
   {
@@ -1509,7 +1517,7 @@ export const mutations: Mutation[] = [
   {
     name: 'colour is applied before padding, so an escape sequence shifts every column after it',
     file: 'src/format.ts',
-    from: '        const pad = \' \'.repeat(Math.max(0, widths[slot]! - raw.length))\n        const painted = paintCell(raw, col)',
+    from: '        const pad = \' \'.repeat(Math.max(0, widths[slot]! - stringWidth(raw)))\n        const painted = paintCell(raw, col)',
     to: '        const painted = paintCell(raw, col)\n        const pad = \' \'.repeat(Math.max(0, widths[slot]! - painted.length))',
     tests: ['tests/table.test.ts'],
   },
@@ -1573,8 +1581,8 @@ export const mutations: Mutation[] = [
   {
     name: 'a command stops resolving colour at its edge, so roster is plain even in a terminal',
     file: 'src/format.ts',
-    from: 'export const outputColor = (): boolean => colorEnabled(Bun.env, Boolean(process.stdout.isTTY))',
-    to: 'export const outputColor = (): boolean => false',
+    from: 'export const outputColor = (): ColorLevel => colorLevel(Bun.env, Boolean(process.stdout.isTTY))',
+    to: 'export const outputColor = (): ColorLevel => 0',
     tests: ['tests/table.test.ts'],
   },
   // --- the roster's size is derived, so a fifth agent cannot be added half-way ---

@@ -250,6 +250,13 @@ test('nothing animates on a pipe, and nothing animates when no tool is running',
   plain.tick()
   expect(piped.err.join('')).toBe('')
 
+  // stdout a terminal and stderr a log: the line being written is held for stdout, and the log
+  // still gets no live region drawn into it
+  const split = harness({ tty: false, outTty: true })
+  const view = turnRender('claude', split.deps)
+  view.onEvent({ t: 'text', text: 'half a line' })
+  expect(split.err.join('')).toBe('')
+
   // a terminal is never left looking hung: before the first event arrives the agent is working
   const tty = harness({ tty: true, hint: 'esc to interrupt' })
   const idle = turnRender('claude', tty.deps)

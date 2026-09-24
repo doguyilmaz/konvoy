@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { coerce, getPath, setPath } from '../src/commands/config'
+import { coerce, getPath, isPrivileged, setPath, unsetPath } from '../src/commands/config'
 import { configSchema } from '../src/config/schema'
 
 test('values are coerced to their obvious type', () => {
@@ -45,4 +45,30 @@ test('a dotted path cannot reach Object.prototype', () => {
 test('ordinary keys that merely contain a reserved word still work', () => {
   expect(setPath({}, 'agents.claude.model', 'opus')).toEqual({ agents: { claude: { model: 'opus' } } })
   expect(setPath({}, 'defaults.prototypeMode', 'true')).toEqual({ defaults: { prototypeMode: true } })
+})
+
+test('a list or an object is written as JSON, so a failover chain can be set from the command line', () => {
+  expect(coerce('["codex","claude"]')).toEqual(['codex', 'claude'])
+  expect(coerce('{"enabled":true}')).toEqual({ enabled: true })
+  expect(coerce('null')).toBe(null)
+  // not JSON after all: kept as the string it was
+  expect(coerce('[not json')).toBe('[not json')
+  const next = setPath({}, 'failover.chain', '["codex","claude"]')
+  expect(configSchema.safeParse(next).success).toBe(true)
+})
+
+test('unset removes a key and the objects it leaves empty, and says when there was nothing to remove', () => {
+  const start = { agents: { codex: { model: 'gpt-6-astra' } }, defaults: { effort: 'high' } }
+  expect(unsetPath(start, 'agents.codex.model')).toEqual({ next: { defaults: { effort: 'high' } }, found: true })
+  expect(unsetPath(start, 'agents.kiro.model').found).toBe(false)
+  expect(() => unsetPath({}, '__proto__.polluted')).toThrow()
+})
+
+// load.ts strips these from a project file at every load; writing one there reported success and
+// was then ignored on every run after it
+test('the keys only the global config may set are recognised before a project write', () => {
+  for (const key of ['gate.command', 'defaults.permission', 'defaults.harness', 'agents.codex.bin', 'agents.claude.permission']) {
+    expect(isPrivileged(key), key).toBe(true)
+  }
+  for (const key of ['defaults.effort', 'agents.codex.model', 'failover.chain', 'gatekeeper']) expect(isPrivileged(key), key).toBe(false)
 })

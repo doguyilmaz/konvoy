@@ -1,7 +1,7 @@
 {
   "name": "@doguyilmaz/konvoy",
   "version": "0.3.2",
-  "description": "One session across Claude Code, Codex, Kiro CLI and opencode: bind, hand off, fail over.",
+  "description": "One session across Claude Code, Codex, Kiro CLI, opencode and Antigravity CLI: bind, hand off, fail over.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -17,6 +17,8 @@
     "codex",
     "kiro",
     "opencode",
+    "antigravity",
+    "agy",
     "bun",
     "ai-agents",
     "developer-tools"
