@@ -75,3 +75,7 @@ test('quotes and rules are drawn, and a table keeps its columns', () => {
   expect(row).toBe('<dim>|</dim> a <dim>|</dim> <b>b</b> <dim>|</dim>')
   expect(sep).toBe('<dim>|---|---|</dim>')
 })
+
+test('a heading keeps a # that is part of its words', () => {
+  expect(render(['## Learning C#', '# Title ##'])).toEqual(['<b><a>Learning C#</a></b>', '<b><a>Title</a></b>'])
+})

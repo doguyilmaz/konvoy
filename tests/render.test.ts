@@ -454,3 +454,28 @@ test('an escape sequence in the streamed answer never reaches the terminal', () 
     expect(view.streamed()).toBe('safe text\n')
   }
 })
+
+// claude's final is its last message only. A turn that spoke, called a tool and spoke again streamed
+// both; the final is the tail of that, and printing it again doubled the answer's last paragraph.
+test('a final that the stream already carried as its tail is not printed again', () => {
+  expect(remainder('The version is 1.0.0.', "I'll read package.json.The version is 1.0.0.")).toBe('')
+  expect(remainder('The version is 1.0.0.', "I'll read package.json.\nThe version is 1.0.0.\n")).toBe('')
+  // a final with something the stream never showed is still printed whole
+  expect(remainder('A different summary.', "I'll read package.json.")).toBe('A different summary.')
+})
+
+test('a streamed line repaints at most once a frame, and a completed line at once', () => {
+  const h = harness({ tty: true, outTty: true })
+  const view = turnRender('claude', h.deps)
+  view.onEvent({ t: 'text', text: 'a' })
+  const after = h.err.length
+  // the same instant: held for the next frame
+  view.onEvent({ t: 'text', text: 'b' })
+  expect(h.err.length).toBe(after)
+  h.tick(40)
+  view.onEvent({ t: 'text', text: 'c' })
+  expect(h.err.length).toBeGreaterThan(after)
+  expect(h.screen.lines()[0]).toBe('abc')
+  view.onEvent({ t: 'text', text: '\n' })
+  expect(h.out.join('')).toBe('abc\n')
+})

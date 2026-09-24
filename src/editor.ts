@@ -678,7 +678,9 @@ function layout(
       rows.push({ cells: [], lead: false })
       width = 0
     }
-    rows.at(-1)!.cells.push({ ch, paint: painting })
+    // a tab would jump to the terminal's next tab stop, a width the layout cannot know: it is drawn
+    // as the one cell it is counted as, and sent as the tab it is
+    rows.at(-1)!.cells.push({ ch: ch === '\t' ? ' ' : ch, paint: painting })
     width += w
     i += ch.length
   }

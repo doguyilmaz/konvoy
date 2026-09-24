@@ -56,7 +56,7 @@ function harness(input: string[], tty = true) {
 test('plain text is a turn against the current agent, and /use changes the agent', async () => {
   const h = harness(['hello', '/use codex', 'review it'])
   expect(await h.go()).toBe(0)
-  expect(h.calls).toEqual([['s', 'send', 'claude', 'hello'], ['s', 'send', 'codex', 'review it']])
+  expect(h.calls).toEqual([['s', 'send', 'claude', '--', 'hello'], ['s', 'send', 'codex', '--', 'review it']])
   expect(h.out.filter((t) => t.endsWith('\u203a '))).toEqual(['claude \u203a ', 'claude \u203a ', 'codex \u203a ', 'codex \u203a '])
 })
 
@@ -64,11 +64,11 @@ test('after a turn the prompt follows the agent that actually answered', async (
   const h = harness(['hello', 'again'])
   h.run = (tokens, slug) => {
     h.calls.push([slug, ...tokens])
-    recordTurn(h.db, { sessionId: h.s.id, agent: 'kiro', prompt: tokens[2]!, final: 'f', exitCode: 0, costUsd: 0 })
+    recordTurn(h.db, { sessionId: h.s.id, agent: 'kiro', prompt: tokens[3]!, final: 'f', exitCode: 0, costUsd: 0 })
     return 0
   }
   await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
-  expect(h.calls[1]).toEqual(['s', 'send', 'kiro', 'again'])
+  expect(h.calls[1]).toEqual(['s', 'send', 'kiro', '--', 'again'])
 })
 
 test('/use rejects an unknown or disabled agent and keeps the current one', async () => {
@@ -77,7 +77,7 @@ test('/use rejects an unknown or disabled agent and keeps the current one', asyn
   const err = spyOn(console, 'error').mockImplementation(() => {})
   try {
     await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
-    expect(h.calls).toEqual([['s', 'send', 'claude', 'x']])
+    expect(h.calls).toEqual([['s', 'send', 'claude', '--', 'x']])
     expect(err.mock.calls.map((c) => String(c[0]))).toEqual([
       `unknown agent "bogus" - expected one of ${agentIds.join(', ')}`,
       'codex is disabled in this konvoy config',
@@ -96,7 +96,7 @@ test('/rename implies the current session and the prompt picks up the new name',
   }
   await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
   expect(h.calls[0]).toEqual(['s', 'rename', 's', 'Fresh Name'])
-  expect(h.calls[1]).toEqual(['fresh-name', 'send', 'claude', 'x'])
+  expect(h.calls[1]).toEqual(['fresh-name', 'send', 'claude', '--', 'x'])
   // the slug lives in the banner and in /roster, so a rename does not change the prompt
   expect(h.out.at(-2)).toBe('claude \u203a ')
 })
@@ -105,7 +105,7 @@ test('/goal stores the goal without leaving the loop', async () => {
   const h = harness(['/goal ship it', 'x'])
   await h.go()
   expect(getSessionBySlug(h.db, 's')?.goal).toBe('ship it')
-  expect(h.calls).toEqual([['s', 'send', 'claude', 'x']])
+  expect(h.calls).toEqual([['s', 'send', 'claude', '--', 'x']])
 })
 
 test('/quit leaves before the remaining input is read, and /help lists the commands', async () => {
@@ -140,7 +140,7 @@ test('without a tty nothing is prompted and EOF ends the loop', async () => {
   const h = harness(['hello'], false)
   expect(await h.go()).toBe(0)
   expect(h.out).toEqual([])
-  expect(h.calls).toEqual([['s', 'send', 'claude', 'hello']])
+  expect(h.calls).toEqual([['s', 'send', 'claude', '--', 'hello']])
 })
 
 test('stdin is paused for the whole run of every command, so an attached TUI owns the keyboard', async () => {
@@ -227,7 +227,7 @@ test('the REPL sends one turn for a pasted block, with every line of it', async 
     return 0
   })
 
-  expect(calls).toEqual([['send', 'claude', 'fix the refresh\nand the retry\nand the test']])
+  expect(calls).toEqual([['send', 'claude', '--', 'fix the refresh\nand the retry\nand the test']])
 })
 
 // /help was two blocks padded to two different widths, and the inner list was produced by
@@ -302,7 +302,7 @@ test('the status line appears once a turn has been recorded, and not again until
 test('@agent asks another agent once and the prompt stays with the current one', async () => {
   const h = harness(['@codex review the diff', 'next', '@kiro'])
   await h.go()
-  expect(h.calls).toEqual([['s', 'send', 'codex', 'review the diff'], ['s', 'send', 'claude', 'next']])
+  expect(h.calls).toEqual([['s', 'send', 'codex', '--', 'review the diff'], ['s', 'send', 'claude', '--', 'next']])
   // a bare mention switches, like /use
   expect(h.out.at(-2)).toBe('kiro \u203a ')
 })
@@ -334,7 +334,7 @@ test('/retry sends the last prompt again, to the current agent or the one named'
   const h = harness(['/retry', 'first try', '/retry', '/retry codex'])
   h.run = (tokens, slug) => {
     h.calls.push([slug, ...tokens])
-    if (tokens[0] === 'send') recordTurn(h.db, { sessionId: h.s.id, agent: tokens[1] as 'claude', prompt: tokens[2]!, final: 'f', exitCode: 0, costUsd: 0 })
+    if (tokens[0] === 'send') recordTurn(h.db, { sessionId: h.s.id, agent: tokens[1] as 'claude', prompt: tokens[3]!, final: 'f', exitCode: 0, costUsd: 0 })
     return 0
   }
   const err = spyOn(console, 'error').mockImplementation(() => {})
@@ -344,9 +344,9 @@ test('/retry sends the last prompt again, to the current agent or the one named'
     err.mockRestore()
   }
   expect(h.calls).toEqual([
-    ['s', 'send', 'claude', 'first try'],
-    ['s', 'send', 'claude', 'first try'],
-    ['s', 'send', 'codex', 'first try'],
+    ['s', 'send', 'claude', '--', 'first try'],
+    ['s', 'send', 'claude', '--', 'first try'],
+    ['s', 'send', 'codex', '--', 'first try'],
   ])
 })
 
@@ -354,7 +354,7 @@ test('a reopened session picks the conversation up with the agent it was last ta
   const h = harness(['hi'])
   recordTurn(h.db, { sessionId: h.s.id, agent: 'opencode', prompt: 'p', final: 'f', exitCode: 0, costUsd: 0 })
   await h.go()
-  expect(h.calls).toEqual([['s', 'send', 'opencode', 'hi']])
+  expect(h.calls).toEqual([['s', 'send', 'opencode', '--', 'hi']])
 })
 
 test('!command runs in the session directory with the terminal handed over, and is not a turn', async () => {
@@ -376,4 +376,14 @@ test('!command runs in the session directory with the terminal handed over, and 
   expect(await Bun.file(`${dir}/shelled`).exists()).toBe(true)
   expect(calls).toEqual([])
   expect(events).toEqual(['pause', 'resume'])
+})
+
+// After a delegation the newest turn is the recipient's, and its prompt is the task konvoy wrote
+// for it. What the person asked last is the latest turn with no parent.
+test('/retry repeats what the person asked, not the task a handoff wrote', async () => {
+  const h = harness(['/retry'])
+  const asked = recordTurn(h.db, { sessionId: h.s.id, agent: 'claude', prompt: 'fix the login bug', final: 'f', exitCode: 0, costUsd: 0 })
+  recordTurn(h.db, { sessionId: h.s.id, agent: 'codex', prompt: 'run the test suite', final: 'f', exitCode: 0, costUsd: 0, parentTurnId: asked })
+  await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
+  expect(h.calls).toEqual([['s', 'send', 'codex', '--', 'fix the login bug']])
 })

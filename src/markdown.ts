@@ -21,7 +21,7 @@ export interface MarkdownRenderer {
 }
 
 const FENCE = /^(\s*)(`{3,}|~{3,})\s*([\w+#.-]*)/
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/
+const HEADING = /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/
 const BULLET = /^(\s*)([-*+])\s+(.*)$/
 const ORDERED = /^(\s*)(\d{1,3}[.)])\s+(.*)$/
 const QUOTE = /^\s*>\s?(.*)$/

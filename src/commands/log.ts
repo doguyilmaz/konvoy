@@ -42,7 +42,8 @@ export function cmdLog(db: Database, cwd: string, opts: { slug?: string; limit?:
       turns.map((t, i) => [
         String(i + 1),
         ago(t.startedAt, now),
-        t.parentTurnId ? `${t.agent}` : t.agent,
+        // a turn konvoy started for the one above it - a handoff, a failover - is marked as one
+        t.parentTurnId ? `↳ ${t.agent}` : t.agent,
         outcome(t),
         t.exitCode === -1 ? '-' : duration(Math.max(0, t.endedAt - t.startedAt)),
         tokens(t.inputTokens),

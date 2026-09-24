@@ -447,3 +447,76 @@ test('an agent continuing its own session is sent its prompt alone, and the firs
   expect(seen[1]).toBe('second')
   expect(gitCalls).toBe(0)
 })
+
+// A rebind starts a NEW foreign session, which holds none of the agent's own turns. The window that
+// skips a reader's own turns assumes its session still has them; after a rebind it does not.
+test('a rebound agent is told the session as a stranger would be, its own old turns included', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'claude' })
+  const { recordTurn } = await import('../src/store/queries')
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'earlier ask', final: 'claude said the retry must be bounded', exitCode: 0, costUsd: 0 })
+  upsertBinding(db, { sessionId: s.id, agent: 'claude', foreignId: 'gone', effort: 'high', permission: 'edit' })
+  const seen: string[] = []
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: (ctx) => {
+      seen.push(withPrelude(ctx))
+      if (ctx.binding?.foreignId != null) {
+        return {
+          cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true })],
+          cwd: process.cwd(),
+          env: { ...(process.env as Record<string, string>), FAKE_AGENT_EXIT: '1', FAKE_AGENT_STDERR: 'No conversation found with session ID: gone' },
+        }
+      }
+      return { cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'result', subtype: 'success', result: 'ok' })], cwd: process.cwd() }
+    },
+  }
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await send({ db, cfg, detect: installed, adapterFor: () => adapter, facts: { git: async () => '' } }, s, 'claude', 'next ask')
+  } finally {
+    err.mockRestore()
+  }
+  expect(seen).toHaveLength(2)
+  // resuming, claude's own session had its turn; rebound, it has to be told
+  expect(seen[0]).toBe('next ask')
+  expect(seen[1]).toContain('claude said the retry must be bounded')
+  expect(seen[1]).toContain('next ask')
+})
+
+test('Esc during a blocked head stops the send: the failover chain starts nobody else', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'g', lead: 'codex' })
+  const ran: string[] = []
+  const controller = new AbortController()
+  const adapterFor = (agent: AgentId): Adapter => ({
+    ...claudeAdapter,
+    id: agent,
+    turn: () => {
+      ran.push(agent)
+      return {
+        cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'result', is_error: true, result: '503 Service Unavailable' })],
+        cwd: process.cwd(),
+        env: { ...(process.env as Record<string, string>), FAKE_AGENT_EXIT: '1' },
+      }
+    },
+  })
+  // one upstream retry with a long backoff: the Esc lands while konvoy waits, after the head's turn
+  // has ended, which is the moment only the chain's own check can act on
+  const chained = configSchema.parse({ failover: { chain: ['codex', 'claude'], upstreamRetries: 1 } })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  const started = Date.now()
+  try {
+    await send({ db, cfg: chained, adapterFor, detect: installed, upstreamBackoffMs: 10_000, facts: { git: async () => '' } }, s, 'codex', 'go', {
+      signal: controller.signal,
+      onEvent: (e) => {
+        if (e.t === 'error') setTimeout(() => controller.abort(), 300)
+      },
+    })
+  } finally {
+    err.mockRestore()
+  }
+  expect(ran).toEqual(['codex'])
+  // and the backoff ended with the Esc instead of running out its ten seconds
+  expect(Date.now() - started).toBeLessThan(5000)
+})

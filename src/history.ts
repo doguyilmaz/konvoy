@@ -1,6 +1,10 @@
+import type { Database } from 'bun:sqlite'
+
 // What was typed at the prompt, kept across runs the way every shell and agent CLI keeps it, and
 // per project: the line you want back in a repository is the one you typed in that repository.
-// One JSON object per line, because an entry can itself span lines.
+// It lives in the store rather than a file of its own. Two REPLs open at once each rewrote a shared
+// file from their own copy and erased the other's entries; SQLite already serialises writers, and
+// the store is already private, which a prompt that held a pasted secret needs.
 export interface History {
   /** this project's entries, newest first, without repeats */
   entries: () => string[]
@@ -9,72 +13,34 @@ export interface History {
 
 const KEEP = 1000
 
-interface Entry {
-  cwd: string
-  text: string
-}
-
-function parse(raw: string): Entry[] {
-  const out: Entry[] = []
-  for (const line of raw.split('\n')) {
-    if (line.trim() === '') continue
-    try {
-      const e = JSON.parse(line) as Partial<Entry>
-      if (typeof e.cwd === 'string' && typeof e.text === 'string') out.push({ cwd: e.cwd, text: e.text })
-    } catch {
-      // a line torn by a crash mid-write costs that line, not the file
-    }
-  }
-  return out
-}
-
-// Owner-only, because what gets typed at a prompt includes what gets pasted into one. Bun.write's
-// `mode` is ignored for a string on Bun 1.4.2 (measured), so the file is made private once, when it
-// is created, with chmod resolved absolutely the way the store resolves mkdir.
-async function save(path: string, body: string): Promise<void> {
-  const created = !(await Bun.file(path).exists())
-  await Bun.write(path, body)
-  if (created) Bun.spawnSync([Bun.which('chmod') ?? '/bin/chmod', '600', path], { stdout: 'ignore', stderr: 'ignore' })
-}
-
-export async function fileHistory(path: string, cwd: string): Promise<History> {
-  const file = Bun.file(path)
-  let all: Entry[] = []
-  try {
-    if (await file.exists()) all = parse(await file.text())
-  } catch {
-    all = []
-  }
-  let writing: Promise<unknown> = Promise.resolve()
-
-  const entries = (): string[] => {
-    const seen = new Set<string>()
-    const out: string[] = []
-    for (let i = all.length - 1; i >= 0; i--) {
-      const e = all[i]!
-      if (e.cwd !== cwd || seen.has(e.text)) continue
-      seen.add(e.text)
-      out.push(e.text)
-    }
-    return out
-  }
-
+export function storeHistory(db: Database, cwd: string): History {
   return {
-    entries,
+    entries() {
+      const rows = db
+        .query('SELECT text FROM prompt_history WHERE cwd = $cwd ORDER BY id DESC LIMIT $limit')
+        .all({ cwd, limit: KEEP }) as { text: string }[]
+      return [...new Set(rows.map((r) => r.text))]
+    },
     add(text) {
       if (text.trim() === '') return
-      const last = all.at(-1)
-      if (last && last.cwd === cwd && last.text === text) return
-      all.push({ cwd, text })
-      if (all.length > KEEP) all = all.slice(-KEEP)
-      const body = `${all.map((e) => JSON.stringify(e)).join('\n')}\n`
-      // serialized, and never allowed to fail the prompt: history is a convenience
-      writing = writing.then(() => save(path, body)).catch(() => undefined)
+      try {
+        const last = db.query('SELECT text FROM prompt_history WHERE cwd = $cwd ORDER BY id DESC LIMIT 1').get({ cwd }) as
+          | { text: string }
+          | null
+        if (last?.text === text) return
+        db.query('INSERT INTO prompt_history (cwd, text, at) VALUES ($cwd, $text, $at)').run({ cwd, text, at: Date.now() })
+        db.query(
+          `DELETE FROM prompt_history WHERE cwd = $cwd AND id <= (
+             SELECT id FROM prompt_history WHERE cwd = $cwd ORDER BY id DESC LIMIT 1 OFFSET $keep)`,
+        ).run({ cwd, keep: KEEP })
+      } catch {
+        // history is a convenience: a store that cannot take the write never fails the prompt
+      }
     },
   }
 }
 
-/** history kept in memory only: a test, or a store that cannot be written */
+/** history kept in memory only: a test, or a prompt with no store behind it */
 export function memoryHistory(initial: string[] = []): History {
   const all = [...initial].reverse()
   return {

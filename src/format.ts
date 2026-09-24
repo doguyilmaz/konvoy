@@ -63,7 +63,11 @@ export function table(header: readonly string[], rows: readonly string[][], opts
 
   const paint = (value: string, col: number): string => {
     if (!color || value === '' || value === '-') return value
-    if (col === agentColumn) return paintAgent(value)(value)
+    if (col === agentColumn) {
+      // a turn konvoy started for another is marked `↳ agent`; the agent still wears its colour
+      const name = value.replace(/^↳ /, '')
+      return value.slice(0, value.length - name.length) + paintAgent(name)(name)
+    }
     const named = STATUS_COLOR[value]
     return named ? p[named](value) : value
   }

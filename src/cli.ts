@@ -4,10 +4,9 @@ import { parseArgs, type Args } from './args'
 import { effectiveHarness, loadConfig, resolveAgent } from './config/load'
 import { getSessionBySlug, listSessions, recentTurns } from './store/queries'
 import { agentIds } from './config/schema'
-import { getAdapter } from './adapters'
 import type { Config } from './config/schema'
 import { openDb } from './store/db'
-import { dbPath, historyPath, sessionDir } from './paths'
+import { dbPath, sessionDir } from './paths'
 import { sessionBanner } from './render'
 import { colorLevel } from './style'
 import { cmdNew } from './commands/new'
@@ -30,8 +29,9 @@ import { commandTable, formatRows, resolveCommandName, unknownFlag, type Command
 import { noSessionNamed, requireAgent, unknownCommand } from './commands/messages'
 import { replColor, replCompleter, runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
 import { terminalEditor, type RawInput } from './editor'
-import { fileHistory } from './history'
+import { storeHistory, type History } from './history'
 import { onExit } from './core/children'
+import { locate } from './core/detect'
 import { ago, tildify } from './format'
 import { oneLine } from './adapters/types'
 import { SHOW_CURSOR } from './term'
@@ -73,7 +73,20 @@ async function withStdin(prompt: string[]): Promise<string | null> {
   if (!prompt.includes('-')) return prompt.join(' ')
   if (process.stdin.isTTY) return null
   const piped = (await Bun.stdin.text()).replace(/\s+$/, '')
-  return prompt.map((word) => (word === '-' ? piped : word)).join(prompt.length > 1 ? '\n\n' : '')
+  // the words on either side of a `-` stay one sentence; the piped text is its own paragraph
+  const parts: string[] = []
+  let words: string[] = []
+  for (const word of prompt) {
+    if (word !== '-') {
+      words.push(word)
+      continue
+    }
+    if (words.length > 0) parts.push(words.join(' '))
+    parts.push(piped)
+    words = []
+  }
+  if (words.length > 0) parts.push(words.join(' '))
+  return parts.join('\n\n')
 }
 
 const flagNumber = (value: string | boolean | undefined): number | undefined =>
@@ -243,7 +256,7 @@ async function dispatch(command: string, rest: string[], cwd: string, slug: stri
 
 // A person at a terminal gets the line editor; anything else - a pipe, a script, a terminal that
 // cannot be put in raw mode - reads a line at a time, exactly as before.
-function editorIo(level: ReturnType<typeof replColor>, history: Awaited<ReturnType<typeof fileHistory>>, completer: ReturnType<typeof replCompleter>): ReplIo | null {
+function editorIo(level: ReturnType<typeof replColor>, history: History, completer: ReturnType<typeof replCompleter>): ReplIo | null {
   const stdin = process.stdin as unknown as Partial<RawInput> & { isTTY?: boolean }
   if (!stdin.isTTY || !process.stdout.isTTY || typeof stdin.setRawMode !== 'function') return null
   const write = (text: string): void => {
@@ -294,7 +307,7 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
     return 2
   }
   const level = replColor()
-  const history = given ? null : await fileHistory(historyPath(), session.cwd)
+  const history = given ? null : storeHistory(db, session.cwd)
   const io = given ?? (history ? editorIo(level, history, replCompleter(db, () => cfg)) : null) ?? terminalIo()
   // Only for a human at a terminal: a piped run is a script, and a banner in its output is noise.
   if (io.tty) {
@@ -309,13 +322,11 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
       model: lead.model,
       effort: lead.effort,
       goal: session.goal || undefined,
-      roster: agentIds
-        .filter((a) => resolveAgent(cfg, a).enabled)
-        .map((a) => {
-          const bin = resolveAgent(cfg, a).bin
-          const name = bin ?? getAdapter(a).bin
-          return { agent: a, ready: name.includes('/') || Bun.which(name) !== null }
-        }),
+      roster: await Promise.all(
+        agentIds
+          .filter((a) => resolveAgent(cfg, a).enabled)
+          .map(async (a) => ({ agent: a, ready: (await locate(a, { bin: resolveAgent(cfg, a).bin })).installed })),
+      ),
       columns: process.stdout.columns ?? 80,
       last: (() => {
         const t = recentTurns(db, session.id, 1)[0]

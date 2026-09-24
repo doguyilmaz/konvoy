@@ -15,7 +15,7 @@ import {
   getSessionBySlug,
   lastTurnAgent,
   listSessions,
-  recentTurns,
+  lastAskedPrompt,
   setGoal,
   usageForSession,
 } from '../store/queries'
@@ -338,7 +338,8 @@ export async function runRepl(
   }
 
   const turn = async (to: AgentId, text: string, follow: boolean): Promise<void> => {
-    await exec(['send', to, text], 'turn')
+    // after `--`: a message that starts with a dash is the person's words, not a flag
+    await exec(['send', to, '--', text], 'turn')
     // failover never falls back, so the agent that answered is the one to keep talking to
     const moved = lastTurnAgent(db, session.id)
     if (follow && moved && moved !== agent) agent = moved
@@ -465,11 +466,11 @@ export async function runRepl(
         say(`${agent} thinks at ${value} until you leave`)
       }
     } else if (cmd === 'retry') {
-      const previous = recentTurns(db, session.id, 1)[0]
+      const previous = lastAskedPrompt(db, session.id)
       const to = rest[0] ? requireAgent(rest[0]) : agent
-      if (!previous) console.error(`session ${session.slug} has no turn to retry`)
+      if (previous === null) console.error(`session ${session.slug} has no turn to retry`)
       else if (to && !resolveAgent(cfg, to).enabled) console.error(disabledAgent(to))
-      else if (to) await turn(to, previous.prompt, to === agent)
+      else if (to) await turn(to, previous, to === agent)
     } else if (cmd === 'clear') {
       if (io.editor) io.editor.clearScreen()
       else if (io.tty) io.write('\x1b[H\x1b[2J')
@@ -571,7 +572,9 @@ export function replCompleter(db: Database, cfg: () => Config): (buffer: string,
     else if (cmd === 'effort') items = EFFORTS.map((e) => ({ label: e, insert: e }))
     else if (cmd === 'config') items = ['get', 'set', 'unset', 'path'].map((e) => ({ label: e, insert: e }))
     else if (cmd === 'completion') items = ['bash', 'zsh', 'fish'].map((e) => ({ label: e, insert: e }))
-    const ranked = rank(items, typed)
+    // one word is all these take, so the word that completes them completes the command
+    const runs = ['use', 'effort', 'resume', 'attach', 'retry', 'completion'].includes(cmd)
+    const ranked = rank(items, typed).map((i) => (runs ? { ...i, run: true } : i))
     return ranked.length > 0 ? { start, items: ranked } : null
   }
 }

@@ -45,6 +45,7 @@ export interface TurnRender {
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
 const STARS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'] as const
 export const SPINNER_MS = 90
+const PREVIEW_MS = 30
 
 // DEC mode 2026: the terminal holds a redraw until it is complete, so erasing and repainting the
 // live region never shows as a flicker. A terminal that does not know the mode ignores it.
@@ -134,6 +135,9 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
   let running = true
   let wrote = false
   let liveRows = 0
+  // when the live region was last drawn: a streamed line updates it at most this often, since a
+  // repaint per token redraws the whole region for a change of a few cells
+  let paintedAt = Number.NEGATIVE_INFINITY
   // the line of the answer still being written, held back on a terminal until it is complete so
   // it can be rendered as a whole line; shown meanwhile in the live region
   let partial = ''
@@ -197,6 +201,7 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
     }
     deps.err(`${SYNC_ON}${eraseRows(liveRows)}`)
     liveRows = 0
+    paintedAt = deps.now()
     commit?.()
     const lines = liveLines()
     if (lines.length > 0) {
@@ -249,7 +254,8 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
     const lines = (partial + chunk).split('\n')
     partial = lines.pop() ?? ''
     if (lines.length === 0) {
-      paint()
+      // the spinner's own tick shows the rest within one frame
+      if (deps.now() - paintedAt >= PREVIEW_MS) paint()
       return
     }
     paint(() => {
@@ -387,9 +393,14 @@ function codePaint(level: boolean | ColorLevel): Paint {
 // the five CLIs was captured emitting a final that its own text events already carried in full
 // (tests/fixtures/streams), so this is normally empty - but an agent that only reports a final,
 // or reports more than it streamed, still has its answer printed instead of swallowed.
+//
+// claude's final is only its LAST message, so a turn that spoke before a tool call streamed more
+// than its final holds: the final then sits at the end of the stream, not at its start, and
+// reprinting it doubled the answer's closing paragraph.
 export function remainder(final: string, alreadyStreamed: string): string {
   if (alreadyStreamed === '') return final
   if (final === alreadyStreamed || final.trim() === alreadyStreamed.trim()) return ''
+  if (final.trim() !== '' && alreadyStreamed.includes(final.trim())) return ''
   if (final.startsWith(alreadyStreamed)) return final.slice(alreadyStreamed.length)
   return final
 }

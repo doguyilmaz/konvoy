@@ -236,3 +236,13 @@ test('a turn that failed is named as unfinished rather than quoted as an empty a
   expect(out).toContain('codex did not finish (rate)')
   expect(out).not.toContain('codex answered: \n')
 })
+
+// A turn the reader never processed - blocked before its prompt was taken in - is not "seen", or
+// every turn before it would be hidden from the reader on its next turn.
+test('a reader whose own last turn failed empty is still told what came before it', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'do it', exitCode: 0, costUsd: 0, final: 'codex moved the refresh' })
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'review', exitCode: 1, costUsd: 0, final: '' })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })
+  expect(out).toContain('codex moved the refresh')
+})

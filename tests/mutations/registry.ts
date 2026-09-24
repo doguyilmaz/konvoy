@@ -494,8 +494,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the replacement turn is recorded with no parentTurnId, losing the link to the turn it replaced',
     file: 'src/core/session.ts',
-    from: '        r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId)',
-    to: '        r = await runOnce(current, currentAdapter, ctxBuild, null)',
+    from: '        r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId, () => freshPrelude({ upTo }, facts))',
+    to: '        r = await runOnce(current, currentAdapter, ctxBuild, null, () => freshPrelude({ upTo }, facts))',
     tests: ['tests/failover.test.ts'],
   },
   {
@@ -621,8 +621,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the delegated turn is run with no parentTurnId, losing the link to the turn that handed it over',
     file: 'src/core/session.ts',
-    from: '      }),\n      turnId,\n    )\n  }',
-    to: '      }),\n      null,\n    )\n  }',
+    from: '      }),\n      turnId,\n      () => freshPrelude({}, handoffFacts),\n    )\n  }',
+    to: '      }),\n      null,\n      () => freshPrelude({}, handoffFacts),\n    )\n  }',
     tests: ['tests/delegation.test.ts'],
   },
   {
@@ -1699,8 +1699,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the prelude window ignores its reader, so an agent continuing its own session is quoted its own turns every turn',
     file: 'src/core/session.ts',
-    from: 'const opts = { recent: RECENT_TURNS, for: reader, ...window }',
-    to: 'const opts = { recent: RECENT_TURNS, ...window }',
+    from: 'withFacts({ recent: RECENT_TURNS, for: reader, ...window }, facts)',
+    to: 'withFacts({ recent: RECENT_TURNS, ...window }, facts)',
     tests: ['tests/session.test.ts'],
   },
   {
@@ -1804,15 +1804,15 @@ export const mutations: Mutation[] = [
   {
     name: 'a new store is left readable by anyone on the machine',
     file: 'src/store/db.ts',
-    from: "      if (current === 0 && path !== ':memory:') {",
-    to: '      if (false) {',
+    from: "      if (current < MIGRATIONS.length && path !== ':memory:') makePrivate(path)",
+    to: '',
     tests: ['tests/store.test.ts'],
   },
   {
-    name: 'the prompt history is left readable by anyone on the machine',
+    name: 'the prompt history is shared across projects, so Up in one repository recalls another',
     file: 'src/history.ts',
-    from: "  if (created) Bun.spawnSync([Bun.which('chmod') ?? '/bin/chmod', '600', path]",
-    to: "  if (false) Bun.spawnSync([Bun.which('chmod') ?? '/bin/chmod', '600', path]",
+    from: "        .query('SELECT text FROM prompt_history WHERE cwd = $cwd ORDER BY id DESC LIMIT $limit')",
+    to: "        .query('SELECT text FROM prompt_history WHERE $cwd = $cwd ORDER BY id DESC LIMIT $limit')",
     tests: ['tests/editor.test.ts'],
   },
   {
@@ -1835,5 +1835,69 @@ export const mutations: Mutation[] = [
     from: "|| item.status === 'failed'",
     to: '',
     tests: ['tests/adapter-codex.test.ts'],
+  },
+  // --- the review of the audit: windows after a rebind or a block, retry, remainder, dashes ---
+  {
+    name: "a turn its reader never processed counts as seen, hiding every turn before it from that reader",
+    file: 'src/core/prelude.ts',
+    from: " AND (final != '' OR exit_code = 0)",
+    to: '',
+    tests: ['tests/prelude.test.ts'],
+  },
+  {
+    name: 'a rebound agent is sent the prelude for a session it no longer has, so it starts blind',
+    file: 'src/core/session.ts',
+    from: '{ ...ctxBuild(), prelude: await rebound(), lease }',
+    to: '{ ...ctxBuild(), lease }',
+    tests: ['tests/session.test.ts'],
+  },
+  {
+    name: 'Esc during a blocked head still starts the next agent in the failover chain',
+    file: 'src/core/session.ts',
+    from: '      if (!isHead && opts.signal?.aborted) break\n',
+    to: '',
+    tests: ['tests/session.test.ts'],
+  },
+  {
+    name: '/retry resends the task a handoff wrote instead of what the person asked',
+    file: 'src/store/queries.ts',
+    from: "WHERE session_id = $sessionId AND parent_turn_id IS NULL ORDER BY rowid DESC LIMIT 1",
+    to: "WHERE session_id = $sessionId ORDER BY rowid DESC LIMIT 1",
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: "a final the stream carried as its tail is printed again, doubling the answer's last paragraph",
+    file: 'src/render.ts',
+    from: "  if (final.trim() !== '' && alreadyStreamed.includes(final.trim())) return ''\n",
+    to: '',
+    tests: ['tests/render.test.ts'],
+  },
+  {
+    name: 'a REPL message is passed without --, so one that starts with a dash is refused as a flag',
+    file: 'src/commands/repl.ts',
+    from: "await exec(['send', to, '--', text], 'turn')",
+    to: "await exec(['send', to, text], 'turn')",
+    tests: ['tests/repl.test.ts'],
+  },
+  {
+    name: 'a privileged key written inside an object value reaches the project file',
+    file: 'src/commands/config.ts',
+    from: '[...privilegedValues(next)].find(([k, v]) => before.get(k) !== v)',
+    to: '[...privilegedValues(next)].find(() => false)',
+    tests: ['tests/config-write.test.ts'],
+  },
+  {
+    name: 'the piped text runs into the words around it instead of standing as its own paragraph',
+    file: 'src/cli.ts',
+    from: "  return parts.join('\\n\\n')",
+    to: "  return parts.join('')",
+    tests: ['tests/cli.test.ts'],
+  },
+  {
+    name: 'a pre-0.4 store stays world-readable after an upgrade: privacy runs only on creation',
+    file: 'src/store/db.ts',
+    from: "      if (current < MIGRATIONS.length && path !== ':memory:') makePrivate(path)",
+    to: "      if (current === 0 && path !== ':memory:') makePrivate(path)",
+    tests: ['tests/store.test.ts'],
   },
 ]

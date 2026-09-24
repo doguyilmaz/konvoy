@@ -494,6 +494,17 @@ export function recentTurns(db: Database, sessionId: string, limit: number): Tur
   return rows.map(toTurn)
 }
 
+/**
+ * the prompt of the latest turn the person asked for: a turn konvoy started for them - a handoff's
+ * task, a failover successor - has a parent, and retrying its words would not be what they typed
+ */
+export function lastAskedPrompt(db: Database, sessionId: string): string | null {
+  const row = db
+    .query('SELECT prompt FROM turn WHERE session_id = $sessionId AND parent_turn_id IS NULL ORDER BY rowid DESC LIMIT 1')
+    .get({ sessionId }) as { prompt: string } | null
+  return row?.prompt ?? null
+}
+
 /** the newest turns of every session */
 export function latestTurns(db: Database, limit: number): TurnRecord[] {
   const rows = db.query('SELECT * FROM turn ORDER BY rowid DESC LIMIT $limit').all({ limit }) as Record<string, unknown>[]

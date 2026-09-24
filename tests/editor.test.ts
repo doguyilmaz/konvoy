@@ -215,7 +215,8 @@ test('Tab accepts the selection; Enter runs a command that takes no argument, an
   // /use takes an agent: accepted with a space after it, not sent
   expect(core.buffer).toBe('/use ')
   typed(core, text('cod'), k('tab'))
-  expect(core.buffer).toBe('/use codex ')
+  // the agent completes the command, so it is ready to run as it stands
+  expect(core.buffer).toBe('/use codex')
 })
 
 test('Esc closes the popup and the line stays as typed', () => {
@@ -348,18 +349,43 @@ test('Ctrl-D on an empty prompt leaves, taking the prompt off the screen', async
   expect(t.screen.text()).toBe('')
 })
 
-test('history is kept per project, newest first, and written where only its owner can read it', async () => {
-  const { fileHistory } = await import('../src/history')
-  const path = `/tmp/konvoy-test-history-${Bun.nanoseconds()}/history.jsonl`
-  const here = await fileHistory(path, '/repo')
+test('history is kept per project, newest first, without repeats, and trimmed', async () => {
+  const { storeHistory } = await import('../src/history')
+  const db = openDb(':memory:')
+  const here = storeHistory(db, '/repo')
   here.add('first')
   here.add('second')
   here.add('second')
-  const there = await fileHistory(path, '/other')
-  there.add('elsewhere')
-  await Bun.sleep(50)
-  const reread = await fileHistory(path, '/repo')
-  expect(reread.entries()).toEqual(['second', 'first'])
-  const mode = (await Bun.file(path).stat()).mode & 0o777
-  expect(mode).toBe(0o600)
+  here.add('first')
+  storeHistory(db, '/other').add('elsewhere')
+  expect(here.entries()).toEqual(['first', 'second'])
+  expect(storeHistory(db, '/other').entries()).toEqual(['elsewhere'])
+})
+
+// Each REPL rewrote a shared history file from its own copy, so the second to write erased the
+// first one's entries. In the store, two REPLs are two writers SQLite already serialises.
+test('two prompts sharing one store keep each other entries', async () => {
+  const { storeHistory } = await import('../src/history')
+  const path = `/tmp/konvoy-test-history-${Bun.nanoseconds()}/konvoy.db`
+  const a = storeHistory(openDb(path), '/x')
+  const b = storeHistory(openDb(path), '/x')
+  a.add('deploy it')
+  b.add('fix tests')
+  a.add('ship')
+  expect(storeHistory(openDb(path), '/x').entries()).toEqual(['ship', 'fix tests', 'deploy it'])
+})
+
+test('a tab is drawn as the one cell the layout counts, and kept as a tab in the line', () => {
+  const core = new EditorCore()
+  typed(core, { name: 'paste', text: 'a\tb' })
+  const { d, screen } = draw(core)
+  expect(screen[1]).toBe('claude › a b')
+  expect(d.col).toBe(12)
+  expect(core.buffer).toBe('a\tb')
+})
+
+test('a command completed by its one word runs on Enter', () => {
+  const core = new EditorCore([], completerFixture())
+  typed(core, text('/effort hi'))
+  expect(core.handle(k('enter'))).toEqual({ t: 'submit', text: '/effort high', echo: '/effort high' })
 })

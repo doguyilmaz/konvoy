@@ -31,6 +31,13 @@ const MIGRATIONS: string[] = [
    ALTER TABLE turn ADD COLUMN model TEXT;`,
   `CREATE INDEX turn_session_id ON turn(session_id);
    CREATE INDEX session_cwd_status ON session(cwd, status);`,
+  // what /retry reads: the latest turn a person asked for, which has no parent. Applying it is also
+  // what makes a store created before it private (see openDb)
+  `CREATE INDEX turn_session_parent ON turn(session_id, parent_turn_id);`,
+  // the REPL's prompt history, per directory (src/history.ts)
+  `CREATE TABLE prompt_history (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, cwd TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL);
+   CREATE INDEX prompt_history_cwd ON prompt_history(cwd, id);`,
 ]
 
 // SQLite refuses to create a database whose directory is missing, so konvoy has to make it. It
@@ -49,6 +56,12 @@ function ensureDirectory(dir: string): void {
     const reason = made.stderr.toString().trim() || `exit ${made.exitCode}`
     throw new Error(`cannot create the konvoy store directory ${dir}: ${reason}`)
   }
+}
+
+function makePrivate(path: string): void {
+  const chmod = Bun.which('chmod') ?? '/bin/chmod'
+  Bun.spawnSync([chmod, '600', path, `${path}-wal`, `${path}-shm`], { stdout: 'ignore', stderr: 'ignore' })
+  Bun.spawnSync([chmod, '700', dirname(path)], { stdout: 'ignore', stderr: 'ignore' })
 }
 
 function open(path: string): Database {
@@ -88,11 +101,11 @@ export function openDb(path: string): Database {
     db.exec('BEGIN IMMEDIATE')
     try {
       const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
-      // a store being created right now is made private before anything is written to it; SQLite
-      // gives its -wal and -shm files the database file's own mode
-      if (current === 0 && path !== ':memory:') {
-        Bun.spawnSync([Bun.which('chmod') ?? '/bin/chmod', '600', path], { stdout: 'ignore', stderr: 'ignore' })
-      }
+      // Every prompt and answer lives here, and the default umask left the store readable by anyone
+      // on the machine. Whenever a migration runs - a store being created, or one from before 0.4 -
+      // the files and their directory are made owner-only; the WAL mode switch above has already
+      // created -wal and -shm by then, so they are included
+      if (current < MIGRATIONS.length && path !== ':memory:') makePrivate(path)
       for (let v = current; v < MIGRATIONS.length; v++) {
         db.exec(MIGRATIONS[v]!)
         db.exec(`PRAGMA user_version = ${v + 1}`)

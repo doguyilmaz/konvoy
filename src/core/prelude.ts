@@ -118,7 +118,12 @@ function unseen(db: Database, session: Session, opts: PreludeWindow): Unseen {
   const seen = opts.for
     ? (
         db
-          .query('SELECT COALESCE(MAX(rowid), 0) AS seen FROM turn WHERE session_id = $id AND agent = $agent AND rowid <= $upTo')
+          // only a turn that produced something reached the reader's session: one blocked before
+          // the agent took its prompt in (a rate limit, a crash with no output) did not, and
+          // counting it as seen would hide every turn before it from the reader
+          .query(
+            "SELECT COALESCE(MAX(rowid), 0) AS seen FROM turn WHERE session_id = $id AND agent = $agent AND rowid <= $upTo AND (final != '' OR exit_code = 0)",
+          )
           .get({ id: session.id, agent: opts.for, upTo }) as { seen: number }
       ).seen
     : 0

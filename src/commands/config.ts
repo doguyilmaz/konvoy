@@ -87,6 +87,22 @@ export function unsetPath(obj: Record<string, unknown>, dotted: string): { next:
 const PRIVILEGED = [/^gate(\.|$)/, /^defaults\.(permission|harness)$/, /^agents\.[^.]+\.(bin|permission|harness)$/]
 export const isPrivileged = (dotted: string): boolean => PRIVILEGED.some((re) => re.test(dotted))
 
+// The privileged values a layer holds, by path. A key is not enough to judge a write by: setting
+// `agents.claude` to an object carrying `bin` writes a privileged key through an ordinary one.
+export function privilegedValues(layer: Record<string, unknown>): Map<string, string> {
+  const out = new Map<string, string>()
+  const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+  if ('gate' in layer) out.set('gate', JSON.stringify(layer.gate))
+  if (obj(layer.defaults)) for (const k of ['permission', 'harness']) if (k in layer.defaults) out.set(`defaults.${k}`, JSON.stringify(layer.defaults[k]))
+  if (obj(layer.agents)) {
+    for (const [id, agent] of Object.entries(layer.agents)) {
+      if (!obj(agent)) continue
+      for (const k of ['bin', 'permission', 'harness']) if (k in agent) out.set(`agents.${id}.${k}`, JSON.stringify(agent[k]))
+    }
+  }
+  return out
+}
+
 export async function cmdConfig(
   cfg: Config,
   cwd: string,
@@ -181,6 +197,14 @@ export async function cmdConfig(
     } catch (e) {
       console.error((e as Error).message)
       return 2
+    }
+    if (!opts.global) {
+      const before = privilegedValues(raw)
+      const smuggled = [...privilegedValues(next)].find(([k, v]) => before.get(k) !== v)
+      if (smuggled) {
+        console.error(`refusing to write ${smuggled[0]} to the project config - it is privileged and only the global config may set it`)
+        return 2
+      }
     }
     const parsed = configSchema.safeParse(next)
     if (!parsed.success) {

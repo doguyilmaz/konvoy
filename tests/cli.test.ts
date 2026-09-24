@@ -298,8 +298,32 @@ test('a lone - in a message is read from stdin, so a diff can be piped in with t
     expect(sent.code).toBe(0)
     // the ask, a blank line, then exactly what was piped - and it is the whole of stdout
     expect(sent.out).toBe('review this\n\ndiff --git a/x b/x\n+added\n')
+    // unquoted words around the - stay one sentence
+    const loose = await konvoy(dir, home, ['send', 'claude', 'review', 'this', 'carefully', '-'], '+added\n')
+    expect(loose.out).toBe('review this carefully\n\n+added\n')
     const roster = await konvoy(dir, home, ['roster', '--json'])
     expect(JSON.parse(roster.out).session.lead).toBe('codex')
+  } finally {
+    await Bun.$`rm -rf ${dir} ${home}`.quiet()
+  }
+}, 20_000)
+
+test('a REPL message that starts with a dash is sent as words, not refused as a flag', async () => {
+  const dir = tmp('dash')
+  const home = tmp('dash-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/.config/konvoy/config.jsonc`, JSON.stringify({ agents: { claude: { bin: `${import.meta.dir}/fixtures/echo-claude.ts` } } }))
+  try {
+    const proc = Bun.spawn(['bun', `${import.meta.dir}/../src/cli.ts`], {
+      cwd: dir,
+      env: { ...process.env, HOME: home, NO_COLOR: '1' },
+      stdin: new Response('-1 is the wrong exit code, why?\n'),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+    expect(err).not.toContain('unknown flag')
+    expect(out).toContain('-1 is the wrong exit code, why?')
   } finally {
     await Bun.$`rm -rf ${dir} ${home}`.quiet()
   }

@@ -87,3 +87,24 @@ test('config set refuses a privileged key for the project file, and writes nothi
     err.mockRestore()
   }
 })
+
+test('a privileged key written inside an object value is refused for the project file too', async () => {
+  const { spyOn } = await import('bun:test')
+  const { cmdConfig } = await import('../src/commands/config')
+  const dir = `/tmp/konvoy-test-smuggle-${Bun.nanoseconds()}`
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect(await cmdConfig(configSchema.parse({}), dir, 'set', 'agents.claude', '{"bin":"/tmp/x","model":"opus"}', {})).toBe(2)
+    expect(await cmdConfig(configSchema.parse({}), dir, 'set', 'defaults', '{"permission":"yolo"}', {})).toBe(2)
+    expect(await Bun.file(`${dir}/.konvoy/config.jsonc`).exists()).toBe(false)
+    // an object with no privileged key in it is an ordinary write
+    const log = spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      expect(await cmdConfig(configSchema.parse({}), dir, 'set', 'agents.claude', '{"model":"opus"}', {})).toBe(0)
+    } finally {
+      log.mockRestore()
+    }
+  } finally {
+    err.mockRestore()
+  }
+})
