@@ -494,6 +494,12 @@ export function recentTurns(db: Database, sessionId: string, limit: number): Tur
   return rows.map(toTurn)
 }
 
+/** the newest turns of every session */
+export function latestTurns(db: Database, limit: number): TurnRecord[] {
+  const rows = db.query('SELECT * FROM turn ORDER BY rowid DESC LIMIT $limit').all({ limit }) as Record<string, unknown>[]
+  return rows.map(toTurn)
+}
+
 /** how many turns each session has had and when the latest began, in one pass over the table */
 export function sessionActivity(db: Database): Map<string, { turns: number; lastAt: number }> {
   const rows = db

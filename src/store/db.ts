@@ -43,7 +43,8 @@ const MIGRATIONS: string[] = [
 // cannot decide whether konvoy starts. Bun.which itself falls back to a default search path.
 function ensureDirectory(dir: string): void {
   const mkdir = Bun.which('mkdir') ?? '/bin/mkdir'
-  const made = Bun.spawnSync([mkdir, '-p', dir], { stdout: 'ignore', stderr: 'pipe' })
+  // owner-only: the store holds every prompt and every answer
+  const made = Bun.spawnSync([mkdir, '-p', '-m', '700', dir], { stdout: 'ignore', stderr: 'pipe' })
   if (made.exitCode !== 0) {
     const reason = made.stderr.toString().trim() || `exit ${made.exitCode}`
     throw new Error(`cannot create the konvoy store directory ${dir}: ${reason}`)
@@ -87,6 +88,11 @@ export function openDb(path: string): Database {
     db.exec('BEGIN IMMEDIATE')
     try {
       const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
+      // a store being created right now is made private before anything is written to it; SQLite
+      // gives its -wal and -shm files the database file's own mode
+      if (current === 0 && path !== ':memory:') {
+        Bun.spawnSync([Bun.which('chmod') ?? '/bin/chmod', '600', path], { stdout: 'ignore', stderr: 'ignore' })
+      }
       for (let v = current; v < MIGRATIONS.length; v++) {
         db.exec(MIGRATIONS[v]!)
         db.exec(`PRAGMA user_version = ${v + 1}`)

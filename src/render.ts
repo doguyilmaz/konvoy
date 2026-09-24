@@ -2,6 +2,7 @@ import type { KonvoyEvent } from './types'
 import { agentPaint, palette, type ColorLevel, type Paint } from './style'
 import { markdownRenderer, type MarkdownRenderer } from './markdown'
 import { eraseRows, stringWidth, stripAnsi, truncate, wrappedRows } from './term'
+import { oneLine, safeText } from './adapters/types'
 
 export interface RenderDeps {
   /** the agent's own words on stdout: verbatim to a pipe, rendered on a terminal */
@@ -83,7 +84,7 @@ function toolLine(p: ReturnType<typeof palette>, name: string, detail: string | 
 // say what the agent is thinking about, never a transcript of the reasoning.
 function thoughtTitle(text: string): string {
   const first = text.trim().split('\n')[0] ?? ''
-  return first.replace(/^\*\*(.*)\*\*$/, '$1').replace(/[*_`#]/g, '').trim()
+  return oneLine(first.replace(/^\*\*(.*)\*\*$/, '$1').replace(/[*_`#]/g, ''), 120)
 }
 
 const WINDOW: Record<string, string> = {
@@ -229,7 +230,12 @@ export function turnRender(agent: string, deps: RenderDeps): TurnRender {
     deps.out(`${md ? md.line(line) : line}\n`)
   }
 
-  const text = (chunk: string): void => {
+  // The agent's words are model output, and model output can carry what it read: an escape sequence
+  // in a file it echoed would clear the screen, retitle the window or write the clipboard (OSC 52).
+  // The final text always went through safeText; the stream written ahead of it did not.
+  const text = (raw: string): void => {
+    const chunk = safeText(raw)
+    if (chunk === '') return
     streamed += chunk
     wrote = true
     if (!outTty) {

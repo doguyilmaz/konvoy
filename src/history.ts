@@ -1,5 +1,3 @@
-import { dirname } from './paths'
-
 // What was typed at the prompt, kept across runs the way every shell and agent CLI keeps it, and
 // per project: the line you want back in a repository is the one you typed in that repository.
 // One JSON object per line, because an entry can itself span lines.
@@ -28,6 +26,15 @@ function parse(raw: string): Entry[] {
     }
   }
   return out
+}
+
+// Owner-only, because what gets typed at a prompt includes what gets pasted into one. Bun.write's
+// `mode` is ignored for a string on Bun 1.4.2 (measured), so the file is made private once, when it
+// is created, with chmod resolved absolutely the way the store resolves mkdir.
+async function save(path: string, body: string): Promise<void> {
+  const created = !(await Bun.file(path).exists())
+  await Bun.write(path, body)
+  if (created) Bun.spawnSync([Bun.which('chmod') ?? '/bin/chmod', '600', path], { stdout: 'ignore', stderr: 'ignore' })
 }
 
 export async function fileHistory(path: string, cwd: string): Promise<History> {
@@ -62,17 +69,7 @@ export async function fileHistory(path: string, cwd: string): Promise<History> {
       if (all.length > KEEP) all = all.slice(-KEEP)
       const body = `${all.map((e) => JSON.stringify(e)).join('\n')}\n`
       // serialized, and never allowed to fail the prompt: history is a convenience
-      writing = writing
-        .then(async () => {
-          try {
-            await Bun.write(path, body)
-          } catch {
-            const mkdir = Bun.which('mkdir') ?? '/bin/mkdir'
-            Bun.spawnSync([mkdir, '-p', dirname(path)])
-            await Bun.write(path, body)
-          }
-        })
-        .catch(() => undefined)
+      writing = writing.then(() => save(path, body)).catch(() => undefined)
     },
   }
 }

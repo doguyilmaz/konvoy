@@ -347,3 +347,19 @@ test('Ctrl-D on an empty prompt leaves, taking the prompt off the screen', async
   expect(await line).toBeNull()
   expect(t.screen.text()).toBe('')
 })
+
+test('history is kept per project, newest first, and written where only its owner can read it', async () => {
+  const { fileHistory } = await import('../src/history')
+  const path = `/tmp/konvoy-test-history-${Bun.nanoseconds()}/history.jsonl`
+  const here = await fileHistory(path, '/repo')
+  here.add('first')
+  here.add('second')
+  here.add('second')
+  const there = await fileHistory(path, '/other')
+  there.add('elsewhere')
+  await Bun.sleep(50)
+  const reread = await fileHistory(path, '/repo')
+  expect(reread.entries()).toEqual(['second', 'first'])
+  const mode = (await Bun.file(path).stat()).mode & 0o777
+  expect(mode).toBe(0o600)
+})

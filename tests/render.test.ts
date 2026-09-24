@@ -439,3 +439,18 @@ test('what the thinking is about is named while it runs, and never kept', () => 
   view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
   expect(h.screen.text()).not.toContain('Inspecting')
 })
+
+// Model output can carry what the model read. A file that holds an escape sequence and is echoed
+// back would, streamed raw, clear the screen or write the clipboard through OSC 52.
+test('an escape sequence in the streamed answer never reaches the terminal', () => {
+  for (const outTty of [false, true]) {
+    const h = harness({ tty: true, outTty })
+    const view = turnRender('claude', h.deps)
+    view.onEvent({ t: 'text', text: 'safe \x1b]52;c;cHduZWQ=\x07text\x1b[2J\n' })
+    view.onEvent({ t: 'thinking', text: '**look\x1b[31m here**' })
+    view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+    expect(h.out.join(''), `outTty ${outTty}`).toBe('safe text\n')
+    expect(h.err.join('')).not.toContain('\x1b[31m')
+    expect(view.streamed()).toBe('safe text\n')
+  }
+})

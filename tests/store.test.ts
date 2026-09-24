@@ -424,3 +424,13 @@ test('a store directory that cannot be created fails with the reason, not a bare
     await Bun.$`rm -rf ${base}`.quiet().nothrow()
   }
 })
+
+// Every prompt and every answer lives in this file. The default umask left it, and the directory
+// it sits in, readable by anyone on the machine.
+test('a store created on disk is readable by its owner alone', async () => {
+  const dir = `/tmp/konvoy-test-private-${Bun.nanoseconds()}/data`
+  const path = `${dir}/konvoy.db`
+  openDb(path).close()
+  expect((await Bun.file(path).stat()).mode & 0o777).toBe(0o600)
+  expect((await Bun.file(dir).stat()).mode & 0o777).toBe(0o700)
+})
