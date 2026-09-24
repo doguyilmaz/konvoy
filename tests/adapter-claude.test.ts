@@ -322,3 +322,62 @@ test('the tool detail is sanitized like every other string a model controls', ()
   expect(detail).not.toContain('\u001b')
   expect(detail).not.toContain('\n')
 })
+
+// --include-partial-messages is what makes a claude answer arrive token by token. The capture
+// shows the cost of it: every text block streams as deltas and is then repeated, whole, in the
+// assistant message that closes the block. A turn reads the stream in order, so it can tell which
+// messages it already has; a line read on its own cannot, so `parse` ignores deltas altogether.
+const partial = async (): Promise<string[]> =>
+  (await Bun.file('tests/fixtures/streams/claude-partial.jsonl').text()).trim().split('\n')
+
+test('a streamed claude turn arrives as deltas, and the message that repeats them is not read twice', async () => {
+  const parse = claudeAdapter.parser!()
+  const events = (await partial()).flatMap((l) => parse(l))
+  const texts = events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text)
+  // more than one piece: this is what streaming means
+  expect(texts.length).toBeGreaterThan(3)
+  const final = (events.find((e) => e.t === 'done') as { final: string }).final
+  expect(texts.join('')).toBe(final)
+  expect(final).toBe('The package.json has version 1.0.0.')
+  // the tool call is still read from the complete message, where its input is whole
+  expect(events.filter((e) => e.t === 'tool' && (e as { status: string }).status === 'start')).toEqual([
+    { t: 'tool', name: 'Read', status: 'start', detail: '/tmp/konvoy-capture/package.json' },
+  ])
+  // redacted thinking still says the agent is thinking, which is all the renderer shows of it
+  expect(events.some((e) => e.t === 'thinking')).toBe(true)
+  const usage = events.find((e) => e.t === 'usage') as { inputTokens: number; outputTokens: number; costUsd: number }
+  expect(usage.inputTokens).toBe(18 + 32269 + 31993)
+  expect(usage.outputTokens).toBe(260)
+})
+
+test('the same capture read a line at a time yields the answer once, from the complete messages', async () => {
+  const events = (await partial()).flatMap((l) => claudeAdapter.parse(l))
+  const text = events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')
+  expect(text).toBe('The package.json has version 1.0.0.')
+})
+
+test('a block claude did not stream still reaches the reader of a streaming turn', () => {
+  const parse = claudeAdapter.parser!()
+  const start = JSON.stringify({ type: 'stream_event', event: { type: 'message_start', message: { id: 'msg_1' } } })
+  const whole = JSON.stringify({ type: 'assistant', message: { id: 'msg_1', content: [{ type: 'text', text: 'whole' }] } })
+  expect([...parse(start), ...parse(whole)]).toEqual([{ t: 'text', text: 'whole' }])
+})
+
+test('the command line asks claude for partial messages', () => {
+  expect(claudeAdapter.turn(ctx()).cmd).toContain('--include-partial-messages')
+})
+
+// design §27: the windows are observable before anything fails, with utilisation and reset times
+test('a rate-limit event is read as a limit, flagged when claude itself warns', async () => {
+  const lines = (await Bun.file('tests/fixtures/streams/claude.jsonl').text()).trim().split('\n')
+  const limits = lines.flatMap((l) => claudeAdapter.parse(l)).filter((e) => e.t === 'limit')
+  expect(limits).toEqual([{ t: 'limit', window: 'seven_day', utilization: 0.97, resetsAt: 1790481600, warning: true }])
+})
+
+test('an MCP tool is named by its server and tool, not claude namespacing', () => {
+  const line = JSON.stringify({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', name: 'mcp__github__create_issue', input: { title: 'x' } }] },
+  })
+  expect(claudeAdapter.parse(line)).toEqual([{ t: 'tool', name: 'github.create_issue', status: 'start' }])
+})

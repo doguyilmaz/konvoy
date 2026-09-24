@@ -6,6 +6,12 @@ export interface Adapter {
   supportsPresetSessionId: boolean
   turn(ctx: TurnContext): SpawnPlan
   parse(line: string): KonvoyEvent[]
+  /**
+   * a parser holding state for one turn, when a stream only makes sense read in order - claude's
+   * token deltas repeat in the complete message that follows them. `parse` stays the stateless
+   * reading of each line on its own; a turn uses this when it exists.
+   */
+  parser?(): (line: string) => KonvoyEvent[]
   attach(binding: Binding): SpawnPlan
   prepare?(ctx: TurnContext): Promise<void>
   /** lines a CLI wrote to stderr that the user must see even though the turn succeeded */

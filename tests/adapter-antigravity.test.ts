@@ -125,7 +125,7 @@ test('a tool step is reported with what it touched, from tool_info', () => {
       },
     }),
   )
-  expect(started).toEqual([{ t: 'tool', name: 'run_command', status: 'start', detail: 'ls -la /tmp' }])
+  expect(started).toEqual([{ t: 'tool', name: 'Shell', status: 'start', detail: 'ls -la /tmp' }])
 
   const failed = antigravityAdapter.parse(
     JSON.stringify({
@@ -136,7 +136,7 @@ test('a tool step is reported with what it touched, from tool_info', () => {
       },
     }),
   )
-  expect(failed).toEqual([{ t: 'tool', name: 'run_command', status: 'error', detail: 'ls' }])
+  expect(failed).toEqual([{ t: 'tool', name: 'Shell', status: 'error', detail: 'ls' }])
 })
 
 // Captured live: with `--mode plan`, a tool needing a permission nobody can grant is auto-denied,
@@ -157,7 +157,7 @@ test('the tool capture reaches both a started and a failed tool line', async () 
   const tools = lines.flatMap((l) => antigravityAdapter.parse(l)).filter((e) => e.t === 'tool')
   expect(tools.map((t) => (t as { status: string }).status)).toEqual(['start', 'error'])
   for (const t of tools) {
-    expect((t as { name: string }).name).toBe('run_command')
+    expect((t as { name: string }).name).toBe('Shell')
     expect((t as { detail?: string }).detail).toContain('ls -la')
   }
 })

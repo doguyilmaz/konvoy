@@ -9,6 +9,8 @@ export type KonvoyEvent =
   /** `detail` is what the call acted on: a path, a command. Model-controlled, so sanitized. */
   | { t: 'tool'; name: string; status: 'start' | 'ok' | 'error'; detail?: string }
   | { t: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; credits?: number }
+  /** how much of a quota window the agent has used, when its CLI says so before anything fails */
+  | { t: 'limit'; window: string; utilization: number; resetsAt?: number; warning: boolean }
   | {
       t: 'error'
       message: string

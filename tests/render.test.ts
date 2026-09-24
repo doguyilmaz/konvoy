@@ -1,22 +1,36 @@
 import { expect, test } from 'bun:test'
-import { remainder, sessionBanner, statusLine, turnRender, type RenderDeps } from '../src/render'
+import { duration, limitNotice, remainder, sessionBanner, statusLine, tokens, turnRender, type RenderDeps } from '../src/render'
 import type { KonvoyEvent } from '../src/types'
+import { Screen } from './fixtures/vt'
+
+const SYNC = /\x1b\[\?2026[hl]/g
 
 // What a user saw before this: eighteen lines of "  · Bash" with no target, no outcome and no
 // timing, then silence until the whole answer appeared at once. konvoy already parsed the text,
 // thinking and tool events out of every CLI's stream and threw all but the tool name away.
-function harness(opts: { tty?: boolean; color?: boolean } = {}) {
+function harness(opts: { tty?: boolean; outTty?: boolean; color?: boolean; columns?: number; hint?: string } = {}) {
   const out: string[] = []
   const err: string[] = []
+  // one terminal behind both streams, the way a person's shell is
+  const screen = new Screen(opts.columns ?? 80)
   let clock = 1000
   const deps: RenderDeps = {
-    out: (t) => out.push(t),
-    err: (t) => err.push(t),
+    out: (t) => {
+      out.push(t)
+      screen.write(t)
+    },
+    err: (t) => {
+      err.push(t)
+      screen.write(t)
+    },
     color: opts.color ?? false,
     tty: opts.tty ?? false,
+    outTty: opts.outTty ?? false,
     now: () => clock,
+    columns: () => opts.columns ?? 80,
+    ...(opts.hint ? { hint: opts.hint } : {}),
   }
-  return { out, err, deps, tick: (ms: number) => (clock += ms) }
+  return { out, err, deps, screen, tick: (ms: number) => (clock += ms) }
 }
 
 const feed = (view: { onEvent: (e: KonvoyEvent) => void }, events: KonvoyEvent[]): void => {
@@ -174,8 +188,37 @@ test('a session with nothing withheld gets a banner with no warnings in it', () 
     { version: '0.3.3', slug: 's', dir: '/d', agent: 'claude', harness: 'inherit', permission: 'yolo' },
     false,
   )
-  expect(lines).toHaveLength(2)
+  // the box and nothing after it
+  expect(lines[0]).toStartWith('╭')
+  expect(lines.at(-1)).toStartWith('╰')
   expect(lines.join('\n')).not.toContain('!')
+})
+
+test('the banner box is one width all the way down, whatever its rows hold', () => {
+  const lines = sessionBanner(
+    {
+      version: '0.4.0', slug: 'sinkaf-8f3a', dir: '/repo/.konvoy/sinkaf-8f3a', agent: 'claude', harness: 'inherit',
+      permission: 'auto', model: 'opus', effort: 'high', goal: 'fix the token refresh',
+      roster: [{ agent: 'claude', ready: true }, { agent: 'codex', ready: false }],
+    },
+    true,
+  )
+  const box = lines.filter((l) => /^(\x1b\[[\d;]*m)*[╭│╰]/.test(l))
+  const widths = new Set(box.map((l) => new Screen(200).write(l).text().length))
+  expect(widths.size).toBe(1)
+  const text = new Screen(200).write(lines.join('\n')).text()
+  expect(text).toContain('konvoy 0.4.0')
+  expect(text).toContain('sinkaf-8f3a · fix the token refresh')
+  expect(text).toContain('claude · opus · high · auto')
+  expect(text).toContain('● claude  ○ codex')
+})
+
+test('a banner narrower than its content is cut inside the box, never past its edge', () => {
+  const lines = sessionBanner(
+    { version: '0.4.0', slug: 's', dir: `/${'very-long-directory/'.repeat(8)}`, agent: 'claude', harness: 'inherit', permission: 'auto', columns: 50 },
+    false,
+  )
+  for (const line of lines.filter((l) => /^[╭│╰]/.test(l))) expect(line.length).toBeLessThanOrEqual(50)
 })
 
 // "i dont see anything happens even when thinking": a tool that runs for ninety seconds has to
@@ -192,7 +235,7 @@ test('a running tool line animates in place and carries its own elapsed time', (
     frames.push(h.err.join(''))
   }
   // each redraw returns to the start of the line, and no two consecutive frames look the same
-  for (const frame of frames) expect(frame.startsWith('\r')).toBe(true)
+  for (const frame of frames) expect(frame.replace(SYNC, '').startsWith('\r')).toBe(true)
   expect(new Set(frames.map((f) => f.replace(/[\d.]+s/, ''))).size).toBe(4)
   expect(frames[1]).toContain('1.0s')
   expect(frames[3]).toContain('2.0s')
@@ -207,10 +250,12 @@ test('nothing animates on a pipe, and nothing animates when no tool is running',
   plain.tick()
   expect(piped.err.join('')).toBe('')
 
-  const tty = harness({ tty: true })
+  // a terminal is never left looking hung: before the first event arrives the agent is working
+  const tty = harness({ tty: true, hint: 'esc to interrupt' })
   const idle = turnRender('claude', tty.deps)
+  tty.tick(3200)
   idle.tick()
-  expect(tty.err.join('')).toBe('')
+  expect(tty.screen.text()).toMatch(/Working… \(3s · esc to interrupt\)$/)
 })
 
 test('the settled line replaces the animation, so one tool leaves exactly one line', () => {
@@ -220,12 +265,12 @@ test('the settled line replaces the animation, so one tool leaves exactly one li
   h.tick(200)
   view.tick()
   view.tick()
-  h.err.length = 0
   view.onEvent({ t: 'tool', name: 'Read', status: 'ok' })
-  const settled = h.err.join('')
-  expect(settled.split('\n').filter((l) => l.trim() !== '')).toHaveLength(1)
-  expect(settled).toContain('✓ Read')
-  expect(settled.endsWith('\n')).toBe(true)
+  view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+  // what the person is left looking at: the settled line once, and nothing of the animation
+  const screen = h.screen.lines()
+  expect(screen.filter((l) => l.includes('Read'))).toEqual(['  ✓ Read  src/auth.ts  0.2s'])
+  expect(h.screen.text()).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]|Working/)
 })
 
 // A REPL that shows a turn's own cost and nothing else leaves the session total invisible until
@@ -275,4 +320,115 @@ test('the banner does not warn about refused tools at a level that approves them
     ).join('\n')
     expect(lines, permission).toContain('needs approval')
   }
+})
+
+// The same turn as a person sees it: stdout and stderr on one terminal, the answer rendered a
+// line at a time, the live region erased and redrawn around every permanent line.
+test('a whole turn on a terminal leaves the tools, the answer and the footer, and no animation', () => {
+  const h = harness({ tty: true, outTty: true, hint: 'esc to interrupt' })
+  const view = turnRender('claude', h.deps)
+  view.onEvent({ t: 'thinking', text: '' })
+  h.tick(400)
+  view.tick()
+  view.onEvent({ t: 'text', text: "I'll check the config." })
+  view.onEvent({ t: 'tool', name: 'Read', status: 'start', detail: 'src/auth.ts' })
+  h.tick(300)
+  view.tick()
+  view.onEvent({ t: 'tool', name: '', status: 'ok' })
+  view.onEvent({ t: 'text', text: 'Switched the refresh ' })
+  view.tick()
+  view.onEvent({ t: 'text', text: 'to fire on 401.\nDone.' })
+  h.tick(1000)
+  view.finish({ inputTokens: 24400, outputTokens: 311, costUsd: 0.0621, credits: 0 })
+  expect(h.screen.lines()).toEqual([
+    "I'll check the config.",
+    '  ✓ Read  src/auth.ts  0.3s',
+    'Switched the refresh to fire on 401.',
+    'Done.',
+    '',
+    '  claude · 1.7s · 24.4k in / 311 out · $0.0621',
+  ])
+  // the answer on stdout is still exactly the agent's words, line for line
+  expect(view.streamed()).toBe("I'll check the config.Switched the refresh to fire on 401.\nDone.")
+})
+
+test('the line being written shows in the live region before its newline arrives', () => {
+  const h = harness({ tty: true, outTty: true })
+  const view = turnRender('claude', h.deps)
+  view.onEvent({ t: 'text', text: 'Half a sen' })
+  expect(h.screen.lines()[0]).toBe('Half a sen')
+  // and the status line sits under it, not beside it
+  expect(h.screen.lines()[1]).toContain('Working…')
+  view.onEvent({ t: 'text', text: 'tence.\n' })
+  expect(h.screen.lines()[0]).toBe('Half a sentence.')
+})
+
+test('a line longer than the live region allows shows its tail, and arrives whole when complete', () => {
+  const h = harness({ tty: true, outTty: true, columns: 20 })
+  h.deps.rows = () => 10
+  const view = turnRender('claude', h.deps)
+  const long = 'word '.repeat(60)
+  view.onEvent({ t: 'text', text: long })
+  const live = h.screen.lines()
+  // bounded: the live region never outgrows what it can move back up over
+  expect(live.length).toBeLessThanOrEqual(5)
+  expect(live[0]).toStartWith('…')
+  view.onEvent({ t: 'text', text: '\n' })
+  view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+  // committed whole, as one line of stdout
+  expect(h.out.join('')).toContain(`${long}\n`)
+})
+
+test('on a terminal the answer is rendered as Markdown; to a pipe it stays the agent own bytes', () => {
+  const md = '# Plan\n- **fix** the `retry_count`\n```ts\nconst a = 1\n```\n'
+  const tty = harness({ tty: true, outTty: true, color: true })
+  const view = turnRender('claude', tty.deps)
+  view.onEvent({ t: 'text', text: md })
+  view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+  const shown = tty.screen.lines()
+  expect(shown.slice(0, 5)).toEqual(['Plan', '• fix the retry_count', '```ts', 'const a = 1', '```'])
+
+  const piped = harness({ tty: false, outTty: false, color: true })
+  const plain = turnRender('claude', piped.deps)
+  plain.onEvent({ t: 'text', text: md })
+  expect(piped.out.join('')).toBe(md)
+})
+
+test('a quota window near its edge is named after the footer, with when it resets', () => {
+  const h = harness()
+  const view = turnRender('claude', h.deps)
+  view.onEvent({ t: 'limit', window: 'seven_day', utilization: 0.97, warning: true })
+  view.onEvent({ t: 'limit', window: 'five_hour', utilization: 0.3, warning: false })
+  view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+  const lines = h.err.join('').trimEnd().split('\n')
+  expect(lines).toHaveLength(2)
+  expect(lines[1]).toBe('  ! claude has used 97% of its weekly limit')
+})
+
+test('a reset time reads as a clock today and as a weekday further off', () => {
+  const now = new Date(2026, 8, 24, 10, 0).getTime()
+  const soon = limitNotice('claude', { t: 'limit', window: 'five_hour', utilization: 0.95, warning: true, resetsAt: new Date(2026, 8, 24, 13, 5).getTime() / 1000 }, now)
+  expect(soon).toBe('claude has used 95% of its 5-hour limit · resets 13:05')
+  const later = limitNotice('claude', { t: 'limit', window: 'seven_day', utilization: 0.9, warning: true, resetsAt: new Date(2026, 8, 28, 7, 0).getTime() / 1000 }, now)
+  expect(later).toBe('claude has used 90% of its weekly limit · resets Mon 07:00')
+})
+
+test('durations and token counts stay short at every size', () => {
+  expect(duration(3100)).toBe('3.1s')
+  expect(duration(65_000)).toBe('1m 05s')
+  expect(duration(3_725_000)).toBe('1h 02m')
+  expect(tokens(999)).toBe('999')
+  expect(tokens(24_400)).toBe('24.4k')
+  expect(tokens(1_234_567)).toBe('1.2M')
+  expect(tokens(999_960)).toBe('1.0M')
+})
+
+test('what the thinking is about is named while it runs, and never kept', () => {
+  const h = harness({ tty: true })
+  const view = turnRender('codex', h.deps)
+  view.onEvent({ t: 'thinking', text: '**Inspecting the auth flow**\n\nThe refresh path reads the token' })
+  expect(h.screen.text()).toContain('Thinking… Inspecting the auth flow')
+  view.onEvent({ t: 'text', text: 'ok' })
+  view.finish({ inputTokens: 0, outputTokens: 0, costUsd: 0, credits: 0 })
+  expect(h.screen.text()).not.toContain('Inspecting')
 })

@@ -31,6 +31,11 @@ export interface TurnOptions {
   drainGraceMs?: number
   /** the first blocked turn this one replaces, when a failover chain moved to a new agent */
   parentTurnId?: string | null
+  /**
+   * the person stopping this turn and nothing else: the agent is killed, the turn is recorded as
+   * interrupted, and konvoy itself carries on - which a signal to konvoy cannot offer
+   */
+  signal?: AbortSignal
 }
 
 // how long a pipe may stay open after the child is gone before the read is cut off
@@ -80,9 +85,11 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
   let sawDone = false
   let seq = 0
 
+  // a stream read in order when the adapter has a reading that depends on order
+  const parse = adapter.parser?.() ?? ((line: string) => adapter.parse(line))
   const parseLine = (line: string): KonvoyEvent[] => {
     try {
-      return adapter.parse(line)
+      return parse(line)
     } catch (error) {
       return [{ t: 'error', message: `${adapter.id} parser failed: ${String(error)}`, kind: 'crash' }]
     }
@@ -99,10 +106,20 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     parentTurnId: opts.parentTurnId ?? null,
   })
 
+  // A streamed answer is hundreds of deltas, and a row per delta is a write per token for a log
+  // nobody reads token by token. Consecutive text is stored as one event, flushed when anything
+  // else arrives or the turn ends; the in-memory events and the renderer still see every delta.
+  let heldText = ''
+  const flushText = (): void => {
+    if (heldText === '') return
+    recordEvent(db, turnId, seq++, 'text', { t: 'text', text: heldText })
+    heldText = ''
+  }
   let finished = false
   const finish = (): void => {
     if (finished) return
     finished = true
+    flushText()
     db.query(
       `UPDATE turn SET final = $final, cost_usd = $cost, credits = $credits, input_tokens = $inTok,
          output_tokens = $outTok, exit_code = $exit, error = $error, error_kind = $errorKind,
@@ -156,6 +173,19 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
 
   const cancelEscalation = escalateKill(proc, timeoutMs + (opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS))
 
+  // An interruption asks the agent to stop the way a terminal would, then insists: a CLI that
+  // traps SIGTERM to finish its own cleanup gets the same grace a timeout gives it.
+  let interrupted = false
+  let cancelInterruptKill: (() => void) | undefined
+  const interrupt = (): void => {
+    if (interrupted || proc.exitCode !== null) return
+    interrupted = true
+    proc.kill('SIGTERM')
+    cancelInterruptKill = escalateKill(proc, opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS)
+  }
+  if (opts.signal?.aborted) interrupt()
+  opts.signal?.addEventListener('abort', interrupt, { once: true })
+
   // once the child has exited, whoever still holds its pipes is something it left behind;
   // it gets this long to flush, then both reads end
   const afterExit = proc.exited.then(() => Bun.sleep(opts.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS))
@@ -169,7 +199,11 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
 
   const emit = (event: KonvoyEvent): void => {
     result.events.push(event)
-    recordEvent(db, turnId, seq++, event.t, event)
+    if (event.t === 'text') heldText += event.text
+    else {
+      flushText()
+      recordEvent(db, turnId, seq++, event.t, event)
+    }
     opts.onEvent?.(event)
     switch (event.t) {
       case 'session':
@@ -235,6 +269,13 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
 
     if (!sawDone) result.final = accumulated
 
+    // Whatever the child said on its way out, the person stopped this turn: it is interrupted,
+    // which is the one kind that never moves a failover chain and never gets a gate run on it.
+    if (interrupted) {
+      result.error = { message: 'interrupted', kind: 'interrupted' }
+      if (result.exitCode === 0) result.exitCode = 130
+    }
+
     // an error event that carries no words (claude's is_error result on a dead session id)
     // must not stand in for stderr, which is where that CLI puts the reason
     if (result.exitCode !== 0 && !result.error?.message.trim()) {
@@ -265,6 +306,8 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     }
   } finally {
     cancelEscalation()
+    cancelInterruptKill?.()
+    opts.signal?.removeEventListener('abort', interrupt)
     releaseExitHandler()
     untrack(proc)
     finish()

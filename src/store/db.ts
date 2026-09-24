@@ -77,6 +77,9 @@ export function openDb(path: string): Database {
       } catch {
         // another opener is switching it right now
       }
+      // In WAL mode NORMAL cannot corrupt the database; what it gives up is the last commits on a
+      // power cut. It takes an fsync off every commit, and a turn commits once per event it records.
+      db.exec('PRAGMA synchronous = NORMAL')
     }
     // one transaction for every pending migration: a loser of the open race re-reads
     // user_version under the write lock and finds nothing left to do, and a process that dies

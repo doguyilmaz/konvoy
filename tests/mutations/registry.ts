@@ -472,15 +472,15 @@ export const mutations: Mutation[] = [
   {
     name: 'an upstream error moves to the next agent immediately instead of retrying with backoff first',
     file: 'src/core/session.ts',
-    from: "        if (r.error?.kind === 'upstream' && retries < upstreamRetries) {",
+    from: "        if (r.error?.kind === 'upstream' && retries < upstreamRetries && !opts.signal?.aborted) {",
     to: '        if (false) {',
     tests: ['tests/failover.test.ts'],
   },
   {
     name: 'a rate limit is retried on the same agent before moving, burning seconds against an hours-long window',
     file: 'src/core/session.ts',
-    from: "        if (r.error?.kind === 'upstream' && retries < upstreamRetries) {",
-    to: "        if ((r.error?.kind === 'upstream' || r.error?.kind === 'rate') && retries < upstreamRetries) {",
+    from: "        if (r.error?.kind === 'upstream' && retries < upstreamRetries && !opts.signal?.aborted) {",
+    to: "        if ((r.error?.kind === 'upstream' || r.error?.kind === 'rate') && retries < upstreamRetries && !opts.signal?.aborted) {",
     tests: ['tests/failover.test.ts'],
   },
   {
@@ -921,8 +921,8 @@ export const mutations: Mutation[] = [
   {
     name: 'send ignores an injected detection and asks the machine instead',
     file: 'src/core/session.ts',
-    from: 'const detectFor = deps.detect ?? detect',
-    to: 'const detectFor = detect',
+    from: 'const detectFor = deps.detect ?? locate',
+    to: 'const detectFor = locate',
     tests: ['tests/session.test.ts'],
   },
   {
@@ -1161,8 +1161,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the plain palette colours anyway, so a pipe and a log fill up with escape sequences',
     file: 'src/style.ts',
-    from: 'out[name] = on ? (text) => `\\x1b[${code}m${text}\\x1b[0m` : identity',
-    to: 'out[name] = (text) => `\\x1b[${code}m${text}\\x1b[0m`',
+    from: 'out[name] = level > 0 ? wrap(`\\x1b[${open}m`, `\\x1b[${close}m`) : identity',
+    to: 'out[name] = wrap(`\\x1b[${open}m`, `\\x1b[${close}m`)',
     tests: ['tests/style.color.test.ts'],
   },
   {
@@ -1182,7 +1182,7 @@ export const mutations: Mutation[] = [
   {
     name: 'the answer stops streaming and appears only when the turn ends',
     file: 'src/render.ts',
-    from: '          deps.out(event.text)\n',
+    from: '        deps.out(chunk)\n',
     to: '',
     tests: ['tests/render.test.ts'],
   },
@@ -1196,8 +1196,8 @@ export const mutations: Mutation[] = [
   {
     name: 'the live rewrite is written to a pipe as well, so a log fills with carriage returns',
     file: 'src/render.ts',
-    from: '    if (!deps.tty) return\n    breakLine()',
-    to: '    breakLine()',
+    from: '    if (!deps.tty) {\n      commit?.()\n      return\n    }\n',
+    to: '',
     tests: ['tests/render.test.ts'],
   },
   {
@@ -1298,15 +1298,15 @@ export const mutations: Mutation[] = [
   {
     name: 'the running tool line stops animating, so a long tool looks hung again',
     file: 'src/render.ts',
-    from: 'if (!deps.tty || !pending) return\n    frame = (frame + 1) % FRAMES.length',
-    to: 'if (!deps.tty || !pending) return\n    frame = 0',
+    from: 'if (!deps.tty || !running) return\n      frame++',
+    to: 'if (!deps.tty || !running) return\n      frame = 0',
     tests: ['tests/render.test.ts'],
   },
   {
     name: 'the spinner animates into a pipe, filling a log with frames',
     file: 'src/render.ts',
-    from: 'if (!deps.tty || !pending) return',
-    to: 'if (!pending) return',
+    from: '    if (!deps.tty) {\n      commit?.()\n      return\n    }\n',
+    to: '    if (!deps.tty && commit) {\n      commit()\n      return\n    }\n',
     tests: ['tests/render.test.ts'],
   },
 
@@ -1459,14 +1459,14 @@ export const mutations: Mutation[] = [
   {
     name: 'a codex shell item renders as its item type with the command dropped',
     file: 'src/adapters/codex.ts',
-    from: "typeof item.command === 'string' && item.command !== '' ? { detail: oneLine(item.command, 80) } : {}",
-    to: '{}',
+    from: "if (typeof item.command === 'string' && item.command !== '') return { detail: oneLine(command(item.command), 80) }",
+    to: 'if (false) return {}',
     tests: ['tests/adapter-codex.test.ts', 'tests/render-fixtures.test.ts'],
   },
   {
     name: 'a codex command that exited non-zero is reported as a success',
     file: 'src/adapters/codex.ts',
-    from: "const failed = typeof item.exit_code === 'number' && item.exit_code !== 0",
+    from: "const failed = (typeof item.exit_code === 'number' && item.exit_code !== 0) || item.status === 'failed'",
     to: 'const failed = false',
     tests: ['tests/adapter-codex.test.ts'],
   },
@@ -1588,8 +1588,8 @@ export const mutations: Mutation[] = [
   {
     name: 'an agent falls back to a shared rendering instead of carrying a colour of its own',
     file: 'src/style.ts',
-    from: "  return (agent) => p[AGENT_COLOR[agent as AgentId] ?? 'bold'] ?? identity",
-    to: "  return () => p.bold",
+    from: '  return (agent) => painted.get(agent) ?? bold',
+    to: '  return () => bold',
     tests: ['tests/style.color.test.ts'],
   },
 

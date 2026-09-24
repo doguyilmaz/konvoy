@@ -419,3 +419,28 @@ test('send trusts an injected detection over the machine', async () => {
   const r = await send({ db, cfg: missing, adapterFor: () => adapter, detect: installed }, s, 'codex', 'hi')
   expect(r.final).toBe('ok')
 })
+
+// The wiring half of the prelude window: an agent continuing its own session gets its prompt and
+// nothing else, the goal reaches the very first turn, and no git process runs for either.
+test('an agent continuing its own session is sent its prompt alone, and the first turn carries the goal', async () => {
+  const db = openDb(':memory:')
+  const s = newSession(db, { cwd: process.cwd(), goal: 'refactor the auth layer', lead: 'claude' })
+  const seen: string[] = []
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: (ctx) => {
+      seen.push(withPrelude(ctx))
+      return {
+        cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'result', subtype: 'success', result: 'ok' })],
+        cwd: process.cwd(),
+      }
+    },
+  }
+  let gitCalls = 0
+  const facts = { git: async () => (gitCalls++, '') }
+  await send({ db, cfg, detect: installed, adapterFor: () => adapter, facts }, s, 'claude', 'first')
+  await send({ db, cfg, detect: installed, adapterFor: () => adapter, facts }, s, 'claude', 'second')
+  expect(seen[0]).toBe('goal: refactor the auth layer\n\nfirst')
+  expect(seen[1]).toBe('second')
+  expect(gitCalls).toBe(0)
+})

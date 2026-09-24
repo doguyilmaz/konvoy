@@ -243,6 +243,14 @@ export function lastTurnId(db: Database, sessionId: string): string | null {
   return row?.id ?? null
 }
 
+/** the rowid of the session's newest turn, 0 for none: where a prelude's window ends */
+export function lastTurnRowid(db: Database, sessionId: string): number {
+  const row = db.query('SELECT COALESCE(MAX(rowid), 0) AS r FROM turn WHERE session_id = $sessionId').get({
+    sessionId,
+  }) as { r: number }
+  return row.r
+}
+
 // Who actually produced the most recent turn - which, after a failover move, is not
 // necessarily the agent `send()` was originally asked to run.
 export function lastTurnAgent(db: Database, sessionId: string): AgentId | null {

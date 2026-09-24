@@ -57,16 +57,18 @@ test('a real claude turn renders its tool call with a target and an outcome, the
 
 test('a real codex turn renders its shell command as a tool line and its answer as text', async () => {
   const { answer, chrome } = await render('codex', 'codex')
-  expect(chrome).toContain('command_execution')
-  // the command itself, from the capture, not just the item type
+  expect(chrome).toContain('✓ Shell')
+  // the command itself, from the capture, not the item type or the login shell wrapped around it
   expect(chrome).toContain('cat package.json')
+  expect(chrome).not.toContain('command_execution')
+  expect(chrome).not.toContain('-lc')
   expect(answer).toContain('package.json')
   expect(answer.trim().endsWith('1.0.0')).toBe(true)
 })
 
 test('a real kiro turn renders its tool title and reports credits, not dollars', async () => {
   const { answer, chrome } = await render('kiro', 'kiro')
-  expect(chrome).toContain('Reading package.json')
+  expect(chrome).toContain('✓ Read  package.json')
   expect(answer).toContain('1.0.0')
   expect(chrome).toMatch(/kiro · [\d.]+s .*cr/)
   expect(chrome).not.toContain('$')
@@ -74,8 +76,7 @@ test('a real kiro turn renders its tool title and reports credits, not dollars',
 
 test('a real opencode turn renders its tool call and its own cost', async () => {
   const { answer, chrome } = await render('opencode', 'opencode')
-  expect(chrome).toContain('read')
-  expect(chrome).toContain('package.json')
+  expect(chrome).toContain('✓ Read  package.json')
   expect(answer.trim()).toBe('OK')
   expect(chrome).toContain('$0.0050')
 })

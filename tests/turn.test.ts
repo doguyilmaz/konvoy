@@ -134,6 +134,8 @@ test('a parser that throws is contained and the turn still completes', async () 
       if (line.includes('result')) throw new Error('boom')
       return []
     },
+    // the stateful reading a turn prefers; left inherited, it would parse around the throw
+    parser: undefined,
   }
   const r = await runTurn({ db, adapter }, ctx(s.id))
   expect(r.exitCode).toBe(0)
@@ -383,6 +385,8 @@ test('a kiro turn whose finalText is truncated keeps the full streamed answer', 
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'kiro' })
   const adapter: Adapter = {
     ...kiroAdapter,
+    // the profile kiro's prepare() writes would land in this repository; the parse is what is tested
+    prepare: undefined,
     turn: () => ({
       cmd: [
         'bun', 'tests/fixtures/fake-agent.ts',
@@ -458,6 +462,8 @@ test('a warning a CLI writes to stderr on a successful turn reaches the result',
   const seen: string[] = []
   const adapter: Adapter = {
     ...kiroAdapter,
+    // the profile kiro's prepare() writes would land in this repository; the parse is what is tested
+    prepare: undefined,
     turn: () => ({
       cmd: [
         'bun',

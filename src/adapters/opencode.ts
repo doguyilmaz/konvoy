@@ -14,6 +14,16 @@ function toolDetail(input: Record<string, unknown> | undefined): { detail?: stri
   return {}
 }
 
+// opencode's built-in tools are lower-case single words (`read`, `bash`, `webfetch`); written the
+// way the other CLIs write theirs, a transcript that alternates agents reads as one vocabulary.
+const TOOL_NAME: Record<string, string> = { webfetch: 'WebFetch', todowrite: 'TodoWrite', todoread: 'TodoRead', multiedit: 'MultiEdit' }
+
+function toolName(raw: string | undefined): string {
+  if (!raw) return 'tool'
+  if (TOOL_NAME[raw]) return TOOL_NAME[raw]!
+  return /^[a-z]+$/.test(raw) ? raw[0]!.toUpperCase() + raw.slice(1) : raw
+}
+
 // opencode's own words for what went wrong, preferred over reading its prose. `provider.auth` and
 // 403 both mean the agent cannot work until something outside the turn changes, which is what
 // konvoy's `auth` kind is for; 429 is the rate window. Anything else it files as a provider problem
@@ -82,7 +92,7 @@ export const opencodeAdapter: Adapter = {
       case 'tool_use':
         events.push({
           t: 'tool',
-          name: part?.tool ?? 'tool',
+          name: toolName(part?.tool),
           status: part?.state?.status === 'error' ? 'error' : 'ok',
           ...toolDetail(part?.state?.input),
         })

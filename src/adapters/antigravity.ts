@@ -27,6 +27,25 @@ function toolDetail(input: unknown): { detail?: string } {
   return {}
 }
 
+// agy's tool names are snake_case identifiers of its own (`run_command`, `view_file`); the common
+// ones are named the way every other CLI konvoy drives names them, the rest are kept as agy wrote them.
+const TOOL_NAME: Record<string, string> = {
+  run_command: 'Shell',
+  view_file: 'Read',
+  write_to_file: 'Write',
+  replace_file_content: 'Edit',
+  multi_replace_file_content: 'Edit',
+  sed_file: 'Edit',
+  grep_search: 'Grep',
+  find_by_name: 'Find',
+  list_dir: 'List',
+  search_web: 'WebSearch',
+  read_url_content: 'Fetch',
+  call_mcp_tool: 'MCP',
+}
+
+const toolName = (raw: string | undefined): string => (raw ? (TOOL_NAME[raw] ?? raw) : 'tool')
+
 // Two things agy reports outside its own stream, both captured 2026-09-23, and both a SILENT loss
 // if konvoy ignores them. A resume whose conversation is gone does not fail: agy warns on stderr
 // and starts a NEW conversation, so the turn succeeds having forgotten everything. And a tool that
@@ -98,7 +117,7 @@ export const antigravityAdapter: Adapter = {
         const status = failed ? 'error' : step.state === 'DONE' ? 'ok' : 'start'
         events.push({
           t: 'tool',
-          name: step.tool_name ?? 'tool',
+          name: toolName(step.tool_name),
           status,
           ...toolDetail(step.tool_info?.parameters),
         })
