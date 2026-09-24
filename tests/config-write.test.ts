@@ -72,3 +72,18 @@ test('the keys only the global config may set are recognised before a project wr
   }
   for (const key of ['defaults.effort', 'agents.codex.model', 'failover.chain', 'gatekeeper']) expect(isPrivileged(key), key).toBe(false)
 })
+
+test('config set refuses a privileged key for the project file, and writes nothing', async () => {
+  const { spyOn } = await import('bun:test')
+  const { cmdConfig } = await import('../src/commands/config')
+  const dir = `/tmp/konvoy-test-privileged-${Bun.nanoseconds()}`
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const code = await cmdConfig(configSchema.parse({}), dir, 'set', 'gate.command', 'rm -rf /', {})
+    expect(code).toBe(2)
+    expect(await Bun.file(`${dir}/.konvoy/config.jsonc`).exists()).toBe(false)
+    expect(String(err.mock.calls[0]?.[0])).toContain('only the global config may set it')
+  } finally {
+    err.mockRestore()
+  }
+})
