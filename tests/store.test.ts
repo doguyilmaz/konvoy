@@ -435,7 +435,7 @@ test('a store created on disk is readable by its owner alone', async () => {
   expect((await Bun.file(dir).stat()).mode & 0o777).toBe(0o700)
 })
 
-test('a store from before 0.4 is made private the first time a newer konvoy opens it', async () => {
+test('a store an earlier konvoy left is made private the first time this one opens it', async () => {
   const dir = `/tmp/konvoy-test-upgrade-${Bun.nanoseconds()}`
   const path = `${dir}/konvoy.db`
   openDb(path).close()

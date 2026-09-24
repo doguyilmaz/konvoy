@@ -32,7 +32,7 @@ const MIGRATIONS: string[] = [
   `CREATE INDEX turn_session_id ON turn(session_id);
    CREATE INDEX session_cwd_status ON session(cwd, status);`,
   // what /retry reads: the latest turn a person asked for, which has no parent. Applying it is also
-  // what makes a store created before it private (see openDb)
+  // what makes a store an earlier konvoy created private (see openDb)
   `CREATE INDEX turn_session_parent ON turn(session_id, parent_turn_id);`,
   // the REPL's prompt history, per directory (src/history.ts)
   `CREATE TABLE prompt_history (
@@ -102,7 +102,7 @@ export function openDb(path: string): Database {
     try {
       const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
       // Every prompt and answer lives here, and the default umask left the store readable by anyone
-      // on the machine. Whenever a migration runs - a store being created, or one from before 0.4 -
+      // on the machine. Whenever a migration runs - a store being created, or one an earlier konvoy left -
       // the files and their directory are made owner-only; the WAL mode switch above has already
       // created -wal and -shm by then, so they are included
       if (current < MIGRATIONS.length && path !== ':memory:') makePrivate(path)

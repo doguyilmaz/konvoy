@@ -1816,13 +1816,6 @@ export const mutations: Mutation[] = [
     tests: ['tests/editor.test.ts'],
   },
   {
-    name: 'a privileged key is written to the project file, where every load then ignores it',
-    file: 'src/commands/config.ts',
-    from: '    if (!opts.global && isPrivileged(key)) {',
-    to: '    if (false) {',
-    tests: ['tests/config-write.test.ts'],
-  },
-  {
     name: 'send spawns nothing to find its agent and so always believes it is installed',
     file: 'src/core/detect.ts',
     from: "  const found = bin.includes('/') ? await Bun.file(bin).exists() : Bun.which(bin) !== null",
@@ -1894,7 +1887,7 @@ export const mutations: Mutation[] = [
     tests: ['tests/cli.test.ts'],
   },
   {
-    name: 'a pre-0.4 store stays world-readable after an upgrade: privacy runs only on creation',
+    name: 'a store an earlier konvoy left stays world-readable after an upgrade: privacy runs only on creation',
     file: 'src/store/db.ts',
     from: "      if (current < MIGRATIONS.length && path !== ':memory:') makePrivate(path)",
     to: "      if (current === 0 && path !== ':memory:') makePrivate(path)",

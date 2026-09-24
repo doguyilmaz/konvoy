@@ -35,7 +35,9 @@ re-explaining everything. There is no way to make them cooperate on a single tas
 ## 3. Non-goals
 
 - No account/API-key brokering. Every CLI authenticates itself, locally, as it does today.
-- No custom TUI in v1. The dashboard is `konvoy roster` / `konvoy status`, plain text.
+- No reimplementation of an agent's interface. konvoy draws its own prompt and its own view of a
+  turn (§34, §35) - a line editor and a live status, not a full-screen TUI - and `konvoy attach`
+  still hands the terminal to the agent's real one.
 - No model calls of konvoy's own. konvoy has no LLM; all intelligence lives in the five CLIs.
 - No replacement for each CLI's config. konvoy layers on top and never rewrites user config
   files in place.
@@ -282,7 +284,12 @@ and sit on the roadmap (§33).
 
 ## 14. Storage
 
-`bun:sqlite`, WAL, at `~/.local/share/konvoy/konvoy.db`.
+`bun:sqlite`, WAL with `synchronous = NORMAL`, at `~/.local/share/konvoy/konvoy.db`. The directory
+is `0700` and the database, its WAL and SHM files `0600`: every prompt and every answer lives here,
+and the default umask left them readable by any local user. A store an earlier konvoy created is
+made private the first time a migration runs on it. The REPL's prompt history is a table here too
+(`prompt_history`), so two REPLs open at once are two writers SQLite already serialises. A streamed
+answer is stored as one `text` event per run of deltas rather than a row per token.
 
 ```sql
 session(id, slug, goal, cwd, lead, status, created_at, updated_at)
@@ -1341,7 +1348,8 @@ own prompt the way the agent CLIs draw theirs (measured from their sources and b
 Code, codex-rs/tui, opencode's TUI, the kiro-cli and agy bundles): the input between two rules, a
 footer under it with the session's total and the agent's model, effort and permission, and a popup
 while a `/` word, an `@` mention or a command's argument is being typed. Up and Down walk the
-project's own history (`~/.local/share/konvoy/history.jsonl`, per directory), Ctrl-R searches it,
+project's own history (the store's `prompt_history` table, per directory: two REPLs sharing a flat
+file each rewrote it from their own copy and lost the other's entries), Ctrl-R searches it,
 `\`+Enter, Alt+Enter, Ctrl-J and a Shift+Enter the terminal reports (kitty protocol or
 modifyOtherKeys) insert a newline, Shift-Tab moves to the next enabled agent, and `?` on an empty
 line lists the keys. A bracketed paste lands in the line instead of being sent; one longer than four

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { coerce, getPath, isPrivileged, setPath, unsetPath } from '../src/commands/config'
+import { coerce, getPath, privilegedValues, setPath, unsetPath } from '../src/commands/config'
 import { configSchema } from '../src/config/schema'
 
 test('values are coerced to their obvious type', () => {
@@ -66,11 +66,14 @@ test('unset removes a key and the objects it leaves empty, and says when there w
 
 // load.ts strips these from a project file at every load; writing one there reported success and
 // was then ignored on every run after it
-test('the keys only the global config may set are recognised before a project write', () => {
-  for (const key of ['gate.command', 'defaults.permission', 'defaults.harness', 'agents.codex.bin', 'agents.claude.permission']) {
-    expect(isPrivileged(key), key).toBe(true)
-  }
-  for (const key of ['defaults.effort', 'agents.codex.model', 'failover.chain', 'gatekeeper']) expect(isPrivileged(key), key).toBe(false)
+test('every value only the global config may set is found in a layer, by path', () => {
+  const found = privilegedValues({
+    gate: { command: 'x' },
+    defaults: { permission: 'yolo', harness: 'inherit', effort: 'high' },
+    agents: { codex: { bin: '/x', model: 'm' }, claude: { permission: 'auto' } },
+    failover: { chain: ['codex'] },
+  })
+  expect([...found.keys()].sort()).toEqual(['agents.claude.permission', 'agents.codex.bin', 'defaults.harness', 'defaults.permission', 'gate'])
 })
 
 test('config set refuses a privileged key for the project file, and writes nothing', async () => {
@@ -83,6 +86,8 @@ test('config set refuses a privileged key for the project file, and writes nothi
     expect(code).toBe(2)
     expect(await Bun.file(`${dir}/.konvoy/config.jsonc`).exists()).toBe(false)
     expect(String(err.mock.calls[0]?.[0])).toContain('only the global config may set it')
+    // and says how to do it where it would take effect
+    expect(String(err.mock.calls[1]?.[0])).toBe("  konvoy config set gate.command 'rm -rf /' --global")
   } finally {
     err.mockRestore()
   }

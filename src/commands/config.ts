@@ -82,13 +82,10 @@ export function unsetPath(obj: Record<string, unknown>, dotted: string): { next:
   return { next: out, found: true }
 }
 
-// The keys a project file may not set (src/config/load.ts strips them, with a warning, at every
-// load). Writing one there would report success and then be ignored on every run after it.
-const PRIVILEGED = [/^gate(\.|$)/, /^defaults\.(permission|harness)$/, /^agents\.[^.]+\.(bin|permission|harness)$/]
-export const isPrivileged = (dotted: string): boolean => PRIVILEGED.some((re) => re.test(dotted))
-
-// The privileged values a layer holds, by path. A key is not enough to judge a write by: setting
-// `agents.claude` to an object carrying `bin` writes a privileged key through an ordinary one.
+// The values a project file may not set (src/config/load.ts strips them, with a warning, at every
+// load), by path. Writing one there would report success and then be ignored on every run after
+// it. The write is judged by what it changes rather than by its key: setting `agents.claude` to an
+// object carrying `bin` writes a privileged value through an ordinary key.
 export function privilegedValues(layer: Record<string, unknown>): Map<string, string> {
   const out = new Map<string, string>()
   const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -184,11 +181,6 @@ export async function cmdConfig(
       console.error('usage: konvoy config set <key> <value> [--global]')
       return 2
     }
-    if (!opts.global && isPrivileged(key)) {
-      console.error(`refusing to write ${key} to the project config - it is privileged and only the global config may set it`)
-      console.error(`  konvoy config set ${key} ${value} --global`)
-      return 2
-    }
     const path = opts.global ? globalConfigPath() : projectConfigPath(cwd)
     const raw = ((await readLayer(path)) ?? {}) as Record<string, unknown>
     let next: Record<string, unknown>
@@ -203,6 +195,7 @@ export async function cmdConfig(
       const smuggled = [...privilegedValues(next)].find(([k, v]) => before.get(k) !== v)
       if (smuggled) {
         console.error(`refusing to write ${smuggled[0]} to the project config - it is privileged and only the global config may set it`)
+        console.error(`  konvoy config set ${key} '${value}' --global`)
         return 2
       }
     }
