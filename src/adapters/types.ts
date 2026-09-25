@@ -37,7 +37,7 @@ export const DELEGATION_INSTRUCTION =
   '>>>\n' +
   'If this turn is not handing work over, emit nothing - no block at all.'
 
-// One composition point rather than four: the adapters cannot drift in how they join these,
+// One composition point rather than five: the adapters cannot drift in how they join these,
 // and the prelude leads because a stable prefix is what prompt caching discounts. The style
 // and delegation instructions trail the prompt for the same reason - they must never join
 // the cached prefix.

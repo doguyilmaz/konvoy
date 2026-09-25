@@ -13,8 +13,8 @@ export function distinctPaths(stdout: string): string[] {
   return [...new Set(stdout.trim().split('\n').filter(Boolean))]
 }
 
-// engine, policy.maxDelegationDepth and policy.isolation are in the schema and the spec, but
-// nothing reads them yet - the delegation work will. Comparing the parsed policy values against
+// engine, subagentEffort, policy.maxDelegationDepth and policy.isolation are in the schema and the
+// spec, but nothing reads them yet - the delegation work will. Comparing the parsed policy values against
 // their schema defaults is an approximation (a value set explicitly equal to the default reads
 // as unset), acceptable for an informational line with no behavioural effect.
 export function acceptedButUnusedKeys(cfg: Config): string[] {
@@ -23,6 +23,7 @@ export function acceptedButUnusedKeys(cfg: Config): string[] {
   if (cfg.policy.isolation !== 'serial') keys.push('policy.isolation')
   for (const agent of agentIds) {
     if (cfg.agents[agent]?.engine !== undefined) keys.push(`agents.${agent}.engine`)
+    if (cfg.agents[agent]?.subagentEffort !== undefined) keys.push(`agents.${agent}.subagentEffort`)
   }
   return keys
 }

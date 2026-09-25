@@ -354,7 +354,13 @@ export async function send(
         // agent - with backoff, since a hammered upstream is the last thing to hammer again.
         if (r.error?.kind === 'upstream' && retries < upstreamRetries && !opts.signal?.aborted) {
           retries++
-          await pause((deps.upstreamBackoffMs ?? UPSTREAM_BACKOFF_MS) * retries)
+          const wait = (deps.upstreamBackoffMs ?? UPSTREAM_BACKOFF_MS) * retries
+          // said out loud, like every other move konvoy makes on its own: a silent retry hides
+          // both what it costs and why the answer is late
+          console.error(
+            `konvoy: ${current} hit an upstream error - "${oneLine(r.error.message)}" - retrying in ${Math.round(wait / 100) / 10}s (${retries} of ${upstreamRetries})`,
+          )
+          await pause(wait)
           if (opts.signal?.aborted) break
           continue
         }

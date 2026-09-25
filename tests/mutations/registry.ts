@@ -524,6 +524,15 @@ export const mutations: Mutation[] = [
     tests: ['tests/repl.test.ts'],
   },
 
+  // --- an upstream retry is announced (src/core/session.ts) ---
+  {
+    name: 'an upstream retry happens silently, hiding its cost and why the answer is late',
+    file: 'src/core/session.ts',
+    from: '          console.error(\n            `konvoy: ${current} hit an upstream error',
+    to: '          void (\n            `konvoy: ${current} hit an upstream error',
+    tests: ['tests/failover.test.ts'],
+  },
+
   // --- machine facts render as rows, not objects (src/core/facts.ts) ---
   {
     name: 'formatFacts emits a JSON object per file row instead of a comma-separated row',

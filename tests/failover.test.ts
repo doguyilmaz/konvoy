@@ -77,6 +77,12 @@ test('an upstream failure is retried on the same agent before the chain moves', 
     )
     // the original attempt, two retries, then the successor
     expect(calls).toEqual(['codex', 'codex', 'codex', 'claude'])
+    // and each retry says so, with what failed and how many are left
+    const said = err.mock.calls.map((c) => String(c[0]))
+    expect(said.filter((l) => l.includes('retrying'))).toEqual([
+      'konvoy: codex hit an upstream error - "503 Service Unavailable" - retrying in 0s (1 of 2)',
+      'konvoy: codex hit an upstream error - "503 Service Unavailable" - retrying in 0s (2 of 2)',
+    ])
   } finally {
     err.mockRestore()
   }

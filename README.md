@@ -188,7 +188,7 @@ has nobody to ask.
 | | safe | edit | auto | yolo |
 |---|---|---|---|---|
 | claude | `manual` | `acceptEdits` | `auto`, background safety checks | `bypassPermissions` |
-| codex | `-s read-only` | `-s workspace-write` | `-s workspace-write --approve-for-me` | `--dangerously-bypass-approvals-and-sandbox` |
+| codex | `-s read-only` | `-s workspace-write` | `--approve-for-me`, which sets workspace-write itself | `--dangerously-bypass-approvals-and-sandbox` |
 | kiro | `--trust-tools=` | a fixed tool list | the same list: kiro has no auto-review mode | `--trust-all-tools` |
 | opencode | no flag | no flag | `--auto` | `--auto`, its only approval switch |
 | antigravity | `--mode plan` | `--mode accept-edits` | the same mode: agy has no auto-review either | `--dangerously-skip-permissions` |
@@ -291,10 +291,9 @@ recipient's own configured `permission`.
 ## How it works
 
 One konvoy session holds a binding per agent, and each binding holds that agent's own
-foreign session id; konvoy's id and the agent's id are never the same thing. Only claude
-accepts a caller-chosen session id up front; the other four assign their own and hand it
-back after the first turn, which konvoy stores in that agent's binding and resumes on every
-turn after.
+foreign session id. Only claude accepts a caller-chosen session id up front, so its first turn
+starts under konvoy's own session id; the other four assign their own and hand it back after the
+first turn. Either way the id is stored in that agent's binding and resumed on every turn after.
 
 ```mermaid
 flowchart LR

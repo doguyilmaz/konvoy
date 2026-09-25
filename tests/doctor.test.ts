@@ -115,10 +115,10 @@ test('a logged-out agent that no role names is reported, not failed', async () =
 
 test('engine and delegation-policy keys the user set are named as accepted but unused', () => {
   const cfg = configSchema.parse({
-    agents: { codex: { engine: 'v3' } },
+    agents: { codex: { engine: 'v3', subagentEffort: 'low' } },
     policy: { isolation: 'parallel' },
   })
-  expect(acceptedButUnusedKeys(cfg)).toEqual(['policy.isolation', 'agents.codex.engine'])
+  expect(acceptedButUnusedKeys(cfg)).toEqual(['policy.isolation', 'agents.codex.engine', 'agents.codex.subagentEffort'])
 })
 
 test('an untouched config names no accepted-but-unused keys', () => {
