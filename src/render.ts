@@ -455,8 +455,10 @@ export interface BannerFacts {
   columns?: number
 }
 
-// Only claude and codex read `harness` (design section 18); saying it about kiro or opencode
-// would be describing behavior that was never built.
+// Every adapter honours `harness`, but only for claude and codex does `minimal` withhold exactly
+// this - MCP servers, skills and settings files. kiro runs a generated profile, opencode keeps its
+// global config, and agy only drops slash commands (design section 18); the sentence below would
+// overstate what each of those loses.
 const HARNESS_AWARE = new Set(['claude', 'codex'])
 
 // The first thing a session shows, in the shape every agent CLI opens with: a box naming the tool,

@@ -1,7 +1,7 @@
 import { agentIds, getAdapter } from '../src/adapters'
 import type { AgentId, Binding, TurnContext } from '../src/types'
 
-// bun run verify:claims - checks the claims konvoy's own docs make about the four agent
+// bun run verify:claims - checks the claims konvoy's own docs make about the five agent
 // CLIs against what --help actually says on this machine. This is the standing form of a
 // manual check that already caught one stale belief (a `doctor` claim no command ever
 // implemented); the other kind of stale belief - silent tilde in a `bin` path - is a
@@ -107,6 +107,8 @@ const checks: Check[] = [
   updateCheck('codex', ['update', '--help']),
   updateCheck('kiro-cli', ['update', '--help']),
   updateCheck('opencode', ['upgrade', '--help']),
+  // only user reports and the docs' search snippets name it so far; this is where it is confirmed
+  updateCheck('agy', ['update', '--help']),
 
   helpCheck('claude', ['--help'], 'claude --session-id exists (a caller can set the session id)', (out) =>
     SESSION_ID_FLAG.test(out)

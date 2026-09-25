@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test'
 import { formatRoster, formatUsage, formatVersions, outputColor, table } from '../src/format'
+import { SWITCHES } from '../src/args'
+import { commandHelp, commandTable, FLAG_VALUES, GLOBAL_FLAGS } from '../src/commands/table'
 
 // Every command's output goes through one `table()`, so alignment, colour and empty columns are
 // decided once. Before this, numbers were padded like words - `27` and `6` started at the same
@@ -122,4 +124,25 @@ test('a formatter stays plain even where colour is available, and the edge helpe
     if (before.force === undefined) delete Bun.env.FORCE_COLOR
     else Bun.env.FORCE_COLOR = before.force
   }
+})
+
+// A flag's help says what it takes. The parser decides by SWITCHES whether the word after a flag is
+// its value, so a switch shown with a placeholder, or a value flag shown bare, would teach the
+// wrong command line.
+test('every flag with a help placeholder takes a value, and every other flag is a switch', () => {
+  const flags = new Set([...commandTable.flatMap((c) => Object.keys(c.flags)), ...GLOBAL_FLAGS.filter((f) => f.length > 1)])
+  for (const f of flags) expect(`${f}: ${SWITCHES.has(f) ? 'switch' : 'value'}`).toBe(`${f}: ${FLAG_VALUES[f] ? 'value' : 'switch'}`)
+})
+
+test('every command has a help page naming its usage and each flag it reads', () => {
+  for (const c of commandTable) {
+    const page = commandHelp(c.name)!
+    expect(page.split('\n')[0]).toBe(`usage: konvoy ${c.usage}`)
+    for (const [flag, help] of Object.entries(c.flags)) {
+      expect(help, `${c.name} --${flag}`).not.toBe('')
+      expect(page).toContain(`--${flag}`)
+    }
+  }
+  expect(commandHelp('ls', '/')).toContain('also: /sessions, /list')
+  expect(commandHelp('nope')).toBeNull()
 })

@@ -20,7 +20,7 @@ import {
   usageForSession,
 } from '../store/queries'
 import { cmdNew } from './new'
-import { commandTable, formatRows, resolveCommandName, type CommandRow } from './table'
+import { commandHelp, commandTable, formatRows, resolveCommandName, type CommandRow } from './table'
 import type { Completion, EditorIo, MenuItem, PromptSpec } from '../editor'
 import { stringWidth } from '../term'
 
@@ -196,7 +196,6 @@ const INNER: readonly CommandRow[] = [
   { usage: 'retry [agent]', summary: 'send the last prompt again, to this agent or another' },
   { usage: 'goal <text>', summary: 'set the session goal' },
   { usage: 'clear', summary: 'clear the screen' },
-  { usage: 'help', summary: 'this list' },
   { usage: 'quit', summary: 'leave (Ctrl-D does too)' },
 ]
 
@@ -426,7 +425,8 @@ export async function runRepl(
     const [cmd = '', ...rest] = line.slice(1).split(/\s+/)
     if (cmd === 'quit' || cmd === 'exit' || cmd === 'q') break
     if (cmd === 'help' || cmd === '?') {
-      io.write(replHelp())
+      const page = rest[0] ? commandHelp(rest[0].replace(/^\//, ''), '/') : null
+      io.write(page ?? replHelp())
     } else if (cmd === 'use') {
       if (!rest[0]) {
         say(`talking to ${agent} - /use <agent> to switch: ${agentIds.join(', ')}`)

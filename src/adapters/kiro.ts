@@ -3,7 +3,7 @@ import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type 
 
 // kiro-cli 2.23.0 `chat --help` has only `--trust-tools=<list>` and `--trust-all-tools`: no
 // automatic-review mode to map `auto` onto. It therefore trusts exactly what `edit` trusts -
-// promoting it to `--trust-all-tools` would make `auto` mean yolo on one agent out of four.
+// promoting it to `--trust-all-tools` would make `auto` mean yolo on one agent out of five.
 const TRUST: Record<Permission, string> = {
   safe: '--trust-tools=',
   edit: '--trust-tools=fs_read,fs_write,grep,glob,execute_bash',
@@ -41,8 +41,9 @@ const minimalProfile = JSON.stringify(
 )
 
 // kiro warns and carries on when `--agent` names something it cannot load, so a stderr line is
-// the only evidence konvoy is not running the harness it thinks it is. Treated as a failed turn:
-// silently running the user's whole setup under the name "minimal" is worse than stopping.
+// the only evidence konvoy is not running the harness it thinks it is. The turn's answer stands,
+// but it is reported with the turn: silently running the user's whole setup under the name
+// "minimal" is the one outcome worse than saying so.
 const AGENT_FAILED = /failed to set agent '([^']*)'/
 
 interface ToolUpdate {

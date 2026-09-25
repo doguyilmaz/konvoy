@@ -5,7 +5,7 @@ export interface Args {
 
 // Flags that are switches, so `konvoy rm --yes <slug>` keeps its slug. Their consumers are the
 // `=== true` checks in cli.ts; a value flag (--session, --port) is anything not listed here.
-const SWITCHES = new Set(['all', 'yes', 'global', 'chart', 'json', 'no-open', 'help', 'h', 'version', 'v', 'V'])
+export const SWITCHES = new Set(['all', 'yes', 'global', 'chart', 'json', 'no-open', 'dry-run', 'help', 'h', 'version', 'v', 'V'])
 
 export function parseArgs(argv: string[]): Args {
   const positional: string[] = []
