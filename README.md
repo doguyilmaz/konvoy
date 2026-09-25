@@ -43,8 +43,12 @@ to download; the npm package is a few kilobytes of source and runs on the Bun yo
 konvoy                         # start: resume this directory's session or create one, then talk
 konvoy new "refactor the auth layer"
 konvoy new                     # no goal: named after the directory, like sinkaf-8f3a
+konvoy new --lead codex        # a session codex leads
 konvoy send codex "start with the token refresh path"
+git diff | konvoy send claude "review this" -   # a lone - is read from stdin
 konvoy ls
+konvoy log                     # what this session did, newest first: who, what, how it ended
+konvoy show                    # the latest turn in full; konvoy show 3 > answer.md for an older one
 konvoy resume                  # make a session current again and show its roster
 konvoy roster
 konvoy usage --all --chart     # GATE reads as a dash until a `gate` command is configured
@@ -57,39 +61,81 @@ konvoy rm stale-slug --yes
 konvoy rename stale-slug token-refresh   # the session's .konvoy folder follows
 konvoy version
 konvoy dashboard --port 4000  # local page with the same numbers as `usage --chart`
+konvoy completion zsh > "${fpath[1]}/_konvoy"   # or: eval "$(konvoy completion bash)"
 ```
 
-Bare `konvoy` is the everyday entry: it resumes the session bound to this directory or creates
-one named after it, then reads what you type. Plain text is a turn against the current agent; a
-line starting with `/` runs any command from the list (`/usage --all`, `/rename token-refresh`,
-`/attach`), plus `/use <agent>`, `/goal <text>`, `/help` and `/quit`. Ctrl-D leaves, Ctrl-C stops a
-running turn and leaves, and piped stdin runs one turn per line. A block pasted into a terminal
-is one turn with every line of it, not one turn per line.
+`ls`, `log`, `roster` and `usage` take `--json` for scripts. A flag a command does not read is
+refused by name, with the one it was probably meant to be: a mistyped session flag stops the command
+instead of quietly running it against the current session.
+
+### Interactive
+
+Bare `konvoy` is the everyday entry: it resumes the session bound to this directory, or creates one
+named after it, and picks the conversation up with the agent that answered last. On a terminal the
+prompt sits between two rules, with the session's running total and the agent's model, effort and
+permission under it, the way the agents' own CLIs draw theirs:
 
 ```text
-konvoy 0.3.2  session sinkaf-8f3a  lead claude
-  /repo/.konvoy/sinkaf-8f3a
-  ! harness minimal: claude runs without your MCP servers, skills or settings files
-    konvoy config set defaults.harness inherit --global   to run it with your own setup
-  ! permission edit: a tool that needs approval is refused, since a headless turn has nobody to ask
+╭────────────────────────────────────────────────────────╮
+│ ✻ konvoy 0.4.0                                         │
+│                                                        │
+│   session sinkaf-8f3a · fix the token refresh          │
+│   agent   claude · opus · high · auto                  │
+│   convoy  ● claude  ● codex  ○ kiro  ● opencode        │
+│   dir     ~/repo/.konvoy/sinkaf-8f3a                   │
+╰────────────────────────────────────────────────────────╯
 
 claude › fix the token refresh
-  … thinking
   ✓ Read  src/auth.ts  0.3s
   ✗ Bash  bun test  1.4s
 Switched the refresh to fire on 401 with a single in-flight retry.
+
   claude · 8.2s · 24.4k in / 311 out · $0.0621
-claude › /use codex
-codex › review that diff
+
+────────────────────────────────────────────────────────────────
+claude › @codex review that diff
+────────────────────────────────────────────────────────────────
+  sinkaf-8f3a · 1 turn · 24.4k in · $0.06          opus · high · auto
 ```
 
-The answer streams as the agent produces it, each tool call says what it touched and how it
-ended, and the footer carries the turn's time, context and spend. On a terminal the slug is dim
-and each agent keeps its own colour; piped or with `NO_COLOR` set, the same run writes plain text
-and only the answer goes to stdout, so `konvoy send … > file` still holds exactly the answer.
-The two `!` lines appear only when konvoy is actually withholding something: `harness: minimal`
-strips claude's and codex's own MCP servers, skills and settings, and `permission: safe` or
-`edit` means a tool that asks for approval is refused, because a headless turn has nobody to ask.
+While a turn runs, a status line says the agent is working or thinking, for how long and how to stop
+it (`✻ Thinking… (4s · esc to interrupt)`); the answer streams in as it is written, token by token
+for claude, rendered as Markdown; each tool call says what it touched, how it ended and how long it
+took; and the footer carries the turn's time, context and spend. Piped or with `NO_COLOR` set, the
+same run writes plain text and only the answer goes to stdout, so `konvoy send … > file` still holds
+exactly the answer. Each agent keeps its own CLI's colour, in 24-bit, 256 or 16 colours as the
+terminal allows.
+
+Plain text is a turn against the current agent. `/` opens a popup of every command (`/usage --all`,
+`/rename token-refresh`, `/attach`), plus the REPL's own:
+
+| | |
+|---|---|
+| `/use <agent>` | talk to that agent from now on; Shift-Tab cycles through them |
+| `@codex <msg>` | ask another agent once, without switching to it |
+| `/model <name>`, `/effort <level>` | change the current agent's model or effort until you leave |
+| `/retry [agent]` | send the last prompt again, to this agent or another |
+| `!<command>` | run a shell command in the session directory |
+| `/goal <text>`, `/clear`, `/help`, `/quit` | set the goal, clear the screen, list everything, leave |
+
+| key | |
+|---|---|
+| Esc | stop the running turn and stay in konvoy; twice clears the line |
+| Ctrl-C | stop the running turn, or clear the line; twice on an empty line leaves |
+| Ctrl-D | leave, from an empty line |
+| `\` Enter, Alt-Enter, Ctrl-J | a new line (Shift-Enter too, where the terminal reports it) |
+| ↑ ↓, Ctrl-R | this project's history; search it |
+| Tab | take what the popup offers |
+| `?` | the keys, on an empty line |
+
+A pasted block lands in the line to be edited, not sent; one longer than four lines is held under a
+`[Pasted text #1 +42 lines]` placeholder and sent in full. What you type while a turn runs waits for
+the next prompt. Piped stdin runs one turn per line and exits at EOF.
+
+The `!` lines in the banner appear only when konvoy is actually withholding something:
+`harness: minimal` strips claude's and codex's own MCP servers, skills and settings, and
+`permission: safe` or `edit` means a tool that asks for approval is refused, because a headless turn
+has nobody to ask.
 
 `permission` is one scale over five CLIs, `safe | edit | auto | yolo`:
 
@@ -200,7 +246,7 @@ recipient's own configured `permission`.
 
 One konvoy session holds a binding per agent, and each binding holds that agent's own
 foreign session id; konvoy's id and the agent's id are never the same thing. Only claude
-accepts a caller-chosen session id up front; the other three assign their own and hand it
+accepts a caller-chosen session id up front; the other four assign their own and hand it
 back after the first turn, which konvoy stores in that agent's binding and resumes on every
 turn after.
 
@@ -252,7 +298,11 @@ If a CLI is not on your `PATH`, point konvoy at it directly and every command (`
 
 `konvoy config set <key> <value> [--global]` rewrites the layer it touches as plain JSON, so
 any comments in that file are lost; `--global` targets the global file instead of the
-project one. Hand-edit the file instead when you want to keep them.
+project one. Hand-edit the file instead when you want to keep them. A list or an object is given
+as JSON (`konvoy config set failover.chain '["codex","claude"]'`), `konvoy config unset <key>`
+removes one, and `konvoy config path` prints where both files live. A privileged key - `bin`,
+`permission`, `harness`, `gate` - is refused for the project file with the `--global` command that
+would set it, since a project value would be ignored at every load.
 
 Name a `failover` chain and konvoy follows it when an agent can't work, instead of asking:
 

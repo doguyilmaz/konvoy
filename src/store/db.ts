@@ -31,6 +31,13 @@ const MIGRATIONS: string[] = [
    ALTER TABLE turn ADD COLUMN model TEXT;`,
   `CREATE INDEX turn_session_id ON turn(session_id);
    CREATE INDEX session_cwd_status ON session(cwd, status);`,
+  // what /retry reads: the latest turn a person asked for, which has no parent. Applying it is also
+  // what makes a store an earlier konvoy created private (see openDb)
+  `CREATE INDEX turn_session_parent ON turn(session_id, parent_turn_id);`,
+  // the REPL's prompt history, per directory (src/history.ts)
+  `CREATE TABLE prompt_history (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, cwd TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL);
+   CREATE INDEX prompt_history_cwd ON prompt_history(cwd, id);`,
 ]
 
 // SQLite refuses to create a database whose directory is missing, so konvoy has to make it. It
@@ -43,11 +50,18 @@ const MIGRATIONS: string[] = [
 // cannot decide whether konvoy starts. Bun.which itself falls back to a default search path.
 function ensureDirectory(dir: string): void {
   const mkdir = Bun.which('mkdir') ?? '/bin/mkdir'
-  const made = Bun.spawnSync([mkdir, '-p', dir], { stdout: 'ignore', stderr: 'pipe' })
+  // owner-only: the store holds every prompt and every answer
+  const made = Bun.spawnSync([mkdir, '-p', '-m', '700', dir], { stdout: 'ignore', stderr: 'pipe' })
   if (made.exitCode !== 0) {
     const reason = made.stderr.toString().trim() || `exit ${made.exitCode}`
     throw new Error(`cannot create the konvoy store directory ${dir}: ${reason}`)
   }
+}
+
+function makePrivate(path: string): void {
+  const chmod = Bun.which('chmod') ?? '/bin/chmod'
+  Bun.spawnSync([chmod, '600', path, `${path}-wal`, `${path}-shm`], { stdout: 'ignore', stderr: 'ignore' })
+  Bun.spawnSync([chmod, '700', dirname(path)], { stdout: 'ignore', stderr: 'ignore' })
 }
 
 function open(path: string): Database {
@@ -77,6 +91,9 @@ export function openDb(path: string): Database {
       } catch {
         // another opener is switching it right now
       }
+      // In WAL mode NORMAL cannot corrupt the database; what it gives up is the last commits on a
+      // power cut. It takes an fsync off every commit, and a turn commits once per event it records.
+      db.exec('PRAGMA synchronous = NORMAL')
     }
     // one transaction for every pending migration: a loser of the open race re-reads
     // user_version under the write lock and finds nothing left to do, and a process that dies
@@ -84,6 +101,11 @@ export function openDb(path: string): Database {
     db.exec('BEGIN IMMEDIATE')
     try {
       const current = (db.query('PRAGMA user_version').get() as { user_version: number }).user_version
+      // Every prompt and answer lives here, and the default umask left the store readable by anyone
+      // on the machine. Whenever a migration runs - a store being created, or one an earlier konvoy left -
+      // the files and their directory are made owner-only; the WAL mode switch above has already
+      // created -wal and -shm by then, so they are included
+      if (current < MIGRATIONS.length && path !== ':memory:') makePrivate(path)
       for (let v = current; v < MIGRATIONS.length; v++) {
         db.exec(MIGRATIONS[v]!)
         db.exec(`PRAGMA user_version = ${v + 1}`)

@@ -72,7 +72,7 @@ test('an item error is reported without claiming the turn failed', () => {
 
 test('other completed items are reported as tool activity', () => {
   const line = JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: ['ls'] } })
-  expect(codexAdapter.parse(line)).toEqual([{ t: 'tool', name: 'command_execution', status: 'ok' }])
+  expect(codexAdapter.parse(line)).toEqual([{ t: 'tool', name: 'Shell', status: 'ok' }])
 })
 
 test('turn.completed yields usage', () => {
@@ -87,8 +87,8 @@ test('the captured fixture parses into session, tool call, text, notice and usag
   // the capture holds the started/completed pair for one shell call, and both carry the command:
   // the started item is what opens the live line, the completed one settles it with its exit code
   expect(events.filter((e) => e.t === 'tool')).toEqual([
-    { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
-    { t: 'tool', name: 'command_execution', status: 'ok', detail: "/bin/zsh -lc 'cat package.json'" },
+    { t: 'tool', name: 'Shell', status: 'start', detail: 'cat package.json' },
+    { t: 'tool', name: 'Shell', status: 'ok', detail: 'cat package.json' },
   ])
   const text = events.filter((e) => e.t === 'text').map((e) => (e as { text: string }).text).join('')
   expect(text).toContain('package.json')
@@ -130,9 +130,8 @@ test('a codex shell item carries the command it ran', () => {
       item: { id: 'item_2', type: 'command_execution', command: "/bin/zsh -lc 'cat package.json'", status: 'in_progress' },
     }),
   )
-  expect(started).toEqual([
-    { t: 'tool', name: 'command_execution', status: 'start', detail: "/bin/zsh -lc 'cat package.json'" },
-  ])
+  // the login-shell wrapper is codex's plumbing; the command inside it is what the agent ran
+  expect(started).toEqual([{ t: 'tool', name: 'Shell', status: 'start', detail: 'cat package.json' }])
 
   const completed = codexAdapter.parse(
     JSON.stringify({
@@ -140,7 +139,33 @@ test('a codex shell item carries the command it ran', () => {
       item: { id: 'item_2', type: 'command_execution', command: 'bun test', exit_code: 1, status: 'completed' },
     }),
   )
-  expect(completed).toEqual([{ t: 'tool', name: 'command_execution', status: 'error', detail: 'bun test' }])
+  expect(completed).toEqual([{ t: 'tool', name: 'Shell', status: 'error', detail: 'bun test' }])
+})
+
+// codex's own item types are plumbing. What a reader recognises is what every other CLI calls the
+// same act, and the subject each item carries under its own key: the files, the server, the query.
+test('codex items are named for what they do, with the subject each carries', () => {
+  const edit = codexAdapter.parse(
+    JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'file_change', status: 'completed', changes: [{ path: 'src/auth.ts', kind: 'update' }, { path: 'src/b.ts', kind: 'add' }] },
+    }),
+  )
+  expect(edit).toEqual([{ t: 'tool', name: 'Edit', status: 'ok', detail: 'src/auth.ts +1 more' }])
+
+  const mcp = codexAdapter.parse(
+    JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'github', tool: 'create_issue', status: 'failed' } }),
+  )
+  expect(mcp).toEqual([{ t: 'tool', name: 'github.create_issue', status: 'error' }])
+
+  const search = codexAdapter.parse(JSON.stringify({ type: 'item.started', item: { type: 'web_search', query: 'bun sqlite wal' } }))
+  expect(search).toEqual([{ t: 'tool', name: 'WebSearch', status: 'start', detail: 'bun sqlite wal' }])
+
+  // a wrapper whose command itself holds a quote is left alone rather than unwrapped wrongly
+  const quoted = codexAdapter.parse(
+    JSON.stringify({ type: 'item.started', item: { type: 'command_execution', command: "bash -lc 'echo '\\''x'\\'''" } }),
+  )
+  expect((quoted[0] as { detail: string }).detail).toStartWith('bash -lc')
 })
 
 // Captured on 2026-09-23 from a real exhausted codex account (design section 33 called this

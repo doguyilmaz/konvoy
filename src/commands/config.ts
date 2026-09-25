@@ -4,10 +4,19 @@ import { explain, globalConfigPath, projectConfigPath, readLayer, resolveAgent }
 import { agentIds } from '../adapters'
 import { outputColor, table } from '../format'
 
-export function coerce(raw: string): string | number | boolean {
+export function coerce(raw: string): unknown {
   if (raw === 'true') return true
   if (raw === 'false') return false
+  if (raw === 'null') return null
   if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw)
+  // a list or an object is written as JSON: `config set failover.chain '["codex","claude"]'`
+  if (/^[\[{]/.test(raw)) {
+    try {
+      return JSON.parse(raw) as unknown
+    } catch {
+      return raw
+    }
+  }
   return raw
 }
 
@@ -47,6 +56,47 @@ export function setPath(
     node = node[key] as Record<string, unknown>
   }
   node[keys.at(-1)!] = coerce(raw)
+  return out
+}
+
+/** the layer without the key, and without any object the removal left empty */
+export function unsetPath(obj: Record<string, unknown>, dotted: string): { next: Record<string, unknown>; found: boolean } {
+  assertSafe(dotted)
+  const keys: string[] = dotted.split('.')
+  const out = structuredClone(obj)
+  const trail: Record<string, unknown>[] = [out]
+  let node: Record<string, unknown> = out
+  for (const key of keys.slice(0, -1)) {
+    const child = node[key]
+    if (typeof child !== 'object' || child === null) return { next: obj, found: false }
+    node = child as Record<string, unknown>
+    trail.push(node)
+  }
+  const last = keys.at(-1)!
+  if (!(last in node)) return { next: obj, found: false }
+  delete node[last]
+  for (let i = trail.length - 1; i > 0; i--) {
+    if (Object.keys(trail[i]!).length > 0) break
+    delete trail[i - 1]![keys[i - 1]!]
+  }
+  return { next: out, found: true }
+}
+
+// The values a project file may not set (src/config/load.ts strips them, with a warning, at every
+// load), by path. Writing one there would report success and then be ignored on every run after
+// it. The write is judged by what it changes rather than by its key: setting `agents.claude` to an
+// object carrying `bin` writes a privileged value through an ordinary key.
+export function privilegedValues(layer: Record<string, unknown>): Map<string, string> {
+  const out = new Map<string, string>()
+  const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+  if ('gate' in layer) out.set('gate', JSON.stringify(layer.gate))
+  if (obj(layer.defaults)) for (const k of ['permission', 'harness']) if (k in layer.defaults) out.set(`defaults.${k}`, JSON.stringify(layer.defaults[k]))
+  if (obj(layer.agents)) {
+    for (const [id, agent] of Object.entries(layer.agents)) {
+      if (!obj(agent)) continue
+      for (const k of ['bin', 'permission', 'harness']) if (k in agent) out.set(`agents.${id}.${k}`, JSON.stringify(agent[k]))
+    }
+  }
   return out
 }
 
@@ -97,6 +147,35 @@ export async function cmdConfig(
     return 0
   }
 
+  if (action === 'path') {
+    console.log(`global   ${globalConfigPath()}`)
+    console.log(`project  ${projectConfigPath(cwd)}`)
+    return 0
+  }
+
+  if (action === 'unset') {
+    if (!key) {
+      console.error('usage: konvoy config unset <key> [--global]')
+      return 2
+    }
+    const path = opts.global ? globalConfigPath() : projectConfigPath(cwd)
+    const raw = ((await readLayer(path)) ?? {}) as Record<string, unknown>
+    let result: { next: Record<string, unknown>; found: boolean }
+    try {
+      result = unsetPath(raw, key)
+    } catch (e) {
+      console.error((e as Error).message)
+      return 2
+    }
+    if (!result.found) {
+      console.error(`${key} is not set in ${path}`)
+      return 2
+    }
+    await Bun.write(path, JSON.stringify(result.next, null, 2) + '\n')
+    console.log(`${key} unset  (${path})`)
+    return 0
+  }
+
   if (action === 'set') {
     if (!key || value === undefined) {
       console.error('usage: konvoy config set <key> <value> [--global]')
@@ -111,6 +190,15 @@ export async function cmdConfig(
       console.error((e as Error).message)
       return 2
     }
+    if (!opts.global) {
+      const before = privilegedValues(raw)
+      const smuggled = [...privilegedValues(next)].find(([k, v]) => before.get(k) !== v)
+      if (smuggled) {
+        console.error(`refusing to write ${smuggled[0]} to the project config - it is privileged and only the global config may set it`)
+        console.error(`  konvoy config set ${key} '${value}' --global`)
+        return 2
+      }
+    }
     const parsed = configSchema.safeParse(next)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
@@ -122,6 +210,6 @@ export async function cmdConfig(
     return 0
   }
 
-  console.error('usage: konvoy config get|set')
+  console.error('usage: konvoy config get|set|unset|path')
   return 2
 }

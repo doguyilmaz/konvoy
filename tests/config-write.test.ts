@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { coerce, getPath, setPath } from '../src/commands/config'
+import { coerce, getPath, privilegedValues, setPath, unsetPath } from '../src/commands/config'
 import { configSchema } from '../src/config/schema'
 
 test('values are coerced to their obvious type', () => {
@@ -45,4 +45,71 @@ test('a dotted path cannot reach Object.prototype', () => {
 test('ordinary keys that merely contain a reserved word still work', () => {
   expect(setPath({}, 'agents.claude.model', 'opus')).toEqual({ agents: { claude: { model: 'opus' } } })
   expect(setPath({}, 'defaults.prototypeMode', 'true')).toEqual({ defaults: { prototypeMode: true } })
+})
+
+test('a list or an object is written as JSON, so a failover chain can be set from the command line', () => {
+  expect(coerce('["codex","claude"]')).toEqual(['codex', 'claude'])
+  expect(coerce('{"enabled":true}')).toEqual({ enabled: true })
+  expect(coerce('null')).toBe(null)
+  // not JSON after all: kept as the string it was
+  expect(coerce('[not json')).toBe('[not json')
+  const next = setPath({}, 'failover.chain', '["codex","claude"]')
+  expect(configSchema.safeParse(next).success).toBe(true)
+})
+
+test('unset removes a key and the objects it leaves empty, and says when there was nothing to remove', () => {
+  const start = { agents: { codex: { model: 'gpt-6-astra' } }, defaults: { effort: 'high' } }
+  expect(unsetPath(start, 'agents.codex.model')).toEqual({ next: { defaults: { effort: 'high' } }, found: true })
+  expect(unsetPath(start, 'agents.kiro.model').found).toBe(false)
+  expect(() => unsetPath({}, '__proto__.polluted')).toThrow()
+})
+
+// load.ts strips these from a project file at every load; writing one there reported success and
+// was then ignored on every run after it
+test('every value only the global config may set is found in a layer, by path', () => {
+  const found = privilegedValues({
+    gate: { command: 'x' },
+    defaults: { permission: 'yolo', harness: 'inherit', effort: 'high' },
+    agents: { codex: { bin: '/x', model: 'm' }, claude: { permission: 'auto' } },
+    failover: { chain: ['codex'] },
+  })
+  expect([...found.keys()].sort()).toEqual(['agents.claude.permission', 'agents.codex.bin', 'defaults.harness', 'defaults.permission', 'gate'])
+})
+
+test('config set refuses a privileged key for the project file, and writes nothing', async () => {
+  const { spyOn } = await import('bun:test')
+  const { cmdConfig } = await import('../src/commands/config')
+  const dir = `/tmp/konvoy-test-privileged-${Bun.nanoseconds()}`
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const code = await cmdConfig(configSchema.parse({}), dir, 'set', 'gate.command', 'rm -rf /', {})
+    expect(code).toBe(2)
+    expect(await Bun.file(`${dir}/.konvoy/config.jsonc`).exists()).toBe(false)
+    expect(String(err.mock.calls[0]?.[0])).toContain('only the global config may set it')
+    // and says how to do it where it would take effect
+    expect(String(err.mock.calls[1]?.[0])).toBe("  konvoy config set gate.command 'rm -rf /' --global")
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('a privileged key written inside an object value is refused for the project file too', async () => {
+  const { spyOn } = await import('bun:test')
+  const { cmdConfig } = await import('../src/commands/config')
+  const dir = `/tmp/konvoy-test-smuggle-${Bun.nanoseconds()}`
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect(await cmdConfig(configSchema.parse({}), dir, 'set', 'agents.claude', '{"bin":"/tmp/x","model":"opus"}', {})).toBe(2)
+    expect(await cmdConfig(configSchema.parse({}), dir, 'set', 'defaults', '{"permission":"yolo"}', {})).toBe(2)
+    expect(await Bun.file(`${dir}/.konvoy/config.jsonc`).exists()).toBe(false)
+    // an object with no privileged key in it is an ordinary write
+    const log = spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      expect(await cmdConfig(configSchema.parse({}), dir, 'set', 'agents.claude', '{"model":"opus"}', {})).toBe(0)
+    } finally {
+      log.mockRestore()
+    }
+  } finally {
+    err.mockRestore()
+  }
 })

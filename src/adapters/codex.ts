@@ -1,9 +1,53 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
 import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
-// codex names the subject of a shell item in `command`; model-controlled, so sanitized.
-const toolDetail = (item: { command?: string }): { detail?: string } =>
-  typeof item.command === 'string' && item.command !== '' ? { detail: oneLine(item.command, 80) } : {}
+interface Item {
+  type?: string
+  text?: string
+  message?: string
+  command?: string
+  exit_code?: number | null
+  status?: string
+  changes?: { path?: string; kind?: string }[]
+  server?: string
+  tool?: string
+  query?: string
+}
+
+// codex runs every command through a login shell and reports the wrapper: `/bin/zsh -lc 'cat
+// package.json'`. The command inside is what the agent chose; the wrapper is codex's own plumbing.
+const SHELL_WRAPPER = /^(?:\/\S*\/)?(?:ba|z|da|k)?sh -l?c '([\s\S]*)'$/
+
+function command(raw: string): string {
+  const inner = SHELL_WRAPPER.exec(raw)?.[1]
+  return inner && !inner.includes("'") ? inner : raw
+}
+
+// codex names each item by its type, and the type is plumbing: `command_execution` reads as a
+// parser's word, `Shell` as what happened. Every other CLI konvoy drives names tools this way.
+const TOOL_NAME: Record<string, string> = {
+  command_execution: 'Shell',
+  file_change: 'Edit',
+  web_search: 'WebSearch',
+  todo_list: 'Plan',
+}
+
+function toolName(item: Item): string {
+  if (item.type === 'mcp_tool_call' && item.server && item.tool) return `${item.server}.${item.tool}`
+  return TOOL_NAME[item.type ?? ''] ?? item.type ?? 'tool'
+}
+
+// The subject of each item sits under its own key; model-controlled, so sanitized.
+function toolDetail(item: Item): { detail?: string } {
+  if (typeof item.command === 'string' && item.command !== '') return { detail: oneLine(command(item.command), 80) }
+  const paths = Array.isArray(item.changes) ? item.changes.flatMap((c) => (typeof c?.path === 'string' ? [c.path] : [])) : []
+  if (paths.length > 0) {
+    const more = paths.length > 1 ? ` +${paths.length - 1} more` : ''
+    return { detail: `${oneLine(paths[0]!, 70)}${more}` }
+  }
+  if (typeof item.query === 'string' && item.query !== '') return { detail: oneLine(item.query, 80) }
+  return {}
+}
 
 // `--approve-for-me` is codex's own words for this: "route approval requests through automatic
 // review using the workspace-write sandbox" (codex exec --help, 0.156.1). It therefore sets that
@@ -44,15 +88,13 @@ export const codexAdapter: Adapter = {
     }
 
     if (o.type === 'item.started' || o.type === 'item.completed') {
-      const item = o.item as
-        | { type?: string; text?: string; message?: string; command?: string; exit_code?: number | null }
-        | undefined
+      const item = o.item as Item | undefined
       if (!item?.type) return []
       // a started item is only ever a tool: text and reasoning arrive completed
       if (o.type === 'item.started') {
         return item.type === 'agent_message' || item.type === 'reasoning' || item.type === 'error'
           ? []
-          : [{ t: 'tool', name: item.type, status: 'start', ...toolDetail(item) }]
+          : [{ t: 'tool', name: toolName(item), status: 'start', ...toolDetail(item) }]
       }
       if (item.type === 'agent_message') return item.text ? [{ t: 'text', text: item.text }] : []
       if (item.type === 'reasoning') return item.text ? [{ t: 'thinking', text: item.text }] : []
@@ -61,9 +103,10 @@ export const codexAdapter: Adapter = {
         return [{ t: 'error', message, kind: classifyError(message), source: 'item' }]
       }
       // the capture carries exit_code on a completed command_execution: a non-zero one is the
-      // difference between "it ran" and "it failed", which the tool line now shows
-      const failed = typeof item.exit_code === 'number' && item.exit_code !== 0
-      return [{ t: 'tool', name: item.type, status: failed ? 'error' : 'ok', ...toolDetail(item) }]
+      // difference between "it ran" and "it failed", which the tool line now shows. The other
+      // tool items report the same through their status.
+      const failed = (typeof item.exit_code === 'number' && item.exit_code !== 0) || item.status === 'failed'
+      return [{ t: 'tool', name: toolName(item), status: failed ? 'error' : 'ok', ...toolDetail(item) }]
     }
 
     if (o.type === 'turn.completed') {

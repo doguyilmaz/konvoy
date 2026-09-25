@@ -140,7 +140,7 @@ test('an opencode tool part carries what it acted on', () => {
       part: { type: 'tool', tool: 'read', state: { status: 'completed', input: { path: 'package.json' } } },
     }),
   )
-  expect(events).toEqual([{ t: 'tool', name: 'read', status: 'ok', detail: 'package.json' }])
+  expect(events).toEqual([{ t: 'tool', name: 'Read', status: 'ok', detail: 'package.json' }])
 
   const bash = opencodeAdapter.parse(
     JSON.stringify({
@@ -148,7 +148,7 @@ test('an opencode tool part carries what it acted on', () => {
       part: { type: 'tool', tool: 'bash', state: { status: 'error', input: { command: 'bun test' } } },
     }),
   )
-  expect(bash).toEqual([{ t: 'tool', name: 'bash', status: 'error', detail: 'bun test' }])
+  expect(bash).toEqual([{ t: 'tool', name: 'Bash', status: 'error', detail: 'bun test' }])
 })
 
 // Captured from a real smoke run on 2026-09-23: opencode refused every turn with

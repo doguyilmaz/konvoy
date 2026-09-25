@@ -1,10 +1,17 @@
 import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
+import type { AgentId } from '../types'
 import { newSession, slugify } from '../core/session'
 import { basename, join, sessionDir } from '../paths'
 
-export async function cmdNew(db: Database, cfg: Config, cwd: string, goal: string): Promise<number> {
-  const lead = cfg.roles.lead ?? 'claude'
+export async function cmdNew(
+  db: Database,
+  cfg: Config,
+  cwd: string,
+  goal: string,
+  opts: { lead?: AgentId; quiet?: boolean } = {},
+): Promise<number> {
+  const lead = opts.lead ?? cfg.roles.lead ?? 'claude'
   const suffix = Bun.randomUUIDv7().slice(-4)
   const slug = goal ? undefined : `${slugify(basename(cwd)).slice(0, 30)}-${suffix}`
   const session = newSession(db, { cwd, goal, lead, slug })
@@ -21,6 +28,8 @@ export async function cmdNew(db: Database, cfg: Config, cwd: string, goal: strin
   )
   const ledger = Bun.file(`${dir}/LEDGER.md`)
   if (!(await ledger.exists())) await Bun.write(ledger, `# Ledger - ${session.slug}\n`)
+  // the REPL's banner names the session it opens, so it asks for no second announcement
+  if (opts.quiet) return 0
   console.log(`created session ${session.slug} (lead: ${lead})`)
   console.log(dir)
   return 0

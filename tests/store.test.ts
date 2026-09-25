@@ -424,3 +424,28 @@ test('a store directory that cannot be created fails with the reason, not a bare
     await Bun.$`rm -rf ${base}`.quiet().nothrow()
   }
 })
+
+// Every prompt and every answer lives in this file. The default umask left it, and the directory
+// it sits in, readable by anyone on the machine.
+test('a store created on disk is readable by its owner alone', async () => {
+  const dir = `/tmp/konvoy-test-private-${Bun.nanoseconds()}/data`
+  const path = `${dir}/konvoy.db`
+  openDb(path).close()
+  expect((await Bun.file(path).stat()).mode & 0o777).toBe(0o600)
+  expect((await Bun.file(dir).stat()).mode & 0o777).toBe(0o700)
+})
+
+test('a store an earlier konvoy left is made private the first time this one opens it', async () => {
+  const dir = `/tmp/konvoy-test-upgrade-${Bun.nanoseconds()}`
+  const path = `${dir}/konvoy.db`
+  openDb(path).close()
+  // what an older konvoy left: world-readable, one migration behind
+  Bun.spawnSync(['chmod', '644', path])
+  Bun.spawnSync(['chmod', '755', dir])
+  const old = new Database(path)
+  old.exec('DROP INDEX turn_session_parent; DROP TABLE prompt_history; PRAGMA user_version = 3')
+  old.close()
+  openDb(path).close()
+  expect((await Bun.file(path).stat()).mode & 0o777).toBe(0o600)
+  expect((await Bun.file(dir).stat()).mode & 0o777).toBe(0o700)
+})

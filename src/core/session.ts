@@ -6,7 +6,7 @@ import type { Adapter } from '../adapters/types'
 import { disabledAgent, effectiveHarness, resolveAgent, resolveRecipient, type AgentSettings } from '../config/load'
 import { getAdapter } from '../adapters'
 import { clampEffort } from '../adapters/effort'
-import { detect, type Detection, type DetectOptions } from './detect'
+import { locate, type Detection, type DetectOptions } from './detect'
 import {
   acquireLock,
   clearForeignId,
@@ -15,13 +15,14 @@ import {
   getSessionBySlug,
   lastTurnAgent,
   lastTurnId,
+  lastTurnRowid,
   lockOwner,
   releaseLock,
 } from '../store/queries'
 import { runTurn, type TurnOptions, type TurnResult } from './turn'
 import { runGate } from './gate'
-import { collectFacts, formatFacts, realFactsDeps } from './facts'
-import { buildPrelude, parseEnvelope } from './prelude'
+import { collectFacts, formatFacts, realFactsDeps, type FactsDeps } from './facts'
+import { buildPrelude, hasUnseenTurns, parseEnvelope, type PreludeWindow } from './prelude'
 import { sessionDir } from '../paths'
 
 // The prelude carries at most this many recent turns; section 28 caps it so a long session
@@ -71,9 +72,15 @@ export interface SendDeps {
   db: Database
   cfg: Config
   adapterFor?: (agent: AgentId) => Adapter
+  /**
+   * whether an agent can run, and at which efforts. A turn needs no version, so the default finds
+   * the binary on PATH instead of spawning `--version` - which cost a node CLI half a second a turn
+   */
   detect?: (agent: AgentId, opts: DetectOptions) => Promise<Detection>
   /** base wait between upstream retries; tests that only care about the walk pass 0 */
   upstreamBackoffMs?: number
+  /** the machine facts beside a prelude; tests pass a fixed reader instead of git */
+  facts?: FactsDeps
 }
 
 // A chain names an order, not a set: konvoy starts at the requested agent and follows the
@@ -98,7 +105,7 @@ export async function send(
   if (!settings.enabled) throw new Error(disabledAgent(agent))
 
   const adapterFor = (a: AgentId): Adapter => deps.adapterFor?.(a) ?? getAdapter(a)
-  const detectFor = deps.detect ?? detect
+  const detectFor = deps.detect ?? locate
   const adapter = adapterFor(agent)
   const detection = await detectFor(agent, { model: settings.model, bin: settings.bin })
   if (!detection.installed) throw new Error(`${agent}: not installed`)
@@ -111,9 +118,28 @@ export async function send(
     throw new Error(`session "${session.slug}" is busy - another konvoy turn is running`)
   }
 
-  // Set once withLock() has built the primary prelude - followHandoff needs its own, built
-  // fresh after the handing-off turn is recorded, so it is read rather than recomputed here.
-  let facts = ''
+  // Git facts cost two processes, and a reader continuing its own session needs none of them: they
+  // are computed on first use, once per point in time - the handoff after a turn gets its own.
+  const factsDeps = deps.facts ?? realFactsDeps()
+  const factsOnce = (): (() => Promise<string>) => {
+    let pending: Promise<string> | null = null
+    return () => (pending ??= collectFacts(factsDeps, deps.db, session).then(formatFacts))
+  }
+  const withFacts = async (opts: PreludeWindow, facts: () => Promise<string>): Promise<string> =>
+    buildPrelude(deps.db, session, hasUnseenTurns(deps.db, session, opts) ? await facts() : '', opts)
+  const preludeFor = (reader: AgentId, window: { upTo?: number }, facts: () => Promise<string>): Promise<string> =>
+    withFacts({ recent: RECENT_TURNS, for: reader, ...window }, facts)
+  // A reader whose own session was just lost holds none of its turns any more: it is told the
+  // session as a stranger would be, every recent turn whoever took it.
+  const freshPrelude = (window: { upTo?: number }, facts: () => Promise<string>): Promise<string> =>
+    withFacts({ recent: RECENT_TURNS, ...window }, facts)
+  // Esc during a backoff ends the wait, not just the next turn
+  const pause = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      if (opts.signal?.aborted) return resolve()
+      const timer = setTimeout(resolve, ms)
+      opts.signal?.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true })
+    })
 
   try {
     const result = await withLock()
@@ -138,6 +164,8 @@ export async function send(
   // would otherwise loop until something ran out, and the caller asked for one turn.
   async function followHandoff(result: TurnResult, turnId: string): Promise<TurnResult | null> {
     if (!deps.cfg.delegation.enabled || result.error) return null
+    // stopped while the gate ran: the person asked for no more turns, a recipient's included
+    if (opts.signal?.aborted) return null
     const envelope = parseEnvelope(result.final)
     if (!envelope?.to) return null
 
@@ -169,8 +197,10 @@ export async function send(
     const recipientEffort = clampEffort(recipientSettings.effort, recipientDetection.efforts)
     // Built fresh, after the handing-off turn was recorded: the prelude built at the top of
     // this send() describes the state before that turn ran - the opposite of what the
-    // recipient needs, which is its own cooperative handoff, envelope and all.
-    const delegatedPrelude = buildPrelude(deps.db, session, facts, { recent: RECENT_TURNS })
+    // recipient needs, which is its own cooperative handoff, envelope and all. The facts are
+    // fresh too: the diff the sender just made is exactly what the recipient is being handed.
+    const handoffFacts = factsOnce()
+    const delegatedPrelude = await preludeFor(recipient, {}, handoffFacts)
     return runOnce(
       recipient,
       adapterFor(recipient),
@@ -194,6 +224,7 @@ export async function send(
         delegation: deps.cfg.delegation.enabled,
       }),
       turnId,
+      () => freshPrelude({}, handoffFacts),
     )
   }
 
@@ -205,6 +236,8 @@ export async function send(
     currentAdapter: Adapter,
     ctxBuild: () => TurnContext,
     parentTurnId: string | null,
+    /** the prelude for a rebound agent, whose new session holds none of its old turns */
+    rebound: () => Promise<string>,
   ): Promise<TurnResult> {
     const resumedId = getBinding(deps.db, session.id, current)?.foreignId ?? null
     const wasResuming = resumedId != null
@@ -230,7 +263,7 @@ export async function send(
     clearForeignId(deps.db, session.id, current)
     return runTurn(
       { db: deps.db, adapter: currentAdapter },
-      { ...ctxBuild(), lease },
+      { ...ctxBuild(), prelude: await rebound(), lease },
       { ...opts, timeoutSec, parentTurnId },
     )
   }
@@ -241,15 +274,18 @@ export async function send(
     let firstTurnId: string | null = null
     let result: TurnResult | undefined
 
-    // Built once for the whole send, not per chain member: recomputing would spend git calls
-    // and, worse, let the handover shift between attempts at the same question.
-    facts = formatFacts(await collectFacts(realFactsDeps(), deps.db, session))
-    const prelude = buildPrelude(deps.db, session, facts, { recent: RECENT_TURNS })
+    // Every chain member reads the session as it stood before this send: the window ends at the
+    // last turn already recorded, so a blocked attempt at this same question is never quoted back
+    // to the agent taking it over, and the facts are gathered once for all of them.
+    const upTo = lastTurnRowid(deps.db, session.id)
+    const facts = factsOnce()
 
     let blocked: { agent: AgentId; kind: string; message: string } | null = null
     for (let i = 0; i < chain.length; i++) {
       const current = chain[i]!
       const isHead = i === 0
+      // the person stopped this send: nothing further in the chain is started for it
+      if (!isHead && opts.signal?.aborted) break
 
       let currentSettings: AgentSettings
       let currentAdapter: Adapter
@@ -288,6 +324,7 @@ export async function send(
       }
 
       const currentEffort = clampEffort(currentSettings.effort, currentDetection.efforts)
+      const prelude = await preludeFor(current, { upTo }, facts)
       const ctxBuild = (): TurnContext => ({
         sessionId: session.id,
         slug: session.slug,
@@ -311,13 +348,14 @@ export async function send(
       let retries = 0
       let r: TurnResult
       for (;;) {
-        r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId)
+        r = await runOnce(current, currentAdapter, ctxBuild, firstTurnId, () => freshPrelude({ upTo }, facts))
         if (firstTurnId === null) firstTurnId = lastTurnId(deps.db, session.id)
         // upstream is transient and usually returns, so it is worth retrying on the same
         // agent - with backoff, since a hammered upstream is the last thing to hammer again.
-        if (r.error?.kind === 'upstream' && retries < upstreamRetries) {
+        if (r.error?.kind === 'upstream' && retries < upstreamRetries && !opts.signal?.aborted) {
           retries++
-          await Bun.sleep((deps.upstreamBackoffMs ?? UPSTREAM_BACKOFF_MS) * retries)
+          await pause((deps.upstreamBackoffMs ?? UPSTREAM_BACKOFF_MS) * retries)
+          if (opts.signal?.aborted) break
           continue
         }
         break

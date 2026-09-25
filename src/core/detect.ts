@@ -124,8 +124,7 @@ function authDetail(stdout: string, exitCode: number): string {
 // and undefined when konvoy cannot tell (no model configured, unknown model, no readable registry).
 async function opencodeEfforts(deps: DetectDeps, model?: string): Promise<readonly string[] | undefined> {
   if (!model) return undefined
-  const home = process.env.HOME ?? ''
-  const raw = await deps.readText(`${home}/.cache/opencode/models.json`)
+  const raw = await deps.readText(join(home(), '.cache', 'opencode', 'models.json'))
   if (!raw) return undefined
   try {
     const registry = JSON.parse(raw) as Record<string, { models?: Record<string, unknown> }>
@@ -204,9 +203,13 @@ function realDeps(): DetectDeps {
     run: async (cmd) => {
       try {
         const proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'pipe', timeout: 10_000 })
-        const stdout = await new Response(proc.stdout).text()
-        const stderr = await new Response(proc.stderr).text()
-        const exitCode = await proc.exited
+        // both at once: a CLI that fills the stderr pipe while its stdout is still being read
+        // would otherwise block on the write, and the read on it, until the timeout
+        const [stdout, stderr, exitCode] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
+        ])
         return { stdout: stdout || stderr, exitCode }
       } catch {
         return { stdout: '', exitCode: 127 }
@@ -245,6 +248,20 @@ export interface DetectOptions {
   model?: string
   bin?: string
   deps?: DetectDeps
+}
+
+// What a turn needs to know, without running the agent: whether its binary is there and which
+// efforts its model takes. `detect` spawns `<bin> --version` for a version nothing on the turn
+// path reads, and a node-based CLI takes the better part of a second to print it. A binary that is
+// present but cannot start still fails the turn, where turn.ts records why.
+export async function locate(agent: AgentId, opts: DetectOptions = {}): Promise<Detection> {
+  const deps = opts.deps ?? realDeps()
+  const bin = opts.bin ?? getAdapter(agent).bin
+  const found = bin.includes('/') ? await Bun.file(bin).exists() : Bun.which(bin) !== null
+  if (!found) return { agent, installed: false, version: null }
+  const efforts =
+    agent === 'codex' ? await codexEfforts(deps, opts.model) : agent === 'opencode' ? await opencodeEfforts(deps, opts.model) : undefined
+  return { agent, installed: true, version: null, efforts }
 }
 
 export async function detect(agent: AgentId, opts: DetectOptions = {}): Promise<Detection> {

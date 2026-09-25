@@ -184,3 +184,65 @@ test('a session without a goal gets no goal line', () => {
   expect(out).toContain('first ask')
   expect(out).not.toContain('goal:')
 })
+
+// A prelude is what its reader lacks. An agent resuming its own session already holds its own
+// turns; quoting them back cost a full prelude on every turn and told it nothing it did not know.
+test('a reader continuing its own session is quoted nothing it already holds', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'p1', exitCode: 0, costUsd: 0, final: 'a1' })
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'p2', exitCode: 0, costUsd: 0, final: 'a2' })
+  expect(buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })).toBe('')
+})
+
+test('a reader is quoted only the turns other agents took since its own last one', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'old', exitCode: 0, costUsd: 0, final: 'before claude' })
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'mine', exitCode: 0, costUsd: 0, final: 'claude said' })
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'new', exitCode: 0, costUsd: 0, final: 'after claude' })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })
+  expect(out).toContain('after claude')
+  expect(out).not.toContain('before claude')
+  expect(out).not.toContain('claude said')
+  // nothing was dropped from what claude has not seen, so nothing is counted as left out
+  expect(out).not.toContain('not shown')
+  expect(out).toContain(TRUST)
+})
+
+// The goal only ever travelled inside a prelude, and a session's first turn had none - so the first
+// agent of every session started without it. First contact carries the goal and nothing else.
+test('an agent with no turn in the session yet is told the goal, even on the first turn of all', () => {
+  const { db, s } = seed()
+  expect(buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })).toBe('goal: refactor the auth layer')
+  const bare = createSession(db, { slug: 'bare', goal: '', cwd: '/x', lead: 'claude' })
+  expect(buildPrelude(db, bare, 'FACTS', { recent: 3, for: 'claude' })).toBe('')
+})
+
+test('a window ending before this send never quotes the attempt being replaced', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'earlier', exitCode: 0, costUsd: 0, final: 'earlier answer' })
+  const upTo = (db.query('SELECT MAX(rowid) AS r FROM turn').get() as { r: number }).r
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'this send', exitCode: 1, costUsd: 0, final: '' })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude', upTo })
+  expect(out).toContain('earlier answer')
+  expect(out).not.toContain('this send')
+})
+
+test('a turn that failed is named as unfinished rather than quoted as an empty answer', () => {
+  const { db, s } = seed()
+  const id = recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'try it', exitCode: 1, costUsd: 0, final: '' })
+  db.query("UPDATE turn SET error_kind = 'rate' WHERE id = $id").run({ id })
+  recordTurn(db, { sessionId: s.id, agent: 'kiro', prompt: 'then', exitCode: 0, costUsd: 0, final: 'kiro did it' })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })
+  expect(out).toContain('codex did not finish (rate)')
+  expect(out).not.toContain('codex answered: \n')
+})
+
+// A turn the reader never processed - blocked before its prompt was taken in - is not "seen", or
+// every turn before it would be hidden from the reader on its next turn.
+test('a reader whose own last turn failed empty is still told what came before it', () => {
+  const { db, s } = seed()
+  recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'do it', exitCode: 0, costUsd: 0, final: 'codex moved the refresh' })
+  recordTurn(db, { sessionId: s.id, agent: 'claude', prompt: 'review', exitCode: 1, costUsd: 0, final: '' })
+  const out = buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })
+  expect(out).toContain('codex moved the refresh')
+})

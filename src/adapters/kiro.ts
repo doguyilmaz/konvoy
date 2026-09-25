@@ -1,5 +1,5 @@
 import type { Binding, KonvoyEvent, Permission, SpawnPlan, TurnContext } from '../types'
-import { classifyError, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
+import { classifyError, oneLine, safeJson, stripControlChars, withPrelude, type Adapter } from './types'
 
 // kiro-cli 2.23.0 `chat --help` has only `--trust-tools=<list>` and `--trust-all-tools`: no
 // automatic-review mode to map `auto` onto. It therefore trusts exactly what `edit` trusts -
@@ -45,6 +45,37 @@ const minimalProfile = JSON.stringify(
 // silently running the user's whole setup under the name "minimal" is worse than stopping.
 const AGENT_FAILED = /failed to set agent '([^']*)'/
 
+interface ToolUpdate {
+  title?: string
+  kind?: string
+  status?: string
+  locations?: { path?: unknown }[]
+  rawInput?: { command?: unknown }
+}
+
+// kiro speaks ACP, where a call carries a `kind` from a fixed vocabulary and the files it touched
+// under `locations`. The title is prose ("Reading package.json:1"); the kind and the path are the
+// same two facts every other CLI's tool line shows, so they are what konvoy shows for kiro too.
+const KIND: Record<string, string> = {
+  read: 'Read',
+  edit: 'Edit',
+  delete: 'Delete',
+  move: 'Move',
+  search: 'Search',
+  execute: 'Shell',
+  fetch: 'Fetch',
+  think: 'Think',
+}
+
+function toolLabel(update: ToolUpdate): { name: string; detail?: string } {
+  const name = KIND[update.kind ?? '']
+  const path = update.locations?.find((l) => typeof l?.path === 'string')?.path as string | undefined
+  const command = typeof update.rawInput?.command === 'string' ? update.rawInput.command : undefined
+  const subject = path ?? command
+  if (name) return { name, ...(subject ? { detail: oneLine(subject, 80) } : update.title ? { detail: oneLine(update.title, 80) } : {}) }
+  return { name: update.title ? oneLine(update.title, 60) : 'tool', ...(subject ? { detail: oneLine(subject, 80) } : {}) }
+}
+
 export const kiroAdapter: Adapter = {
   id: 'kiro',
   bin: 'kiro-cli',
@@ -74,9 +105,7 @@ export const kiroAdapter: Adapter = {
     if (typeof data.sessionId === 'string') events.push({ t: 'session', foreignId: stripControlChars(data.sessionId) })
 
     if (o.type === 'sessionUpdate') {
-      const update = data.update as
-        | { sessionUpdate?: string; content?: { text?: string }; title?: string; status?: string }
-        | undefined
+      const update = data.update as (ToolUpdate & { sessionUpdate?: string; content?: { text?: string } }) | undefined
       const text = update?.content?.text
       switch (update?.sessionUpdate) {
         case 'agent_message_chunk':
@@ -86,10 +115,10 @@ export const kiroAdapter: Adapter = {
           if (text) events.push({ t: 'thinking', text })
           break
         case 'tool_call':
-          events.push({ t: 'tool', name: update.title ?? 'tool', status: 'start' })
+          events.push({ t: 'tool', ...toolLabel(update), status: 'start' })
           break
         case 'tool_call_update':
-          events.push({ t: 'tool', name: update.title ?? 'tool', status: update.status === 'failed' ? 'error' : 'ok' })
+          events.push({ t: 'tool', ...toolLabel(update), status: update.status === 'failed' ? 'error' : 'ok' })
           break
       }
     }

@@ -10,7 +10,7 @@ import {
 import { requireSession } from './messages'
 import { formatUsage, outputColor } from '../format'
 import { agentSparklines, heatmap, shareBars } from '../chart'
-import { isPricingConfigured } from '../pricing'
+import { estimateAgentUsd, isPricingConfigured } from '../pricing'
 import type { Config } from '../config/schema'
 import type { Session } from '../types'
 
@@ -21,10 +21,25 @@ export function cmdUsage(
   db: Database,
   cfg: Config,
   cwd: string,
-  opts: { all: boolean; slug?: string; chart?: boolean },
+  opts: { all: boolean; slug?: string; chart?: boolean; json?: boolean },
 ): number {
   let session: Session | null = null
   let rows: UsageRow[]
+
+  if (opts.json) {
+    if (!opts.all) {
+      session = requireSession(db, cwd, opts.slug)
+      if (!session) return 2
+    }
+    const id = session?.id
+    const byModel = usageByAgentModel(db, id)
+    const agents = (id ? usageForSession(db, id) : usageAcrossSessions(db)).map((r) => ({
+      ...r,
+      estimateUsd: estimateAgentUsd(r.agent, byModel, cfg.pricing),
+    }))
+    console.log(JSON.stringify({ session: session?.slug ?? null, agents, perDay: turnsPerDay(db, id) }, null, 2))
+    return 0
+  }
 
   if (opts.all) {
     rows = usageAcrossSessions(db)

@@ -228,3 +228,103 @@ test('-h prints the usage, and a stray flag with no command is refused instead o
     err.mockRestore()
   }
 })
+
+// A typo in a flag used to be ignored, and a value flag takes the word after it: so a misspelled
+// --session silently ran the command against the CURRENT session, with the named one thrown away.
+test('a flag the command does not read is refused by name, with the one it was probably meant to be', async () => {
+  const dir = tmp('flags')
+  const home = tmp('flags-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/marker`, '')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await withEnv(dir, home, async () => {
+      expect(await main(['send', 'codex', '--sesion', 'other', 'fix it'])).toBe(2)
+      expect(await main(['ls', '--jsn'])).toBe(2)
+      expect(await main(['dashboard', '--port', 'eighty'])).toBe(2)
+    })
+    const said = err.mock.calls.map((c) => String(c[0]))
+    expect(said[0]).toBe('unknown flag --sesion for send - did you mean --session?')
+    expect(said[1]).toBe('unknown flag --jsn for ls - did you mean --json?')
+    expect(said[2]).toContain('--port takes a number')
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('the same refusal holds for a command typed inside the REPL', async () => {
+  const dir = tmp('replflags')
+  const home = tmp('replflags-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/marker`, '')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  async function* input(): AsyncGenerator<string> {
+    yield '/usage --al'
+  }
+  try {
+    await withEnv(dir, home, async () => {
+      expect(await main([], { lines: input(), write: () => {}, tty: false, pause: () => {}, resume: () => {} })).toBe(0)
+    })
+    expect(err.mock.calls.map((c) => String(c[0]))).toContain('unknown flag --al for usage - did you mean --all?')
+  } finally {
+    err.mockRestore()
+    log.mockRestore()
+  }
+})
+
+// run konvoy itself, with a HOME whose global config points claude at a stand-in
+async function konvoy(dir: string, home: string, args: string[], stdin?: string): Promise<{ code: number; out: string; err: string }> {
+  const proc = Bun.spawn(['bun', `${import.meta.dir}/../src/cli.ts`, ...args], {
+    cwd: dir,
+    env: { ...process.env, HOME: home, NO_COLOR: '1' },
+    stdin: stdin === undefined ? 'ignore' : new Response(stdin),
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+  return { code, out, err }
+}
+
+test('a lone - in a message is read from stdin, so a diff can be piped in with the ask', async () => {
+  const dir = tmp('stdin')
+  const home = tmp('stdin-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/.config/konvoy/config.jsonc`, JSON.stringify({ agents: { claude: { bin: `${import.meta.dir}/fixtures/echo-claude.ts` } } }))
+  try {
+    expect((await konvoy(dir, home, ['new', '--lead', 'codex'])).code).toBe(0)
+    const sent = await konvoy(dir, home, ['send', 'claude', 'review this', '-'], 'diff --git a/x b/x\n+added\n')
+    expect(sent.err).toMatch(/^  claude · [\d.]+s · 1 in \/ 1 out\n$/)
+    expect(sent.code).toBe(0)
+    // the ask, a blank line, then exactly what was piped - and it is the whole of stdout
+    expect(sent.out).toBe('review this\n\ndiff --git a/x b/x\n+added\n')
+    // unquoted words around the - stay one sentence
+    const loose = await konvoy(dir, home, ['send', 'claude', 'review', 'this', 'carefully', '-'], '+added\n')
+    expect(loose.out).toBe('review this carefully\n\n+added\n')
+    const roster = await konvoy(dir, home, ['roster', '--json'])
+    expect(JSON.parse(roster.out).session.lead).toBe('codex')
+  } finally {
+    await Bun.$`rm -rf ${dir} ${home}`.quiet()
+  }
+}, 20_000)
+
+test('a REPL message that starts with a dash is sent as words, not refused as a flag', async () => {
+  const dir = tmp('dash')
+  const home = tmp('dash-home')
+  await Bun.write(`${dir}/marker`, '')
+  await Bun.write(`${home}/.config/konvoy/config.jsonc`, JSON.stringify({ agents: { claude: { bin: `${import.meta.dir}/fixtures/echo-claude.ts` } } }))
+  try {
+    const proc = Bun.spawn(['bun', `${import.meta.dir}/../src/cli.ts`], {
+      cwd: dir,
+      env: { ...process.env, HOME: home, NO_COLOR: '1' },
+      stdin: new Response('-1 is the wrong exit code, why?\n'),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+    expect(err).not.toContain('unknown flag')
+    expect(out).toContain('-1 is the wrong exit code, why?')
+  } finally {
+    await Bun.$`rm -rf ${dir} ${home}`.quiet()
+  }
+}, 20_000)

@@ -134,6 +134,8 @@ test('a parser that throws is contained and the turn still completes', async () 
       if (line.includes('result')) throw new Error('boom')
       return []
     },
+    // the stateful reading a turn prefers; left inherited, it would parse around the throw
+    parser: undefined,
   }
   const r = await runTurn({ db, adapter }, ctx(s.id))
   expect(r.exitCode).toBe(0)
@@ -383,6 +385,8 @@ test('a kiro turn whose finalText is truncated keeps the full streamed answer', 
   const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'kiro' })
   const adapter: Adapter = {
     ...kiroAdapter,
+    // the profile kiro's prepare() writes would land in this repository; the parse is what is tested
+    prepare: undefined,
     turn: () => ({
       cmd: [
         'bun', 'tests/fixtures/fake-agent.ts',
@@ -458,6 +462,8 @@ test('a warning a CLI writes to stderr on a successful turn reaches the result',
   const seen: string[] = []
   const adapter: Adapter = {
     ...kiroAdapter,
+    // the profile kiro's prepare() writes would land in this repository; the parse is what is tested
+    prepare: undefined,
     turn: () => ({
       cmd: [
         'bun',
@@ -479,4 +485,65 @@ test('a warning a CLI writes to stderr on a successful turn reaches the result',
   expect(seen.join('')).toContain('failed to set agent')
   expect(result.warnings).toHaveLength(1)
   expect(result.warnings[0]).toContain('not the minimal harness')
+})
+
+// The REPL's Esc: the agent is stopped and the turn recorded as interrupted, while konvoy itself
+// carries on - which a signal to konvoy's own process could never offer.
+test('an aborted turn stops the agent, keeps what it said, and is recorded as interrupted', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter: Adapter = {
+    ...claudeAdapter,
+    turn: () => ({
+      cmd: [
+        'bun', 'tests/fixtures/fake-agent.ts',
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'partial answer' }] } }),
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: ' never sent' }] } }),
+      ],
+      env: { ...(process.env as Record<string, string>), FAKE_AGENT_DELAY_MS: '400' },
+    }),
+  }
+  const controller = new AbortController()
+  const started = Date.now()
+  const run = runTurn({ db, adapter }, ctx(s.id), { signal: controller.signal, onEvent: (e) => e.t === 'text' && controller.abort() })
+  const r = await run
+  expect(Date.now() - started).toBeLessThan(3000)
+  expect(r.error).toEqual({ message: 'interrupted', kind: 'interrupted' })
+  expect(r.exitCode).not.toBe(0)
+  expect(r.final).toBe('partial answer')
+  const row = db.query('SELECT error_kind, final FROM turn').get() as { error_kind: string; final: string }
+  expect(row).toEqual({ error_kind: 'interrupted', final: 'partial answer' })
+})
+
+test('a signal already aborted stops the turn before it gets going', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const adapter = fakeAdapter([{ type: 'result', subtype: 'success', result: 'late' }], {
+    turn: () => ({ cmd: ['bun', 'tests/fixtures/fake-agent.ts', JSON.stringify({ type: 'result', subtype: 'success', result: 'late' })], env: { ...(process.env as Record<string, string>), FAKE_AGENT_DELAY_MS: '2000' } }),
+  })
+  const controller = new AbortController()
+  controller.abort()
+  const r = await runTurn({ db, adapter }, ctx(s.id), { signal: controller.signal })
+  expect(r.error?.kind).toBe('interrupted')
+})
+
+// A streamed claude answer is hundreds of deltas; a stored row per delta is a write per token.
+test('consecutive text is stored as one event, while the caller still sees every delta', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'claude' })
+  const delta = (text: string) => ({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } })
+  const adapter = fakeAdapter([
+    { type: 'stream_event', event: { type: 'message_start', message: { id: 'm1' } } },
+    delta('one '),
+    delta('two '),
+    delta('three'),
+    { type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: 'one two three' }] } },
+    { type: 'result', subtype: 'success', result: 'one two three' },
+  ])
+  const seen: string[] = []
+  const r = await runTurn({ db, adapter }, ctx(s.id), { onEvent: (e) => e.t === 'text' && seen.push(e.text) })
+  expect(seen).toEqual(['one ', 'two ', 'three'])
+  expect(r.final).toBe('one two three')
+  const rows = db.query("SELECT payload FROM event WHERE type = 'text'").all() as { payload: string }[]
+  expect(rows.map((row) => JSON.parse(row.payload).text)).toEqual(['one two three'])
 })

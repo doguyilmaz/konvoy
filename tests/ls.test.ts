@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test'
 import { openDb } from '../src/store/db'
-import { createSession, upsertBinding } from '../src/store/queries'
+import { createSession, recordTurn, upsertBinding } from '../src/store/queries'
 import { cmdLs } from '../src/commands/ls'
 import { agentIds } from '../src/config/schema'
 
@@ -103,4 +103,28 @@ test('the bound count is measured against the roster konvoy actually drives', as
   }
   // every agent bound reads as all of them, whatever "all" currently means
   expect(out).toContain(`${agentIds.length}/${agentIds.length}`)
+})
+
+test('ls says how busy each session is and when it last moved, and --json says it for a script', () => {
+  const d = openDb(':memory:')
+  const busy = createSession(d, { slug: 'busy', goal: 'g', cwd: '/x', lead: 'claude' })
+  createSession(d, { slug: 'idle', goal: 'g', cwd: '/y', lead: 'codex' })
+  for (let i = 0; i < 3; i++) recordTurn(d, { sessionId: busy.id, agent: 'claude', prompt: 'p', final: 'f', exitCode: 0, costUsd: 0 })
+
+  const log = spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    cmdLs(d, '/x')
+    const lines = String(log.mock.calls[0]?.[0]).split('\n')
+    expect(lines[0]).toContain('TURNS')
+    expect(lines[0]).toContain('ACTIVE')
+    expect(lines.find((l) => l.includes('busy'))).toMatch(/\s3\s+just now/)
+
+    log.mockClear()
+    cmdLs(d, '/x', { json: true })
+    const rows = JSON.parse(String(log.mock.calls[0]?.[0])) as { slug: string; turns: number; current: boolean; lastTurnAt: number | null }[]
+    expect(rows.find((r) => r.slug === 'busy')).toMatchObject({ turns: 3, current: true })
+    expect(rows.find((r) => r.slug === 'idle')).toMatchObject({ turns: 0, current: false, lastTurnAt: null })
+  } finally {
+    log.mockRestore()
+  }
 })

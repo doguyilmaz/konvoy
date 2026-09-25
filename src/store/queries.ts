@@ -243,6 +243,14 @@ export function lastTurnId(db: Database, sessionId: string): string | null {
   return row?.id ?? null
 }
 
+/** the rowid of the session's newest turn, 0 for none: where a prelude's window ends */
+export function lastTurnRowid(db: Database, sessionId: string): number {
+  const row = db.query('SELECT COALESCE(MAX(rowid), 0) AS r FROM turn WHERE session_id = $sessionId').get({
+    sessionId,
+  }) as { r: number }
+  return row.r
+}
+
 // Who actually produced the most recent turn - which, after a failover move, is not
 // necessarily the agent `send()` was originally asked to run.
 export function lastTurnAgent(db: Database, sessionId: string): AgentId | null {
@@ -438,4 +446,79 @@ export function turnsPerDayByAgent(
     const [agent, day] = key.split('\u0000') as [AgentId, string]
     return { agent, day, count }
   })
+}
+
+export interface TurnRecord {
+  id: string
+  agent: AgentId
+  prompt: string
+  final: string
+  exitCode: number
+  error: string | null
+  errorKind: string | null
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  credits: number
+  gatePassed: boolean | null
+  parentTurnId: string | null
+  model: string | null
+  startedAt: number
+  endedAt: number
+}
+
+const toTurn = (r: Record<string, unknown>): TurnRecord => ({
+  id: r.id as string,
+  agent: r.agent as AgentId,
+  prompt: r.prompt as string,
+  final: r.final as string,
+  exitCode: r.exit_code as number,
+  error: (r.error as string | null) ?? null,
+  errorKind: (r.error_kind as string | null) ?? null,
+  inputTokens: r.input_tokens as number,
+  outputTokens: r.output_tokens as number,
+  costUsd: r.cost_usd as number,
+  credits: r.credits as number,
+  gatePassed: r.gate_passed === null || r.gate_passed === undefined ? null : r.gate_passed === 1,
+  parentTurnId: (r.parent_turn_id as string | null) ?? null,
+  model: (r.model as string | null) ?? null,
+  startedAt: r.started_at as number,
+  endedAt: r.ended_at as number,
+})
+
+/** a session's turns, newest first */
+export function recentTurns(db: Database, sessionId: string, limit: number): TurnRecord[] {
+  const rows = db
+    .query('SELECT * FROM turn WHERE session_id = $sessionId ORDER BY rowid DESC LIMIT $limit')
+    .all({ sessionId, limit }) as Record<string, unknown>[]
+  return rows.map(toTurn)
+}
+
+/**
+ * the prompt of the latest turn the person asked for: a turn konvoy started for them - a handoff's
+ * task, a failover successor - has a parent, and retrying its words would not be what they typed
+ */
+export function lastAskedPrompt(db: Database, sessionId: string): string | null {
+  const row = db
+    .query('SELECT prompt FROM turn WHERE session_id = $sessionId AND parent_turn_id IS NULL ORDER BY rowid DESC LIMIT 1')
+    .get({ sessionId }) as { prompt: string } | null
+  return row?.prompt ?? null
+}
+
+/** the newest turns of every session */
+export function latestTurns(db: Database, limit: number): TurnRecord[] {
+  const rows = db.query('SELECT * FROM turn ORDER BY rowid DESC LIMIT $limit').all({ limit }) as Record<string, unknown>[]
+  return rows.map(toTurn)
+}
+
+/** how many turns each session has had and when the latest began, in one pass over the table */
+export function sessionActivity(db: Database): Map<string, { turns: number; lastAt: number }> {
+  const rows = db
+    .query('SELECT session_id, COUNT(*) AS turns, MAX(started_at) AS last_at FROM turn GROUP BY session_id')
+    .all() as { session_id: string; turns: number; last_at: number }[]
+  return new Map(rows.map((r) => [r.session_id, { turns: r.turns, lastAt: r.last_at }]))
+}
+
+export function getSessionById(db: Database, id: string): Session | null {
+  return toSession(db.query('SELECT * FROM session WHERE id = $id').get({ id }) as never)
 }

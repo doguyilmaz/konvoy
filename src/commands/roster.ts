@@ -6,7 +6,7 @@ import { listBindings } from '../store/queries'
 import { requireSession } from './messages'
 import { duplicateModels, formatRoster, outputColor, type RosterRow } from '../format'
 
-export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string): number {
+export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string, opts: { json?: boolean } = {}): number {
   const session = requireSession(db, cwd, slug)
   if (!session) return 2
 
@@ -26,6 +26,10 @@ export function cmdRoster(db: Database, cfg: Config, cwd: string, slug?: string)
     }
   })
 
+  if (opts.json) {
+    console.log(JSON.stringify({ session: { slug: session.slug, goal: session.goal, cwd: session.cwd, lead: session.lead }, agents: rows }, null, 2))
+    return 0
+  }
   console.log(session.goal ? `session ${session.slug} - ${session.goal}` : `session ${session.slug}`)
   console.log(formatRoster(rows, outputColor()))
   for (const model of duplicateModels(rows)) {

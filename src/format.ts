@@ -2,7 +2,8 @@ import type { AgentId } from './types'
 import type { UsageRow } from './store/queries'
 import { estimateAgentUsd, isPricingConfigured, type ModelUsage, type Pricing } from './pricing'
 import { tokens } from './render'
-import { agentPaint, colorEnabled, palette } from './style'
+import { agentPaint, colorLevel, palette, type ColorLevel } from './style'
+import { stringWidth } from './term'
 
 export interface RosterRow {
   agent: AgentId
@@ -18,13 +19,15 @@ export interface RosterRow {
 // The terminal decision, made once at a command's edge and passed down: a formatter never reads
 // it, so the same arguments always produce the same bytes. stdout, because that is where a table
 // goes and `konvoy usage > file` must hold plain text.
-export const outputColor = (): boolean => colorEnabled(Bun.env, Boolean(process.stdout.isTTY))
+export const outputColor = (): ColorLevel => colorLevel(Bun.env, Boolean(process.stdout.isTTY))
 
 export interface TableOptions {
   /** indexes of columns holding numbers: padded on the left, so they end on one column */
   right?: readonly number[]
   /** default false: a formatter is pure, so the terminal decision is made by the caller */
-  color?: boolean
+  color?: boolean | ColorLevel
+  /** the column holding agent names, painted in each agent's colour; the first, when it is AGENT */
+  agentColumn?: number
 }
 
 const STATUS_COLOR: Record<string, keyof ReturnType<typeof palette>> = {
@@ -36,6 +39,13 @@ const STATUS_COLOR: Record<string, keyof ReturnType<typeof palette>> = {
   ok: 'green',
   'login required': 'red',
   unknown: 'yellow',
+  interrupted: 'yellow',
+  rate: 'yellow',
+  upstream: 'yellow',
+  auth: 'red',
+  crash: 'red',
+  timeout: 'red',
+  running: 'cyan',
 }
 
 // One table for every command konvoy prints. Width is computed on the PLAIN text and the paint is
@@ -47,12 +57,17 @@ export function table(header: readonly string[], rows: readonly string[][], opts
   const paintAgent = agentPaint(color)
   const keep = header.map((_, i) => rows.length === 0 || rows.some((r) => (r[i] ?? '') !== ''))
   const cols = header.map((_, i) => i).filter((i) => keep[i])
-  const widths = cols.map((i) => Math.max(header[i]!.length, ...rows.map((r) => (r[i] ?? '').length)))
+  const widths = cols.map((i) => Math.max(stringWidth(header[i]!), ...rows.map((r) => stringWidth(r[i] ?? ''))))
   const right = new Set(opts.right ?? [])
+  const agentColumn = opts.agentColumn ?? (header[0] === 'AGENT' ? 0 : -1)
 
   const paint = (value: string, col: number): string => {
     if (!color || value === '' || value === '-') return value
-    if (col === 0 && header[0] === 'AGENT') return paintAgent(value)(value)
+    if (col === agentColumn) {
+      // a turn konvoy started for another is marked `↳ agent`; the agent still wears its colour
+      const name = value.replace(/^↳ /, '')
+      return value.slice(0, value.length - name.length) + paintAgent(name)(name)
+    }
     const named = STATUS_COLOR[value]
     return named ? p[named](value) : value
   }
@@ -61,7 +76,7 @@ export function table(header: readonly string[], rows: readonly string[][], opts
     cols
       .map((col, slot) => {
         const raw = cells[col] ?? ''
-        const pad = ' '.repeat(Math.max(0, widths[slot]! - raw.length))
+        const pad = ' '.repeat(Math.max(0, widths[slot]! - stringWidth(raw)))
         const painted = paintCell(raw, col)
         return right.has(col) ? `${pad}${painted}` : `${painted}${pad}`
       })
@@ -72,7 +87,7 @@ export function table(header: readonly string[], rows: readonly string[][], opts
   return [head, ...rows.map((r) => line(r, paint))].join('\n') + '\n'
 }
 
-export function formatRoster(rows: RosterRow[], color = false): string {
+export function formatRoster(rows: RosterRow[], color: boolean | ColorLevel = false): string {
   return table(
     ['AGENT', 'STATUS', 'MODEL', 'EFFORT', 'SESSION', 'TURNS', 'COST'],
     rows.map((r) => [r.agent, r.status, r.model || '-', r.effort, r.foreignId ?? '-', String(r.turns), cost(r)]),
@@ -105,7 +120,7 @@ function usdCell(row: UsageRow, modelRows: ModelUsage[], pricing: Pricing): stri
   return row.costUsd > 0 ? `$${est.toFixed(2)}` : `$${est.toFixed(3)}`
 }
 
-export function formatUsage(rows: UsageRow[], pricing?: Pricing, modelRows: ModelUsage[] = [], color = false): string {
+export function formatUsage(rows: UsageRow[], pricing?: Pricing, modelRows: ModelUsage[] = [], color: boolean | ColorLevel = false): string {
   const showUsd = pricing !== undefined && isPricingConfigured(pricing)
   const header = ['AGENT', 'TURNS', 'IN', 'OUT', 'SPEND', ...(showUsd ? ['~USD'] : []), 'GATE']
   return table(
@@ -141,7 +156,7 @@ export interface AgentStatusRow {
   detail?: string
 }
 
-export function formatVersions(rows: AgentStatusRow[], color = false): string {
+export function formatVersions(rows: AgentStatusRow[], color: boolean | ColorLevel = false): string {
   return table(
     ['AGENT', 'VERSION', 'AUTH', 'DETAIL'],
     rows.map((r) => [
@@ -152,4 +167,25 @@ export function formatVersions(rows: AgentStatusRow[], color = false): string {
     ]),
     { color },
   )
+}
+
+/** how long ago, in the one unit that matters at that distance */
+export function ago(then: number, now: number): string {
+  const s = Math.max(0, Math.round((now - then) / 1000))
+  if (s < 45) return 'just now'
+  if (s < 90) return '1m ago'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 36) return `${h}h ago`
+  const d = Math.round(h / 24)
+  if (d < 60) return `${d}d ago`
+  return new Date(then).toISOString().slice(0, 10)
+}
+
+/** a path under the home directory, written the way a shell user writes it */
+export function tildify(path: string, home: string | undefined = Bun.env.HOME): string {
+  if (!home || home === '/') return path
+  if (path === home) return '~'
+  return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
 }
