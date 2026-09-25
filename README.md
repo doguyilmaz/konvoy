@@ -77,7 +77,7 @@ permission under it, the way the agents' own CLIs draw theirs:
 
 ```text
 ╭────────────────────────────────────────────────────────╮
-│ ✻ konvoy 0.3.2                                         │
+│ ✻ konvoy 0.4.0                                         │
 │                                                        │
 │   session sinkaf-8f3a · fix the token refresh          │
 │   agent   claude · opus · high · auto                  │

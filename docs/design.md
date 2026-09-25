@@ -1,6 +1,6 @@
 # konvoy - design
 
-**Status:** approved 2026-09-19, revised 2026-09-22 against v0.3.2. This is the design record and
+**Status:** approved 2026-09-19, revised 2026-09-24 against v0.4.0. This is the design record and
 some of its mechanisms were replaced before shipping; the code and the README are authoritative
 wherever it still differs. Replaced: the MCP server and its tools (§10, §20, parts of §21 and
 §22) by the envelope handoff and the prelude (§21, §28); per-CLI config injection (§9) by
@@ -1319,6 +1319,10 @@ Where no gate is configured, `gate_passed` stays null and every rate reads as a 
 **Shipped (0.3)** - sessions and bindings, headless turns, `attach` and `attach --id`, envelope
 delegation, failover, the gate, `usage`, `--chart` and `dashboard`, `doctor`, `update`, `rename`,
 interactive mode; a signed and notarized brew cask, Linux tarballs, npm with provenance.
+**Shipped (0.4)** - the interactive prompt (§34): a raw-mode line editor with a command popup,
+per-project history, `@agent` and `!shell`, and Esc to stop a turn without leaving; a turn drawn
+live (§35) with claude streaming token by token and answers rendered as Markdown; `log`, `show`,
+`completion` and `--json`; the reader-relative prelude (§28); a private store (§14).
 **Next** - nothing open. `harness: minimal` shipped for kiro, through a generated project agent
 profile, and for opencode, through its project config alone: the `OPENCODE_CONFIG*` variables this
 section once named turned out to ADD a config source rather than replace one (§18). The codex
