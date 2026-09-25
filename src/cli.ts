@@ -26,7 +26,7 @@ import { cmdUsage } from './commands/usage'
 import { cmdDashboard } from './commands/dashboard'
 import { cmdLog, cmdShow } from './commands/log'
 import { cmdCompletion } from './commands/completion'
-import { commandTable, formatRows, resolveCommandName, unknownFlag, type CommandName } from './commands/table'
+import { commandHelp, commandTable, formatRows, resolveCommandName, unknownFlag, type CommandName } from './commands/table'
 import { noSessionNamed, requireAgent, unknownCommand } from './commands/messages'
 import { replColor, replCompleter, runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
 import { terminalEditor, type RawInput } from './editor'
@@ -193,6 +193,7 @@ const handlers: Record<CommandName, Handler> = {
     return cmdDashboard(db, cfg, cwd, { port, slug, open: args.flags['no-open'] !== true })
   },
   completion: (_ctx, rest) => cmdCompletion(rest[0]),
+  help: (_ctx, rest) => help(rest[0]),
 }
 
 export async function main(argv: string[], io?: ReplIo): Promise<number> {
@@ -205,10 +206,8 @@ export async function main(argv: string[], io?: ReplIo): Promise<number> {
     console.log(`konvoy ${VERSION}`)
     return 0
   }
-  if (command === 'help' || args.flags.help === true || args.flags.h === true) {
-    console.log(USAGE)
-    return 0
-  }
+  // answered before the store is opened: help works where nothing else can yet
+  if (command === 'help' || args.flags.help === true || args.flags.h === true) return help(command === 'help' ? rest[0] : command)
   if (!command) {
     const stray = Object.keys(args.flags).filter((f) => f !== 'session')
     if (stray.length > 0) {
@@ -226,6 +225,21 @@ export async function main(argv: string[], io?: ReplIo): Promise<number> {
     console.error(`konvoy: ${error instanceof Error ? error.message : String(error)}`)
     return 1
   }
+}
+
+// Every command, or one command's own page; a word that is no command is refused like one
+function help(topic: string | undefined): number {
+  if (topic === undefined) {
+    console.log(USAGE)
+    return 0
+  }
+  const page = commandHelp(topic)
+  if (!page) {
+    console.error(unknownCommand(topic, 'konvoy '))
+    return 2
+  }
+  process.stdout.write(page)
+  return 0
 }
 
 // What shell completion asks konvoy for (src/commands/completion.ts): the words, one per line,

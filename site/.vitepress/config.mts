@@ -8,7 +8,13 @@ export default defineConfig({
   description,
   base: '/konvoy/',
   cleanUrls: true,
+  head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/konvoy/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/konvoy/favicon-32.png' }],
+    ['link', { rel: 'apple-touch-icon', href: '/konvoy/apple-touch-icon.png' }],
+  ],
   themeConfig: {
+    logo: { src: '/logo.svg', alt: '' },
     nav: [
       { text: 'Releases', link: `${repo}/releases` },
       { text: 'npm', link: 'https://www.npmjs.com/package/@doguyilmaz/konvoy' },

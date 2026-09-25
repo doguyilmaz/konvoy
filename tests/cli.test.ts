@@ -202,6 +202,29 @@ test('konvoy help prints the usage and exits 0', async () => {
   }
 })
 
+// `konvoy install --help` printed the whole list again; the agents' own CLIs give a subcommand
+// its own page, and so does konvoy now, from the same table the dispatcher reads.
+test('a command with --help, or after help, prints its own page; an unknown one is refused', async () => {
+  const write = spyOn(process.stdout, 'write').mockImplementation(() => true)
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect(await main(['install', '--help'])).toBe(0)
+    expect(await main(['help', 'upgrade'])).toBe(0)
+    const [install, update] = write.mock.calls.map((c) => String(c[0]))
+    expect(install).toStartWith('usage: konvoy install [agent...|--all]\n')
+    expect(install).toMatch(/^  --via <how>  install with script, npm, brew or bun/m)
+    expect(install).toMatch(/^  --dry-run {4}print what would run, and run nothing$/m)
+    // an alias opens the command it stands for, and says so
+    expect(update).toStartWith('usage: konvoy update')
+    expect(update).toContain('also: konvoy upgrade')
+    expect(await main(['help', 'instal'])).toBe(2)
+    expect(String(err.mock.calls[0]?.[0])).toBe('unknown command "konvoy instal" - did you mean konvoy install?')
+  } finally {
+    write.mockRestore()
+    err.mockRestore()
+  }
+})
+
 test('-v and --version print one line and start nothing', async () => {
   const log = spyOn(console, 'log').mockImplementation(() => {})
   try {

@@ -5,6 +5,7 @@ import { agentIds } from '../src/config/schema'
 import { createSession, getSessionBySlug, recordTurn, renameSession } from '../src/store/queries'
 import { runRepl, replHelp, messageSplitter, terminalIo, PASTE_ON, PASTE_OFF, type ReplIo, type InputStream, type RunExtras } from '../src/commands/repl'
 import type { Session } from '../src/types'
+import { commandHelp } from '../src/commands/table'
 
 const START = '\x1b[200~'
 const END = '\x1b[201~'
@@ -124,6 +125,14 @@ test('/quit leaves before the remaining input is read, and /help lists the comma
   const help = h.out.find((t) => t.includes('/use <agent>'))!
   expect(help).toContain('/send <agent> "<msg>"')
   expect(replHelp()).toBe(help)
+})
+
+test('/help <command> shows that command, with the REPL\'s own spelling', async () => {
+  const h = harness(['/help install', '/help /log'])
+  await h.go()
+  expect(h.out).toContain(commandHelp('install', '/')!)
+  expect(h.out.find((t) => t.startsWith('usage: /log'))).toContain('also: /history')
+  expect(h.calls).toEqual([])
 })
 
 test('any other slash command goes through the table with the session implied', async () => {

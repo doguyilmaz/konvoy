@@ -1,5 +1,10 @@
-# konvoy
+<p align="center">
+  <img src="site/public/logo.svg" alt="" width="96" height="96">
+</p>
 
+<h1 align="center">konvoy</h1>
+
+<!-- #region docs -->
 One session across Claude Code, Codex, Kiro CLI, opencode and Antigravity CLI. konvoy binds a foreign
 session per CLI, keeps them on one shared brief, and lets you move between them without
 re-explaining anything.
@@ -12,10 +17,11 @@ macOS, via the tap (a signed binary; no Bun needed):
 brew install --cask doguyilmaz/tap/konvoy
 ```
 
-Linux, from the release tarball (no Bun needed):
+Linux, from the release tarball (no Bun needed; `konvoy_linux_arm64.tar.gz` on ARM):
 
 ```bash
-curl -fsSL https://github.com/doguyilmaz/konvoy/releases/latest/download/konvoy_linux_amd64.tar.gz | tar xz konvoy
+curl -fsSL https://github.com/doguyilmaz/konvoy/releases/latest/download/konvoy_linux_amd64.tar.gz \
+  | tar xz konvoy
 install -m 755 konvoy ~/.local/bin/konvoy
 ```
 
@@ -32,7 +38,11 @@ bun install
 bun run build          # produces ./dist/konvoy
 ```
 
-Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g @doguyilmaz/konvoy@latest`, or `bun run build`.
+Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g @doguyilmaz/konvoy@latest`,
+the tarball again, or `git pull && bun run build`; `konvoy update` says which one applies to you.
+
+The brew and tarball binaries carry the Bun runtime, so each is about 60 MB on disk and 25–35 MB
+to download; the npm package is a few kilobytes of source and runs on the Bun you already have.
 
 ### The agent CLIs
 
@@ -48,15 +58,19 @@ konvoy update claude --dry-run
 ```
 
 `install` picks the first of the vendor's documented ways whose tools are on PATH, in the vendor's
-order, or the one named with `--via` (`script`, `npm`, `brew`, `bun`):
+order, or the one named with `--via` (`script`, `npm`, `brew`, `bun`). A script runs as
+`curl -fsSL https://<script> | bash`, codex's with `sh`, exactly as its vendor documents it:
 
 | agent | script | npm / bun | Homebrew | its own updater |
 |---|---|---|---|---|
-| claude | `curl -fsSL https://claude.ai/install.sh \| bash` | `@anthropic-ai/claude-code` (deprecated) | `--cask claude-code` | `claude update` |
-| codex | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` | `@openai/codex` | `--cask codex` | `codex update` |
-| kiro | `curl -fsSL https://cli.kiro.dev/install \| bash` | | | `kiro-cli update` |
-| opencode | `curl -fsSL https://opencode.ai/install \| bash` | `opencode-ai` | `anomalyco/tap/opencode` | `opencode upgrade` |
-| antigravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | | | `agy update` |
+| claude | `claude.ai/install.sh` | `@anthropic-ai/claude-code` | `--cask claude-code` | `claude update` |
+| codex | `chatgpt.com/codex/install.sh` | `@openai/codex` | `--cask codex` | `codex update` |
+| kiro | `cli.kiro.dev/install` | | | `kiro-cli update` |
+| opencode | `opencode.ai/install` | `opencode-ai` | `anomalyco/tap/opencode` | `opencode upgrade` |
+| antigravity | `antigravity.google/cli/install.sh` | | | `agy update` |
+
+claude's npm package is deprecated in favour of its script, so it comes last. Kiro and Antigravity
+document only their scripts; the community Homebrew casks for them are not offered.
 
 Nothing runs before you have seen it: without a terminal to confirm at, `install` runs only with
 `--yes`. A binary that lands off PATH (`~/.local/bin`, `~/.opencode/bin`) is reported with the
@@ -65,10 +79,7 @@ Nothing runs before you have seen it: without a terminal to confirm at, `install
 `update` reads how each CLI was installed from where its binary lives and updates it the same way:
 `brew upgrade` for a Homebrew install, `npm install -g …@latest` or `bun add -g …@latest` for a
 package, and the CLI's own updater for its script install. A package from apt, dnf, pacman or nix is
-left to the system, since `claude update` and the rest would refuse or overwrite files the system owns.
-
-The brew and tarball binaries carry the Bun runtime, so each is about 60 MB on disk and 25–35 MB
-to download; the npm package is a few kilobytes of source and runs on the Bun you already have.
+skipped: the system's package manager owns those files and is the one to update them.
 
 ## Use
 
@@ -87,7 +98,7 @@ konvoy roster
 konvoy usage --all --chart     # GATE reads as a dash until a `gate` command is configured
 konvoy status
 konvoy attach codex    # drops you into the real Codex TUI, same session
-konvoy attach kiro --id cli_8a1…   # adopt a session you started in kiro's own TUI; the next turn resumes it
+konvoy attach kiro --id cli_8a1…   # adopt a session begun in kiro's own TUI; turns resume it
 konvoy doctor
 konvoy install codex   # the vendor's own installer, shown first and run on a yes (see Install)
 konvoy update --all    # every agent CLI the way it was installed, then konvoy itself
@@ -98,6 +109,7 @@ konvoy dashboard --port 4000  # local page with the same numbers as `usage --cha
 konvoy completion zsh > "${fpath[1]}/_konvoy"   # or: eval "$(konvoy completion bash)"
 ```
 
+`konvoy help <command>`, or `--help` after one, prints that command's usage and each flag it takes.
 `ls`, `log`, `roster` and `usage` take `--json` for scripts. A flag a command does not read is
 refused by name, with the one it was probably meant to be: a mistyped session flag stops the command
 instead of quietly running it against the current session.
@@ -110,14 +122,14 @@ prompt sits between two rules, with the session's running total and the agent's 
 permission under it, the way the agents' own CLIs draw theirs:
 
 ```text
-╭────────────────────────────────────────────────────────╮
-│ ✻ konvoy 0.4.0                                         │
-│                                                        │
-│   session sinkaf-8f3a · fix the token refresh          │
-│   agent   claude · opus · high · auto                  │
-│   convoy  ● claude  ● codex  ○ kiro  ● opencode        │
-│   dir     ~/repo/.konvoy/sinkaf-8f3a                   │
-╰────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────╮
+│ ✻ konvoy 0.4.0                                                 │
+│                                                                │
+│   session sinkaf-8f3a · fix the token refresh                  │
+│   agent   claude · opus · high · auto                          │
+│   convoy  ● claude  ● codex  ○ kiro  ● opencode  ○ antigravity │
+│   dir     ~/repo/.konvoy/sinkaf-8f3a                           │
+╰────────────────────────────────────────────────────────────────╯
 
 claude › fix the token refresh
   ✓ Read  src/auth.ts  0.3s
@@ -126,10 +138,10 @@ Switched the refresh to fire on 401 with a single in-flight retry.
 
   claude · 8.2s · 24.4k in / 311 out · $0.0621
 
-────────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────
 claude › @codex review that diff
-────────────────────────────────────────────────────────────────
-  sinkaf-8f3a · 1 turn · 24.4k in · $0.06          opus · high · auto
+──────────────────────────────────────────────────────────────────
+  sinkaf-8f3a · 1 turn · 24.4k in · $0.06       opus · high · auto
 ```
 
 While a turn runs, a status line says the agent is working or thinking, for how long and how to stop
@@ -324,7 +336,7 @@ and `LEDGER.md` never reach git while the project config can be committed.
 clamped to what the target model actually supports.
 
 If a CLI is not on your `PATH`, point konvoy at it directly and every command (`doctor`,
-`status`, `send`, `attach`, `update`) uses that path:
+`status`, `send`, `attach`, `install`, `update`) uses that path:
 
 ```jsonc
 { "agents": { "opencode": { "bin": "~/.opencode/bin/opencode" } } }
@@ -344,7 +356,8 @@ Name a `failover` chain and konvoy follows it when an agent can't work, instead 
 { "failover": { "chain": ["codex", "claude", "kiro"], "upstreamRetries": 3 } }
 ```
 
-A rate limit or an auth failure moves to the next agent in the chain at once. An agent that failed on auth shows as `auth_required` in the roster until one of its turns succeeds. An upstream
+A rate limit or an auth failure moves to the next agent in the chain at once. An agent that failed
+on auth shows as `auth_required` in the roster until one of its turns succeeds. An upstream
 error (a reachable-but-refusing API) retries the same agent with backoff up to
 `upstreamRetries` times before moving on. A crash, a timeout, or an interrupted turn never
 moves the chain: the fault is in the work, and the next agent would just fail the same way.
@@ -414,8 +427,10 @@ override yet.
 
 ## Requirements
 
-Whichever of `claude`, `codex`, `kiro-cli`, `opencode`, `agy` you want in the convoy. Bun 1.4+ only for the npm install or a checkout; the brew and tarball binaries carry their own runtime.
-Each authenticates itself; konvoy never handles credentials.
+Whichever of `claude`, `codex`, `kiro-cli`, `opencode`, `agy` you want in the convoy;
+`konvoy install` sets up any that are missing. Each authenticates itself; konvoy never handles
+credentials. Bun 1.4+ only for the npm install or a checkout; the brew and tarball binaries carry
+their own runtime.
 
 ## Releasing
 
@@ -437,7 +452,7 @@ bun test
 bun run typecheck
 bun run mutate         # mutation coverage of src/
 bun run verify:claims  # checks konvoy's own claims about the five CLIs against what --help says here
-bun run smoke          # two real turns per installed, authenticated agent, the second resumed; spends quota
+bun run smoke          # two real turns per logged-in agent, the second resumed; spends quota
 ```
 
 `verify:claims` is the standing form of a manual check: it re-reads each CLI's own `--help`
@@ -456,3 +471,5 @@ the one cheap proof that a bound session carries its context, which every unit t
 checks with fakes. It skips an agent that isn't installed or isn't logged in, and flags
 when an installed CLI's version has drifted from the one a fixture was captured against, the
 moment to re-capture. It spends real quota, so it is opt-in and never part of `bun test`.
+
+<!-- #endregion docs -->

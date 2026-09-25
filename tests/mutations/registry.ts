@@ -357,7 +357,7 @@ export const mutations: Mutation[] = [
       '    aliases: [],',
       "    usage: 'rm <session> --yes',",
       "    summary: 'delete a konvoy session (foreign sessions survive)',",
-      "    flags: ['yes'],",
+      "    flags: { yes: 'confirm the delete; nothing is removed without it' },",
       '  },',
     ].join('\n'),
     to: '',
@@ -492,6 +492,36 @@ export const mutations: Mutation[] = [
     from: 'const landed = await firstExisting(PACKAGING[agent].binPaths ?? [], deps)',
     to: 'const landed = null',
     tests: ['tests/install.test.ts'],
+  },
+
+  // --- one command's help page (src/commands/table.ts, src/cli.ts, src/commands/repl.ts) ---
+  {
+    name: 'a command\'s help page drops the konvoy prefix from its usage line',
+    file: 'src/commands/table.ts',
+    from: 'const lines = [`usage: ${prefix}${c.usage}`, \'\', `  ${c.summary}`]',
+    to: 'const lines = [`usage: ${c.usage}`, \'\', `  ${c.summary}`]',
+    tests: ['tests/table.test.ts'],
+  },
+  {
+    name: 'a value flag\'s help shows it bare, as if it were a switch',
+    file: 'src/commands/table.ts',
+    from: 'usage: `--${f}${FLAG_VALUES[f] ? ` ${FLAG_VALUES[f]}` : \'\'}`',
+    to: 'usage: `--${f}`',
+    tests: ['tests/cli.test.ts'],
+  },
+  {
+    name: 'konvoy help <word that is no command> exits 0 as if it had helped',
+    file: 'src/cli.ts',
+    from: '    console.error(unknownCommand(topic, \'konvoy \'))\n    return 2',
+    to: '    console.error(unknownCommand(topic, \'konvoy \'))\n    return 0',
+    tests: ['tests/cli.test.ts'],
+  },
+  {
+    name: '/help <command> in the REPL prints the whole list instead of that command',
+    file: 'src/commands/repl.ts',
+    from: 'const page = rest[0] ? commandHelp(rest[0].replace(/^\\//, \'\'), \'/\') : null',
+    to: 'const page = null',
+    tests: ['tests/repl.test.ts'],
   },
 
   // --- machine facts render as rows, not objects (src/core/facts.ts) ---

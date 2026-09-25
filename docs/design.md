@@ -122,6 +122,7 @@ starts with, the one bare `konvoy` talks to first; with none configured it is cl
   konvoy version                             konvoy and agent versions
   konvoy dashboard [--port N] [--no-open]    open a local page with the same numbers
   konvoy completion bash|zsh|fish            print a shell completion script
+  konvoy help [command]                      every command, or one command's usage and flags
 ```
 
 This block is the command table in `src/commands/table.ts` as `konvoy help` prints it;
