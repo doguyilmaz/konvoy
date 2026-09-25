@@ -24,19 +24,21 @@ html {
 /* The site is one long page with no sidebar. VitePress sizes that for a narrow reading column
    (688px), which left the README's wide terminal samples scrolling sideways under a nav bar twice
    as wide. The page now spans the nav: text starts under the logo, the outline ends under the
-   GitHub link. The selectors start at .Layout to outrank VitePress's own scoped rules. */
+   GitHub link. The selectors start at .Layout to outrank VitePress's own scoped rules, and name
+   each step with > because the outline has a .content of its own: a descendant selector took its
+   padding too and left "On this page" flush against its divider. */
 @media (min-width: 960px) {
-  .Layout .VPContent .VPDoc:not(.has-sidebar) .container {
+  .Layout .VPContent .VPDoc:not(.has-sidebar) > .container {
     max-width: calc(var(--vp-layout-max-width) - 64px);
   }
 
-  .Layout .VPContent .VPDoc:not(.has-sidebar) .content {
+  .Layout .VPContent .VPDoc:not(.has-sidebar) > .container > .content {
     max-width: none;
     padding-left: 0;
     padding-right: 0;
   }
 
-  .Layout .VPContent .VPDoc.has-aside .content-container {
+  .Layout .VPContent .VPDoc.has-aside > .container > .content > .content-container {
     max-width: none;
   }
 }
