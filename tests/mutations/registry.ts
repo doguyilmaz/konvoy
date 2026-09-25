@@ -366,10 +366,10 @@ export const mutations: Mutation[] = [
 
   // --- the update guard (src/commands/update.ts) ---
   {
-    name: 'updateCommand ignores a configured bin and always runs the bare CLI name',
+    name: 'update ignores a configured bin and always runs the bare CLI name',
     file: 'src/commands/update.ts',
-    from: 'return [bin ?? name!, ...rest]',
-    to: 'return [name!, ...rest]',
+    from: '    const bin = settings.bin ?? getAdapter(agent).bin',
+    to: '    const bin = getAdapter(agent).bin',
     tests: ['tests/update.test.ts'],
   },
   {
@@ -382,9 +382,116 @@ export const mutations: Mutation[] = [
   {
     name: "a failing agent update is not counted as a failure, so cmdUpdate exits 0 even though one update failed",
     file: 'src/commands/update.ts',
-    from: 'failures++',
-    to: '',
+    from: "      console.log(`! ${agent}: update exited with ${code}`)\n      failures++",
+    to: "      console.log(`! ${agent}: update exited with ${code}`)",
     tests: ['tests/update.test.ts'],
+  },
+
+  // --- installing and updating agents through their vendors' channels (src/core/install.ts, src/commands/install.ts) ---
+  {
+    name: 'a script install pipes curl to the shell without pipefail, so a failed download runs an empty script and succeeds',
+    file: 'src/core/install.ts',
+    from: 'argv: [\'bash\', \'-c\', `set -o pipefail; ${command}`]',
+    to: 'argv: [\'bash\', \'-c\', command]',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'codex\'s installer runs interactive, stopping to ask whether to start codex',
+    file: 'src/core/install.ts',
+    from: 'script(\'https://chatgpt.com/codex/install.sh\', \'sh\', \'CODEX_NON_INTERACTIVE=1\')',
+    to: 'script(\'https://chatgpt.com/codex/install.sh\', \'sh\')',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'a distribution\'s package is taken for a hand-placed binary and handed to the CLI\'s own updater',
+    file: 'src/core/install.ts',
+    from: '  if (channel === \'system\') return {',
+    to: '  if (false) return {',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'a /usr or nix store path is not read as a distribution\'s package',
+    file: 'src/core/install.ts',
+    from: '/^\\/(?:usr\\/)?s?bin\\//.test(p) || ',
+    to: 'false || ',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'a Cellar formula is upgraded as a cask',
+    file: 'src/core/install.ts',
+    from: 'cask: m[1] === \'Caskroom\'',
+    to: 'cask: true',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'a Homebrew update drops --cask, so brew looks for a formula that is not installed',
+    file: 'src/core/install.ts',
+    from: 'const argv = [\'brew\', \'upgrade\', ...(cask.cask ? [\'--cask\'] : []), cask.name]',
+    to: 'const argv = [\'brew\', \'upgrade\', cask.name]',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'a keg under another name, or a community cask, is upgraded as if it were the vendor\'s',
+    file: 'src/core/install.ts',
+    from: '`${base}@`) ? found : null',
+    to: '`${base}@`) ? found : found',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'a Homebrew path that names no keg is not upgraded through the vendor\'s own formula',
+    file: 'src/core/install.ts',
+    from: '  if (!found) return own',
+    to: '  if (!found) return null',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'an npm install is reinstalled at its current version instead of the latest',
+    file: 'src/core/install.ts',
+    from: 'const argv = [\'npm\', \'install\', \'-g\', `${p.npm}@latest`]',
+    to: 'const argv = [\'npm\', \'install\', \'-g\', p.npm]',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'the CLI\'s own updater runs the bare binary, starting a session instead of updating',
+    file: 'src/core/install.ts',
+    from: 'const argv = [bin, ...p.self]',
+    to: 'const argv = [bin]',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'install runs the vendor\'s installer without asking',
+    file: 'src/commands/install.ts',
+    from: '    if (!opts.yes) {',
+    to: '    if (false) {',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'install with no terminal to confirm at quietly skips instead of saying --yes is needed and failing',
+    file: 'src/commands/install.ts',
+    from: '      if (answer === null) {',
+    to: '      if (false) {',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'install --dry-run runs the installers it was only meant to print',
+    file: 'src/commands/install.ts',
+    from: '    if (opts.dryRun) continue\n    if (!opts.yes) {',
+    to: '    if (!opts.yes) {',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'install reinstalls an agent that is already there',
+    file: 'src/commands/install.ts',
+    from: '    if (found.installed) {',
+    to: '    if (false) {',
+    tests: ['tests/install.test.ts'],
+  },
+  {
+    name: 'an install that lands off PATH is reported as not found, with no path and no bin line',
+    file: 'src/commands/install.ts',
+    from: 'const landed = await firstExisting(PACKAGING[agent].binPaths ?? [], deps)',
+    to: 'const landed = null',
+    tests: ['tests/install.test.ts'],
   },
 
   // --- machine facts render as rows, not objects (src/core/facts.ts) ---

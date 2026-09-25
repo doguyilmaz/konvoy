@@ -34,6 +34,39 @@ bun run build          # produces ./dist/konvoy
 
 Updating follows the channel: `brew upgrade --cask konvoy`, `bun add -g @doguyilmaz/konvoy@latest`, or `bun run build`.
 
+### The agent CLIs
+
+konvoy installs and updates the agents with their vendors' own installers:
+
+```bash
+konvoy install                 # every agent: installed or not, and the command that would install it
+konvoy install codex opencode  # shows each command and its source, runs it on a yes
+konvoy install --all --yes     # every missing one, without asking; --dry-run prints the plan only
+konvoy install claude --via npm
+konvoy update --all            # every agent the way it was installed, then konvoy itself
+konvoy update claude --dry-run
+```
+
+`install` picks the first of the vendor's documented ways whose tools are on PATH, in the vendor's
+order, or the one named with `--via` (`script`, `npm`, `brew`, `bun`):
+
+| agent | script | npm / bun | Homebrew | its own updater |
+|---|---|---|---|---|
+| claude | `curl -fsSL https://claude.ai/install.sh \| bash` | `@anthropic-ai/claude-code` (deprecated) | `--cask claude-code` | `claude update` |
+| codex | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` | `@openai/codex` | `--cask codex` | `codex update` |
+| kiro | `curl -fsSL https://cli.kiro.dev/install \| bash` | | | `kiro-cli update` |
+| opencode | `curl -fsSL https://opencode.ai/install \| bash` | `opencode-ai` | `anomalyco/tap/opencode` | `opencode upgrade` |
+| antigravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | | | `agy update` |
+
+Nothing runs before you have seen it: without a terminal to confirm at, `install` runs only with
+`--yes`. A binary that lands off PATH (`~/.local/bin`, `~/.opencode/bin`) is reported with the
+`konvoy config set agents.<id>.bin` line that points konvoy at it.
+
+`update` reads how each CLI was installed from where its binary lives and updates it the same way:
+`brew upgrade` for a Homebrew install, `npm install -g …@latest` or `bun add -g …@latest` for a
+package, and the CLI's own updater for its script install. A package from apt, dnf, pacman or nix is
+left to the system, since `claude update` and the rest would refuse or overwrite files the system owns.
+
 The brew and tarball binaries carry the Bun runtime, so each is about 60 MB on disk and 25–35 MB
 to download; the npm package is a few kilobytes of source and runs on the Bun you already have.
 
@@ -56,7 +89,8 @@ konvoy status
 konvoy attach codex    # drops you into the real Codex TUI, same session
 konvoy attach kiro --id cli_8a1…   # adopt a session you started in kiro's own TUI; the next turn resumes it
 konvoy doctor
-konvoy update --all    # every agent CLI; konvoy itself follows its install channel (see Install)
+konvoy install codex   # the vendor's own installer, shown first and run on a yes (see Install)
+konvoy update --all    # every agent CLI the way it was installed, then konvoy itself
 konvoy rm stale-slug --yes
 konvoy rename stale-slug token-refresh   # the session's .konvoy folder follows
 konvoy version

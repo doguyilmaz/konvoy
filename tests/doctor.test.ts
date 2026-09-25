@@ -86,7 +86,7 @@ test('an uninstalled agent that no role names is reported, not failed', async ()
     }),
     fakeDeps({ [leadBin]: { version: '2.1.278', auth: '{"loggedIn":true}' } }),
   )
-  expect(lines).toContain('\u00b7  opencode: not installed')
+  expect(lines).toContain('\u00b7  opencode: not installed - konvoy install opencode')
   expect(lines).not.toContain('x opencode: not installed')
   expect(code).toBe(0)
 })

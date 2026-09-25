@@ -7,6 +7,8 @@ import { commandTable, GLOBAL_FLAGS } from './table'
 
 const SESSION_COMMANDS = ['resume', 'rm', 'rename']
 const AGENT_COMMANDS = ['send', 'attach']
+// these take any number of agents, so every position after the command offers one
+const MULTI_AGENT_COMMANDS = ['install', 'update', 'upgrade']
 
 const words = (xs: readonly string[]): string => xs.join(' ')
 const longFlags = (flags: readonly string[]): string[] => flags.filter((f) => f.length > 1).map((f) => `--${f}`)
@@ -27,6 +29,7 @@ _konvoy() {
   case "$prev" in
     --session) COMPREPLY=($(compgen -W "$(konvoy __complete sessions 2>/dev/null)" -- "$cur")); return ;;
     --lead) COMPREPLY=($(compgen -W "${words(agentIds)}" -- "$cur")); return ;;
+    --via) COMPREPLY=($(compgen -W "script npm brew bun" -- "$cur")); return ;;
   esac
   if [ "$COMP_CWORD" -eq 1 ]; then
     COMPREPLY=($(compgen -W "${words(names)} ${words(globals)} --version" -- "$cur"))
@@ -40,6 +43,9 @@ ${flagCases}
     COMPREPLY=($(compgen -W "$flags" -- "$cur"))
     return
   fi
+  case "$cmd" in
+    ${MULTI_AGENT_COMMANDS.join("|")}) COMPREPLY=($(compgen -W "${words(agentIds)}" -- "$cur")); return ;;
+  esac
   if [ "$COMP_CWORD" -eq 2 ]; then
     case "$cmd" in
       ${AGENT_COMMANDS.join('|')}) COMPREPLY=($(compgen -W "${words(agentIds)}" -- "$cur")) ;;
@@ -78,6 +84,7 @@ _konvoy() {
   case $words[CURRENT-1] in
     --session) compadd -- \${(f)"$(konvoy __complete sessions 2>/dev/null)"}; return ;;
     --lead) compadd -- ${words(agentIds)}; return ;;
+    --via) compadd -- script npm brew bun; return ;;
   esac
   flags=(${words(globals)})
   case $words[2] in
@@ -87,6 +94,9 @@ ${flagCases}
     compadd -- $flags
     return
   fi
+  case $words[2] in
+    ${MULTI_AGENT_COMMANDS.join('|')}) compadd -- ${words(agentIds)}; return ;;
+  esac
   if (( CURRENT == 3 )); then
     case $words[2] in
       ${AGENT_COMMANDS.join('|')}) compadd -- ${words(agentIds)} ;;
@@ -112,12 +122,12 @@ function fish(): string {
   for (const c of commandTable) {
     for (const n of [c.name, ...c.aliases]) lines.push(`complete -c konvoy -n __fish_use_subcommand -a ${n} -d ${fq(c.summary)}`)
     for (const f of c.flags) {
-      const value = ['lead', 'limit', 'port', 'id'].includes(f) ? ' -x' : ''
-      const agents = f === 'lead' ? ` -a ${fq(words(agentIds))}` : ''
+      const value = ['lead', 'limit', 'port', 'id', 'via'].includes(f) ? ' -x' : ''
+      const agents = f === 'lead' ? ` -a ${fq(words(agentIds))}` : f === 'via' ? ` -a 'script npm brew bun'` : ''
       lines.push(`complete -c konvoy -n '__fish_seen_subcommand_from ${[c.name, ...c.aliases].join(' ')}' -l ${f}${value}${agents}`)
     }
   }
-  lines.push(`complete -c konvoy -n '__fish_seen_subcommand_from ${AGENT_COMMANDS.join(' ')}' -a ${fq(words(agentIds))}`)
+  lines.push(`complete -c konvoy -n '__fish_seen_subcommand_from ${[...AGENT_COMMANDS, ...MULTI_AGENT_COMMANDS].join(' ')}' -a ${fq(words(agentIds))}`)
   lines.push(`complete -c konvoy -n '__fish_seen_subcommand_from ${SESSION_COMMANDS.join(' ')}' -a '(konvoy __complete sessions 2>/dev/null)'`)
   lines.push(`complete -c konvoy -n '__fish_seen_subcommand_from config' -a 'get set unset path'`)
   lines.push(`complete -c konvoy -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'`)

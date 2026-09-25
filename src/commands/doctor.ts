@@ -71,7 +71,7 @@ export async function cmdDoctor(cfg: Config, deps?: DetectDeps): Promise<number>
     }
 
     const d = await detect(agent, { model: settings.model, bin: settings.bin, deps })
-    if (!d.installed) return [severity(`${agent}: not installed`)]
+    if (!d.installed) return [severity(`${agent}: not installed - konvoy install ${agent}`)]
     const auth = await detectAuth(agent, { bin: settings.bin, deps })
     if (auth.authed === false) return [severity(`${agent}: ${auth.detail} - ${loginHint(agent)}`)]
 

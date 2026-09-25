@@ -117,7 +117,8 @@ starts with, the one bare `konvoy` talks to first; with none configured it is cl
   konvoy status                              versions, auth and roster
   konvoy attach <agent> [--id <session-id>]  open that agent's own interface, same session
   konvoy doctor                              check installs, logins, effort and model overlap
-  konvoy update [--all]                      update konvoy, and with --all the agent CLIs
+  konvoy install [agent...|--all]            install agent CLIs with each vendor's own installer
+  konvoy update [agent...|--all]             update agent CLIs, and konvoy, the way each was installed
   konvoy version                             konvoy and agent versions
   konvoy dashboard [--port N] [--no-open]    open a local page with the same numbers
   konvoy completion bash|zsh|fish            print a shell completion script
@@ -126,7 +127,7 @@ starts with, the one bare `konvoy` talks to first; with none configured it is cl
 This block is the command table in `src/commands/table.ts` as `konvoy help` prints it;
 `tests/docs.test.ts` fails when the two drift. Every command takes `--session <slug>`; without
 it the session bound to the current directory is used. Aliases: `start` for `new`, `history` for
-`log`, `last` for `show`, `agents` for `roster`, `cost` for `usage`, `sessions` and `list` for `ls`. A flag a
+`log`, `last` for `show`, `agents` for `roster`, `cost` for `usage`, `upgrade` for `update`, `sessions` and `list` for `ls`. A flag a
 command does not read is refused by name, with the nearest one it does, rather than ignored.
 
 ## 7. Architecture
@@ -307,7 +308,7 @@ The ledger stays a Markdown file, not a table: agents read it directly, and a hu
 
 | failure | behaviour |
 |---|---|
-| CLI not installed | marked unavailable in roster; a handoff to it is reported, not dropped; doctor prints the install command |
+| CLI not installed | marked unavailable in roster; a handoff to it is reported, not dropped; doctor names `konvoy install <agent>` (§36) |
 | an agent is absent, logged out or expired | the session continues with whoever is present - see "Availability is not a verdict" below |
 | CLI present but not on konvoy's PATH | a spawned process inherits konvoy's environment, not the user's interactive shell, so a CLI reachable in their terminal can be invisible to konvoy - observed on this machine, where `~/.opencode/bin` is added by `.zshrc` and was absent from a long-running process's PATH. `agents.<id>.bin` names the binary explicitly, and `doctor` prints the resolved path for each agent rather than assuming a lookup succeeded |
 | not authenticated | auth errors detected from the stream; binding marked `auth_required`; konvoy prints that CLI's own login command and continues with the rest |
@@ -1322,7 +1323,8 @@ interactive mode; a signed and notarized brew cask, Linux tarballs, npm with pro
 **Shipped (0.4)** - the interactive prompt (§34): a raw-mode line editor with a command popup,
 per-project history, `@agent` and `!shell`, and Esc to stop a turn without leaving; a turn drawn
 live (§35) with claude streaming token by token and answers rendered as Markdown; `log`, `show`,
-`completion` and `--json`; the reader-relative prelude (§28); a private store (§14).
+`completion` and `--json`; the reader-relative prelude (§28); a private store (§14); `install`, and
+an `update` that follows each CLI's install channel (§36).
 **Next** - nothing open. `harness: minimal` shipped for kiro, through a generated project agent
 profile, and for opencode, through its project config alone: the `OPENCODE_CONFIG*` variables this
 section once named turned out to ADD a config source rather than replace one (§18). The codex
@@ -1390,3 +1392,37 @@ in the message that closes it, so the adapter's per-turn parser (`Adapter.parser
 message for exactly the blocks whose deltas it saw. Tool lines share one vocabulary across the five
 CLIs (codex's `command_execution` is `Shell`, its login-shell wrapper unwrapped; kiro reads ACP kind
 and location), and claude's `rate_limit_event` names a quota window near its edge after the footer.
+
+## 36. Installing and updating the agents
+
+`konvoy install <agent>` runs the vendor's own installer and nothing else: the commands live in one
+table (`src/core/install.ts`), each beside the page that documents it, in the vendor's order of
+preference - the curl script first where there is one, then npm, Homebrew and bun. The first whose
+tools are on PATH is chosen, or the one named with `--via`. A script is piped from curl under
+`set -o pipefail`, so a failed download fails the install instead of handing the shell an empty
+page. Only vendor-documented routes are offered: Homebrew carries community casks for kiro-cli and
+antigravity-cli, but Kiro's own page says Homebrew is not a supported path, so neither is listed.
+
+Every installer is code fetched from somewhere else, so konvoy prints the exact command and its
+source and runs it only on a yes at the terminal. With no terminal to ask at, it runs nothing unless
+`--yes` says the command was read; `--dry-run` prints the plan and stops. An agent already present
+is left alone and pointed at `update`. After the installer exits konvoy detects the agent again, and
+when the binary landed somewhere this shell's PATH does not reach - `~/.local/bin` and
+`~/.opencode/bin` are the usual ones - it says where, and how to point `agents.<id>.bin` at it.
+codex's installer asks on `/dev/tty` whether to start codex once it is done, even when piped; it runs
+with `CODEX_NON_INTERACTIVE=1`, the way codex's own `update` runs it.
+
+`konvoy update` updates each CLI through the channel that installed it, read from the binary's path
+and the file its symlinks end at: a Cellar or Caskroom path is Homebrew, `node_modules` is npm,
+`~/.bun` is bun, a path only the vendor's script writes (`~/.local/share/claude`,
+`~/.codex/packages/standalone`, `~/.opencode/bin`, ...) is the script, and `/usr`, `/nix/store` or
+`/snap` is the distribution. A package manager's install is updated by that package manager: a
+self-updater that replaces files brew or npm own leaves the manager's record wrong, and
+`claude update` on a Homebrew install reports it is up to date and changes nothing. Homebrew
+upgrades the keg the binary sits in, which tells `claude-code` from `claude-code@latest`; a keg that
+is not the vendor's - those community casks, marked `auto_updates` - is left to the CLI's own
+updater rather than rolled back to whatever version the cask last recorded. A distribution's package
+is skipped with a line saying the distribution updates it. Everything else - a script install, or a
+binary nobody can place - runs the CLI's own updater (`claude update`, `codex update`,
+`kiro-cli update`, `opencode upgrade`, `agy update`). With `--all`, konvoy updates itself last, by the
+same rule: brew for the cask, bun for the npm package, and a sentence for a tarball or a checkout.

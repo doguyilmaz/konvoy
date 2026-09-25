@@ -17,6 +17,7 @@ import { cmdStatus } from './commands/status'
 import { cmdAttach } from './commands/attach'
 import { cmdDoctor } from './commands/doctor'
 import { cmdUpdate } from './commands/update'
+import { cmdInstall } from './commands/install'
 import { cmdConfig } from './commands/config'
 import { cmdResume } from './commands/resume'
 import { cmdRm } from './commands/rm'
@@ -137,7 +138,17 @@ const handlers: Record<CommandName, Handler> = {
     return cmdAttach(ctx.db, ctx.cwd, agent, { slug: ctx.slug, bin: settings.bin, id, effort: settings.effort, permission: settings.permission })
   },
   doctor: (ctx) => cmdDoctor(ctx.cfg),
-  update: (ctx) => cmdUpdate(ctx.cfg, { all: ctx.args.flags.all === true }),
+  update: (ctx, rest) =>
+    cmdUpdate(ctx.cfg, { all: ctx.args.flags.all === true, agents: rest, dryRun: ctx.args.flags['dry-run'] === true }),
+  install: (ctx, rest) =>
+    cmdInstall(ctx.cfg, {
+      agents: rest,
+      all: ctx.args.flags.all === true,
+      // a bare --via is refused by name rather than read as no preference
+      via: ctx.args.flags.via === undefined ? undefined : String(ctx.args.flags.via),
+      yes: ctx.args.flags.yes === true,
+      dryRun: ctx.args.flags['dry-run'] === true,
+    }),
   resume: (ctx, rest) => cmdResume(ctx.db, ctx.cfg, ctx.cwd, rest[0] ?? ctx.slug),
   log: (ctx) =>
     cmdLog(ctx.db, ctx.cwd, { slug: ctx.slug, limit: flagNumber(ctx.args.flags.limit), json: ctx.args.flags.json === true }),

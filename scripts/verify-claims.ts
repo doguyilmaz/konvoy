@@ -107,6 +107,8 @@ const checks: Check[] = [
   updateCheck('codex', ['update', '--help']),
   updateCheck('kiro-cli', ['update', '--help']),
   updateCheck('opencode', ['upgrade', '--help']),
+  // only user reports and the docs' search snippets name it so far; this is where it is confirmed
+  updateCheck('agy', ['update', '--help']),
 
   helpCheck('claude', ['--help'], 'claude --session-id exists (a caller can set the session id)', (out) =>
     SESSION_ID_FLAG.test(out)
