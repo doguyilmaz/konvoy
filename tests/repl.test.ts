@@ -3,7 +3,9 @@ import { openDb } from '../src/store/db'
 import { configSchema } from '../src/config/schema'
 import { agentIds } from '../src/config/schema'
 import { createSession, getSessionBySlug, recordTurn, renameSession } from '../src/store/queries'
-import { runRepl, replHelp, messageSplitter, terminalIo, PASTE_ON, PASTE_OFF, type ReplIo, type InputStream, type RunExtras } from '../src/commands/repl'
+import { runRepl, replHelp, messageSplitter, terminalIo, PASTE_ON, PASTE_OFF, type ReplIo, type ReplOptions, type InputStream, type RunExtras } from '../src/commands/repl'
+import type { EditorIo, PickSpec, PromptSpec } from '../src/editor'
+import type { Config } from '../src/config/schema'
 import type { Session } from '../src/types'
 import { commandHelp } from '../src/commands/table'
 
@@ -122,7 +124,7 @@ test('/quit leaves before the remaining input is read, and /help lists the comma
   await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
   expect(drained).toBe(false)
   expect(h.calls).toEqual([])
-  const help = h.out.find((t) => t.includes('/use <agent>'))!
+  const help = h.out.find((t) => t.includes('/use [agent|konvoy]'))!
   expect(help).toContain('/send <agent> "<msg>"')
   expect(replHelp()).toBe(help)
 })
@@ -395,4 +397,180 @@ test('/retry repeats what the person asked, not the task a handoff wrote', async
   recordTurn(h.db, { sessionId: h.s.id, agent: 'codex', prompt: 'run the test suite', final: 'f', exitCode: 0, costUsd: 0, parentTurnId: asked })
   await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
   expect(h.calls).toEqual([['s', 'send', 'codex', '--', 'fix the login bug']])
+})
+
+// ---- lists to pick from: `/model` opened nothing and accepted any string, which the turn then
+// failed on ("Invalid model reference: opus-5-5")
+
+const catalog = { complete: true, source: 'opencode models', models: [{ id: 'opencode/claude-opus-5-5' }, { id: 'opencode/claude-sonnet-5' }] }
+
+function picking(input: string[], answers: (string | null)[]) {
+  const h = harness(input)
+  const shown: PickSpec[] = []
+  const seen: (Config | undefined)[] = []
+  const hooks: { turn?: (tokens: string[]) => void } = {}
+  h.io.pick = async (spec) => {
+    shown.push(spec)
+    return answers.shift() ?? null
+  }
+  const run = (tokens: string[], slug: string, extras?: RunExtras): number => {
+    h.calls.push([slug, ...tokens])
+    seen.push(extras?.cfg)
+    hooks.turn?.(tokens)
+    return 0
+  }
+  const go = (options: ReplOptions = {}) =>
+    runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, run, { models: async () => catalog, efforts: async () => undefined, ...options })
+  return { ...h, shown, seen, hooks, go }
+}
+
+test('/model alone opens the list of models the agent offers, and the one chosen is used', async () => {
+  const h = picking(['/use opencode', '/model', 'hi'], ['opencode/claude-sonnet-5'])
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await h.go()
+    expect(h.shown[0]!.title).toBe('Model for opencode')
+    expect(h.shown[0]!.items.map((i) => i.value)).toEqual(['default', 'opencode/claude-opus-5-5', 'opencode/claude-sonnet-5'])
+    expect(h.calls).toEqual([['s', 'send', 'opencode', '--', 'hi']])
+    expect(h.seen[0]?.agents.opencode?.model).toBe('opencode/claude-sonnet-5')
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('a typed model the agent does not offer is refused, with the one it was probably meant to be', async () => {
+  const h = picking(['/use opencode', '/model opus-5-5', 'hi'], [])
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await h.go()
+    expect(err.mock.calls.map((c) => String(c[0]))).toContain('"opus-5-5" is not a model opencode offers - did you mean opencode/claude-opus-5-5? /model lists them')
+    expect(h.seen[0]).toBeUndefined()
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('/effort and /permission alone open their lists, and a closed list changes nothing', async () => {
+  const h = picking(['/effort', '/permission', '/permission', 'hi'], ['low', null, 'yolo'])
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await h.go()
+    expect(h.shown.map((s) => s.title)).toEqual(['Effort for claude', 'Permission for claude', 'Permission for claude'])
+    expect(h.shown[1]!.items.find((i) => i.current)?.value).toBe('edit')
+    expect(h.seen[0]?.agents.claude).toEqual({ effort: 'low', permission: 'yolo' })
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('/use alone lists konvoy mode and the agents; konvoy mode routes through the ready ones', async () => {
+  const h = picking(['/use', 'hi', 'again'], ['konvoy'])
+  // claude was out of quota, and the chain handed the first turn to codex
+  h.hooks.turn = (tokens) => {
+    if (tokens[3] === 'hi') recordTurn(h.db, { sessionId: h.s.id, agent: 'codex', prompt: 'hi', final: 'done', exitCode: 0, costUsd: 0 })
+  }
+  await h.go({ installed: new Set(['claude', 'codex', 'opencode']) })
+  expect(h.shown[0]!.items[0]).toMatchObject({ value: 'konvoy' })
+  expect(h.seen[0]?.failover.chain).toEqual(['claude', 'codex', 'opencode'])
+  // the next prompt starts from the agent that answered, and claude, having run out, waits its turn
+  expect(h.calls[1]).toEqual(['s', 'send', 'codex', '--', 'again'])
+  expect(h.seen[1]?.failover.chain).toEqual(['codex', 'claude', 'opencode'])
+  // an agent not installed is never in the route; the prompt says konvoy is listening
+  expect(h.seen[0]?.failover.chain).not.toContain('kiro')
+  expect(h.out.filter((t) => t.endsWith('› ')).at(-1)).toBe('konvoy › ')
+})
+
+test('an @agent question in konvoy mode goes to that agent alone', async () => {
+  const h = picking(['/use konvoy', '@codex look'], [])
+  await h.go({ installed: new Set(['claude', 'codex']) })
+  expect(h.calls).toEqual([['s', 'send', 'codex', '--', 'look']])
+  expect(h.seen[0]).toBeUndefined()
+})
+
+test('/resume alone lists the sessions; the current one is ticked and choosing it says so', async () => {
+  const h = picking(['/resume', '/resume'], ['s', 'other'])
+  createSession(h.db, { slug: 'other', goal: 'elsewhere', cwd: '/nowhere/o', lead: 'kiro' })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await h.go()
+    expect(h.shown[0]!.items.map((i) => [i.value, i.current])).toEqual([
+      ['other', false],
+      ['s', true],
+    ])
+    expect(err.mock.calls.map((c) => String(c[0]))).toContain('already in s')
+    expect(h.calls).toEqual([['s', 'resume', 'other']])
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('/config set alone walks key, value and file; a global-only key goes to the global file', async () => {
+  const h = picking(['/config set', '/config set defaults.effort'], ['defaults.permission', 'auto', 'low', 'project'])
+  let reloads = 0
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await h.go({ loadConfig: async () => (reloads++, h.cfg) })
+    expect(h.calls).toEqual([
+      ['s', 'config', 'set', 'defaults.permission', 'auto', '--global'],
+      ['s', 'config', 'set', 'defaults.effort', 'low'],
+    ])
+    // the REPL runs on what the files say after each write
+    expect(reloads).toBe(2)
+  } finally {
+    err.mockRestore()
+  }
+})
+
+test('with no terminal to point at, a list is printed with nothing chosen', async () => {
+  const h = harness(['/permission'], false)
+  await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run)
+  const out = h.out.join('')
+  expect(out).toContain('Permission for claude')
+  expect(out).toContain('edit ✔')
+  expect(h.calls).toEqual([])
+})
+
+// The footer says who is listening, bottom right like the agents' own CLIs, and makes the shared
+// context visible: an agent that has missed turns says how many it will be caught up on.
+test('the footer names who is listening and how far behind it is; shift+tab reaches konvoy mode', async () => {
+  const h = harness([])
+  const footers: string[][] = []
+  const script = ['@codex first', '/help', 'CYCLE', 'CYCLE', 'second', null]
+  let cycle: (() => void) | undefined
+  const editor = {
+    read: async (spec: () => PromptSpec) => {
+      let next = script.shift()
+      while (next === 'CYCLE') {
+        cycle?.()
+        next = script.shift()
+      }
+      footers.push(spec().footer)
+      return next ?? null
+    },
+    pick: async () => null,
+    busy: async <T,>(fn: (signal: AbortSignal) => Promise<T>) => fn(new AbortController().signal),
+    suspend: async <T,>(fn: () => Promise<T>) => fn(),
+    clearScreen: () => {},
+    close: () => {},
+    set onCycle(fn: (() => void) | undefined) {
+      cycle = fn
+    },
+  }
+  h.io.editor = editor as unknown as EditorIo
+  h.io.columns = () => 160
+  h.run = (tokens, slug) => {
+    h.calls.push([slug, ...tokens])
+    recordTurn(h.db, { sessionId: h.s.id, agent: 'codex', prompt: tokens[3]!, final: 'ok', exitCode: 0, costUsd: 0 })
+    return 0
+  }
+  await runRepl(h.io, h.db, h.cfg, '/nowhere/s', h.s, h.run, { installed: new Set(['claude', 'codex']) })
+  const plain = (t: string) => t.replace(/\x1b\[[0-9;]*m/g, '')
+  // before anything: claude listening, nothing to catch up on, the switch key at hand
+  expect(plain(footers[0]![1]!)).toContain('● claude · high · edit')
+  expect(plain(footers[0]![1]!)).toContain('⇧⇥ switch')
+  expect(plain(footers[0]![0]!)).not.toContain('behind')
+  // codex answered an @codex question claude never saw: claude will be caught up on it
+  expect(plain(footers[1]![0]!)).toContain('claude is 1 turn behind')
+  // shift+tab twice: to codex, then konvoy mode, which shows the route it will take
+  expect(plain(footers[2]![1]!)).toContain('✻ konvoy → codex › claude')
 })

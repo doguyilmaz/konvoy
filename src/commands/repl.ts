@@ -1,7 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import type { Config } from '../config/schema'
-import { effortSchema } from '../config/schema'
-import type { AgentId, Effort, Session } from '../types'
+import { effortSchema, permissionSchema } from '../config/schema'
+import type { AgentId, Effort, Permission, Session } from '../types'
 import { onExit } from '../core/children'
 import { requireAgent, unknownAgent } from './messages'
 import { disabledAgent, MODEL_PATTERN, resolveAgent } from '../config/load'
@@ -11,17 +11,34 @@ import { sessionDir } from '../paths'
 import { agentIds } from '../config/schema'
 import {
   currentSession,
+  getBinding,
   getSessionById,
   getSessionBySlug,
   lastTurnAgent,
   listSessions,
   lastAskedPrompt,
+  recentTurns,
   setGoal,
   usageForSession,
 } from '../store/queries'
+import { detect } from '../core/detect'
+import { listModels, nearestModels, realCatalogDeps, type Catalog } from '../core/models'
+import { unseenTurns } from '../core/prelude'
+import { configKey } from '../config/keys'
+import {
+  agentChoices,
+  configKeyChoices,
+  configValueChoices,
+  effortChoices,
+  KONVOY,
+  modelChoices,
+  permissionChoices,
+  scopeChoices,
+  sessionChoices,
+} from './choices'
 import { cmdNew } from './new'
 import { commandHelp, commandTable, formatRows, resolveCommandName, type CommandRow } from './table'
-import type { Completion, EditorIo, MenuItem, PromptSpec } from '../editor'
+import type { Completion, EditorIo, MenuItem, PickSpec, PromptSpec } from '../editor'
 import { stringWidth } from '../term'
 
 export interface ReplIo {
@@ -42,6 +59,8 @@ export interface ReplIo {
   editor?: EditorIo
   /** terminal width, for the footer and the popup */
   columns?: () => number
+  /** a list to choose from, where the editor would draw one; a test scripts its answers here */
+  pick?: (spec: PickSpec) => Promise<string | null>
 }
 
 // Bracketed paste, DECSET 2004. A pasted block is many lines to the tty, so konvoy read it as
@@ -190,9 +209,10 @@ export type Run = (tokens: string[], slug: string, extras?: RunExtras) => Promis
 // The commands that exist only inside the REPL. They render through the same two-column helper
 // as the table ones, on one shared width, so `/help` reads as a single list.
 const INNER: readonly CommandRow[] = [
-  { usage: 'use <agent>', summary: 'talk to this agent from now on (shift+tab cycles)' },
-  { usage: 'model [name]', summary: "the current agent's model, until you leave" },
+  { usage: 'use [agent|konvoy]', summary: 'talk to this agent from now on, or let konvoy route (shift+tab cycles)' },
+  { usage: 'model [name]', summary: "the current agent's model, until you leave; alone, the list to pick from" },
   { usage: 'effort [level]', summary: "the current agent's effort, until you leave" },
+  { usage: 'permission [level]', summary: 'what the current agent may do without asking, until you leave' },
   { usage: 'retry [agent]', summary: 'send the last prompt again, to this agent or another' },
   { usage: 'goal <text>', summary: 'set the session goal' },
   { usage: 'clear', summary: 'clear the screen' },
@@ -204,7 +224,7 @@ export const SHORTCUTS: readonly [string, string][] = [
   ['/', 'commands'],
   ['@agent <msg>', 'ask another agent once, without switching'],
   ['!<command>', 'run a shell command in the session directory'],
-  ['shift+tab', 'switch to the next agent'],
+  ['shift+tab', 'the next agent, or konvoy mode'],
   ['\\⏎  alt+⏎  ctrl+j', 'a new line'],
   ['↑ ↓', 'history'],
   ['ctrl+r', 'search history'],
@@ -251,16 +271,30 @@ function slashItems(): MenuItem[] {
 }
 
 const EFFORTS = effortSchema.options
-
-export interface ReplOptions {
-  /** the configuration of another directory, for a session resumed from one */
-  loadConfig?: (cwd: string) => Promise<Config>
-}
+const PERMISSIONS = permissionSchema.options
 
 /** the agent a REPL opens on: whoever answered last, when still enabled, or the session's lead */
 export function startingAgent(db: Database, cfg: Config, session: Session): AgentId {
   const last = lastTurnAgent(db, session.id)
   return last && resolveAgent(cfg, last).enabled ? last : session.lead
+}
+
+export interface ReplOptions {
+  /** the configuration of another directory, for a session resumed from one */
+  loadConfig?: (cwd: string) => Promise<Config>
+  /** the models an agent will run, for `/model`; asked of the CLI by default */
+  models?: (agent: AgentId, bin?: string) => Promise<Catalog | null>
+  /** the efforts an agent's model supports, when konvoy can tell */
+  efforts?: (agent: AgentId, model?: string, bin?: string) => Promise<readonly string[] | undefined>
+  /** the agents found installed when the REPL opened: konvoy mode routes among these */
+  installed?: ReadonlySet<AgentId>
+}
+
+/** what a REPL holds over the configuration until it is left: `/model`, `/effort`, `/permission` */
+interface Override {
+  model?: string
+  effort?: Effort
+  permission?: Permission
 }
 
 export async function runRepl(
@@ -276,15 +310,39 @@ export async function runRepl(
   // the agent the person was last talking to, when this session has one: a REPL reopened on a
   // session picks the conversation up where it stood, not at its lead
   let agent: AgentId = startingAgent(db, cfg, session)
+  // konvoy mode: konvoy, not one agent, is listening. Each prompt goes to the agent that answered
+  // last (the lead at first), and when that one is rate-limited, signed out or its upstream is
+  // down, the next ready agent takes it - the order shown in the footer. The agent it lands on is
+  // the one the next prompt starts with, so a limit that resets does not pull the session back.
+  let konvoyMode = false
   const p = palette(io.color ?? false)
   const paintAgent = agentPaint(io.color ?? false)
-  // /model and /effort hold for this REPL, over whatever the configuration says
-  const overrides = new Map<AgentId, { model?: string; effort?: Effort }>()
-  const effective = (): Config => {
-    if (overrides.size === 0) return cfg
+  const overrides = new Map<AgentId, Override>()
+  const enabled = (a: AgentId): boolean => resolveAgent(cfg, a).enabled
+
+  // the order konvoy mode tries: a failover chain the config names, else every ready agent, in
+  // roster order, starting from the one listening now; signed-out agents go last
+  const route = (): AgentId[] => {
+    const named = cfg.failover.chain.filter(enabled)
+    const pool = (named.length > 0 ? named : [...agentIds]).filter((a) => enabled(a) && (options.installed?.has(a) ?? true))
+    const signedOut = (a: AgentId): boolean => getBinding(db, session.id, a)?.status === 'auth_required'
+    const rest = pool.filter((a) => a !== agent)
+    return [agent, ...rest.filter((a) => !signedOut(a)), ...rest.filter(signedOut)]
+  }
+  const effective = (routed = false): Config => {
+    if (overrides.size === 0 && !routed) return cfg
     const agents = { ...cfg.agents }
     for (const [id, o] of overrides) agents[id] = { ...(agents[id] ?? {}), ...o }
-    return { ...cfg, agents }
+    return routed ? { ...cfg, agents, failover: { ...cfg.failover, chain: route() } } : { ...cfg, agents }
+  }
+  const setOverride = (a: AgentId, patch: Override): void => {
+    overrides.set(a, { ...(overrides.get(a) ?? {}), ...patch })
+  }
+  const clearOverride = (a: AgentId, key: keyof Override): void => {
+    const o = overrides.get(a)
+    if (!o) return
+    delete o[key]
+    if (Object.keys(o).length === 0) overrides.delete(a)
   }
 
   // The slug is in the banner and in `/roster`; repeating it on every line is noise, and a
@@ -293,6 +351,7 @@ export async function runRepl(
   // The session total is only worth printing when it has changed, which is after a turn and not
   // after `/help`: a line that reprints itself every prompt is another thing scrolling past.
   let lastStatus = ''
+  const label = (): string => (konvoyMode ? 'konvoy' : agent)
   const prompt = (): void => {
     if (io.editor) return
     if (!io.tty) return
@@ -301,7 +360,7 @@ export async function runRepl(
       io.write(`${status}\n`)
       lastStatus = status
     }
-    io.write(`${paintAgent(agent)(agent)} ${p.dim('›')} `)
+    io.write(`${paintAgent(label())(label())} ${p.dim('›')} `)
   }
   const refresh = (): boolean => {
     const fresh = getSessionById(db, session.id)
@@ -311,8 +370,7 @@ export async function runRepl(
   const moveTo = async (next: Session): Promise<void> => {
     if (next.cwd !== session.cwd && options.loadConfig) cfg = await options.loadConfig(next.cwd)
     session = next
-    const lastAgent = lastTurnAgent(db, next.id)
-    agent = lastAgent && resolveAgent(cfg, lastAgent).enabled ? lastAgent : next.lead
+    agent = startingAgent(db, cfg, next)
   }
 
   // Everything but a turn runs with the terminal handed over and stdin left alone, which an
@@ -327,8 +385,8 @@ export async function runRepl(
     }
   }
   // A turn runs with the keyboard watched, so Esc stops the agent and not konvoy.
-  const exec = async (tokens: string[], mode: 'turn' | 'plain' = 'plain'): Promise<void> => {
-    const extras = overrides.size > 0 ? { cfg: effective() } : undefined
+  const exec = async (tokens: string[], mode: 'turn' | 'plain' = 'plain', routed = false): Promise<void> => {
+    const extras = overrides.size > 0 || routed ? { cfg: effective(routed) } : undefined
     if (io.editor && mode === 'turn') {
       await io.editor.busy((signal) => Promise.resolve(run(tokens, session.slug, { ...extras, signal })))
       return
@@ -342,12 +400,70 @@ export async function runRepl(
   }
 
   const turn = async (to: AgentId, text: string, follow: boolean): Promise<void> => {
-    // after `--`: a message that starts with a dash is the person's words, not a flag
-    await exec(['send', to, '--', text], 'turn')
+    // after `--`: a message that starts with a dash is the person's words, not a flag. konvoy mode
+    // routes the person's own prompts; an `@agent` question goes to that agent alone.
+    await exec(['send', to, '--', text], 'turn', konvoyMode && follow)
     // failover never falls back, so the agent that answered is the one to keep talking to
     const moved = lastTurnAgent(db, session.id)
     if (follow && moved && moved !== agent) agent = moved
     if (io.editor) io.write('\n')
+  }
+
+  // A list to choose from. With nobody at a terminal to point at one, the list is printed with
+  // the word that picks from it, and nothing is chosen.
+  const choose = async (spec: PickSpec): Promise<string | null> => {
+    if (io.pick) return io.pick(spec)
+    if (io.editor) return io.editor.pick(spec, { dim: p.dim, accent: paintAgent(label()), bold: p.bold })
+    const rows = spec.items.map((i) => `  ${i.label}${i.current ? ' ✔' : ''}${i.detail ? `  ${i.detail}` : ''}${i.disabled ? `  (${i.disabled})` : ''}`)
+    io.write(`${spec.title}${spec.subtitle ? ` - ${spec.subtitle}` : ''}\n${rows.join('\n')}\n`)
+    return null
+  }
+
+  // what each CLI will run, asked once per REPL: a CLI takes a second or two to list them
+  const catalogs = new Map<string, Promise<Catalog | null>>()
+  const catalogFor = async (a: AgentId): Promise<Catalog | null> => {
+    const bin = resolveAgent(cfg, a).bin
+    const key = `${a}:${bin ?? ''}`
+    let pending = catalogs.get(key)
+    const fresh = !pending
+    if (!pending) {
+      pending = (options.models ?? ((x: AgentId, b?: string) => listModels(x, realCatalogDeps(), b)))(a, bin)
+      catalogs.set(key, pending)
+    }
+    if (!fresh || !io.editor) return pending
+    io.write(`${p.dim(`  asking ${a} for its models…`)}\n`)
+    try {
+      return await pending
+    } finally {
+      io.write('\x1b[1A\r\x1b[2K')
+    }
+  }
+  const effortsFor = (a: AgentId): Promise<readonly string[] | undefined> => {
+    const s = resolveAgent(effective(), a)
+    return options.efforts ? options.efforts(a, s.model, s.bin) : detect(a, { model: s.model, bin: s.bin }).then((d) => d.efforts)
+  }
+
+  const setModel = async (value: string, typed: boolean): Promise<void> => {
+    if (value === 'default' || value === '-') {
+      clearOverride(agent, 'model')
+      say(`${agent} is back on ${resolveAgent(effective(), agent).model ?? 'its own default model'}`)
+      return
+    }
+    if (!MODEL_PATTERN.test(value)) {
+      console.error(`"${value}" is not a model name konvoy will pass to a command line`)
+      return
+    }
+    if (typed) {
+      // a name the CLI's own list lacks is refused here, not by the turn it would fail
+      const catalog = await catalogFor(agent)
+      if (catalog?.complete && !catalog.models.some((m) => m.id === value)) {
+        const near = nearestModels(value, catalog)
+        console.error(`"${value}" is not a model ${agent} offers${near.length > 0 ? ` - did you mean ${near.join(' or ')}?` : ''} /model lists them`)
+        return
+      }
+    }
+    setOverride(agent, { model: value })
+    say(`${agent} runs ${value} until you leave`)
   }
 
   const iterator = io.lines[Symbol.asyncIterator]()
@@ -368,12 +484,25 @@ export async function runRepl(
     if (turns > 0) left.push(`${turns} turn${turns === 1 ? '' : 's'}`, `${tokens(input)} in`)
     if (usd > 0) left.push(`$${usd.toFixed(2)}`)
     if (credits > 0) left.push(`${credits.toFixed(2)} cr`)
-    const right = [settings.model, settings.effort, settings.permission].filter(Boolean).join(' · ')
+    // the shared context made visible: what the agent listening now will be caught up on
+    const behind = turns > 0 ? unseenTurns(db, session, agent) : 0
+    if (behind > 0) left.push(`${agent} is ${behind} turn${behind === 1 ? '' : 's'} behind`)
+    // who is listening, bottom right, the way the agents' own CLIs show their mode
+    const tuned = [settings.model, settings.effort, settings.permission].filter(Boolean).join(' · ')
+    const who = konvoyMode
+      ? `${paintAgent('konvoy')('✻ konvoy')} ${p.dim(`→ ${route().join(' › ')}`)}`
+      : `${paintAgent(agent)('●')} ${agent} ${p.dim(`· ${tuned}`)}`
+    const width = io.columns?.() ?? 80
+    const hint = p.dim('  ⇧⇥ switch')
+    const room = width - 2 - stringWidth(`  ${left.join(' · ')}`)
+    const right = stringWidth(who) + stringWidth(hint) + 2 <= room ? `${who}${hint}  ` : `${who}  `
     return {
-      prompt: `${paintAgent(agent)(agent)} ${p.dim('›')} `,
-      placeholder: `ask ${agent} anything  ·  / commands  ·  @ another agent  ·  ! shell  ·  ? shortcuts`,
-      footer: [p.dim(`  ${left.join(' · ')}`), p.dim(`${right}  `)],
-      paint: { dim: p.dim, accent: paintAgent(agent), inverse: p.inverse, bold: p.bold, yellow: p.yellow },
+      prompt: `${paintAgent(label())(label())} ${p.dim('›')} `,
+      placeholder: konvoyMode
+        ? 'ask anything - konvoy routes it  ·  / commands  ·  @ one agent  ·  ! shell  ·  ? shortcuts'
+        : `ask ${agent} anything  ·  / commands  ·  @ another agent  ·  ! shell  ·  ? shortcuts`,
+      footer: [p.dim(`  ${left.join(' · ')}`), right],
+      paint: { dim: p.dim, accent: paintAgent(label()), bold: p.bold, yellow: p.yellow },
       shortcuts: SHORTCUTS,
       highlight: (word, first) => {
         if (first && word.startsWith('/') && resolveSlash(word.slice(1))) return p.bold
@@ -383,13 +512,69 @@ export async function runRepl(
     }
   }
 
-  // shift+tab: the next agent that is enabled, in roster order
+  // shift+tab: konvoy mode, then each agent that can answer, in roster order, and round again -
+  // one that is not installed is a stop that only fails
   const cycle = (): void => {
-    const enabled = agentIds.filter((a) => resolveAgent(cfg, a).enabled)
-    if (enabled.length === 0) return
-    agent = enabled[(enabled.indexOf(agent) + 1) % enabled.length]!
+    const stops: (AgentId | typeof KONVOY)[] = [KONVOY, ...agentIds.filter((a) => enabled(a) && (options.installed?.has(a) ?? true))]
+    const at = stops.indexOf(konvoyMode ? KONVOY : agent)
+    const to = stops[(at + 1) % stops.length]!
+    if (to === KONVOY) konvoyMode = true
+    else {
+      konvoyMode = false
+      agent = to
+    }
   }
   if (io.editor) io.editor.onCycle = cycle
+
+  const useAgent = (word: string): void => {
+    if (word === KONVOY) {
+      konvoyMode = true
+      return
+    }
+    const to = requireAgent(word)
+    if (to && !enabled(to)) console.error(disabledAgent(to))
+    else if (to) {
+      agent = to
+      konvoyMode = false
+    }
+  }
+
+  const configCommand = async (rest: string[]): Promise<void> => {
+    const [action, keyWord, ...values] = rest
+    const global = rest.includes('--global')
+    const words = values.filter((v) => v !== '--global')
+    if (!action) {
+      await exec(['config', 'get'])
+      say('/config set to change a key - it offers every key and its values')
+      return
+    }
+    if (action !== 'set' && action !== 'unset') {
+      await exec(['config', ...rest])
+      return
+    }
+    const key = keyWord && keyWord !== '--global' ? keyWord : await choose(configKeyChoices(effective()))
+    if (key === null) return
+    const known = configKey(key)
+    let value: string | null = null
+    if (action === 'set') {
+      value = words.length > 0 ? words.join(' ') : known ? await choose(configValueChoices(known, effective())) : null
+      if (value === null) {
+        if (!known) await exec(['config', 'set', key])
+        return
+      }
+    }
+    // where it goes: a privileged key only ever to the global file, anything else as asked
+    let scope: string | null = global ? 'global' : null
+    if (scope === null && known?.privileged) {
+      scope = 'global'
+      say(`${key} is global only, so it goes to the global config`)
+    }
+    if (scope === null) scope = known ? await choose(scopeChoices(known)) : 'project'
+    if (scope === null) return
+    await exec(['config', action, key, ...(value === null ? [] : [value]), ...(scope === 'global' ? ['--global'] : [])])
+    // the REPL runs on what the files say now, not on what they said when it opened
+    if (options.loadConfig) cfg = await options.loadConfig(session.cwd)
+  }
 
   prompt()
   for (;;) {
@@ -405,9 +590,9 @@ export async function runRepl(
     const mention = /^@([a-z]+)(?:\s+([\s\S]*))?$/.exec(line)
     if (mention) {
       const to = requireAgent(mention[1]!)
-      if (to && !resolveAgent(cfg, to).enabled) console.error(disabledAgent(to))
+      if (to && !enabled(to)) console.error(disabledAgent(to))
       else if (to && mention[2]?.trim()) await turn(to, mention[2].trim(), false)
-      else if (to) agent = to
+      else if (to) useAgent(to)
       prompt()
       continue
     }
@@ -433,48 +618,46 @@ export async function runRepl(
       const page = rest[0] ? commandHelp(rest[0].replace(/^\//, ''), '/') : null
       io.write(page ?? replHelp())
     } else if (cmd === 'use') {
-      if (!rest[0]) {
-        say(`talking to ${agent} - /use <agent> to switch: ${agentIds.join(', ')}`)
-      } else {
-        const next = requireAgent(rest[0] ?? '')
-        if (next && !resolveAgent(cfg, next).enabled) {
-          console.error(disabledAgent(next))
-        } else if (next) {
-          agent = next
-        }
-      }
+      const word =
+        rest[0] ??
+        (await choose(
+          agentChoices(effective(), konvoyMode ? KONVOY : agent, (a) => ({
+            installed: options.installed ? options.installed.has(a) : undefined,
+            signedOut: getBinding(db, session.id, a)?.status === 'auth_required',
+          })),
+        ))
+      if (word !== null) useAgent(word)
     } else if (cmd === 'model') {
-      const value = rest[0]
-      if (!value) {
-        say(`${agent} runs ${resolveAgent(effective(), agent).model ?? 'its own default model'} - /model <name> to change it, /model default to go back`)
-      } else if (value === 'default' || value === '-') {
-        const o = overrides.get(agent)
-        if (o) {
-          delete o.model
-          if (o.effort === undefined) overrides.delete(agent)
-        }
-        say(`${agent} is back on ${resolveAgent(effective(), agent).model ?? 'its own default model'}`)
-      } else if (!MODEL_PATTERN.test(value)) {
-        console.error(`"${value}" is not a model name konvoy will pass to a command line`)
-      } else {
-        overrides.set(agent, { ...(overrides.get(agent) ?? {}), model: value })
-        say(`${agent} runs ${value} until you leave`)
+      if (rest[0]) await setModel(rest[0], true)
+      else {
+        const picked = await choose(modelChoices(agent, await catalogFor(agent), resolveAgent(effective(), agent).model))
+        if (picked !== null) await setModel(picked, false)
       }
     } else if (cmd === 'effort') {
-      const value = rest[0]
-      if (!value) {
-        say(`${agent} thinks at ${resolveAgent(effective(), agent).effort} - /effort ${EFFORTS.join('|')}`)
+      const value = rest[0] ?? (await choose(effortChoices(agent, resolveAgent(effective(), agent).effort, await effortsFor(agent))))
+      if (value === null) {
+        // nothing chosen, and nothing to say: the list was the answer
       } else if (!(EFFORTS as readonly string[]).includes(value)) {
         console.error(`effort is one of ${EFFORTS.join(', ')}`)
       } else {
-        overrides.set(agent, { ...(overrides.get(agent) ?? {}), effort: value as Effort })
+        setOverride(agent, { effort: value as Effort })
         say(`${agent} thinks at ${value} until you leave`)
+      }
+    } else if (cmd === 'permission') {
+      const value = rest[0] ?? (await choose(permissionChoices(agent, resolveAgent(effective(), agent).permission)))
+      if (value === null) {
+        // closed without a choice
+      } else if (!(PERMISSIONS as readonly string[]).includes(value)) {
+        console.error(`permission is one of ${PERMISSIONS.join(', ')}`)
+      } else {
+        setOverride(agent, { permission: value as Permission })
+        say(`${agent} runs at ${value} until you leave - konvoy config set agents.${agent}.permission ${value} --global keeps it`)
       }
     } else if (cmd === 'retry') {
       const previous = lastAskedPrompt(db, session.id)
       const to = rest[0] ? requireAgent(rest[0]) : agent
       if (previous === null) console.error(`session ${session.slug} has no turn to retry`)
-      else if (to && !resolveAgent(cfg, to).enabled) console.error(disabledAgent(to))
+      else if (to && !enabled(to)) console.error(disabledAgent(to))
       else if (to) await turn(to, previous, to === agent)
     } else if (cmd === 'clear') {
       if (io.editor) io.editor.clearScreen()
@@ -497,12 +680,35 @@ export async function runRepl(
       }
     } else if (cmd === 'attach') {
       await exec(['attach', rest[0] ?? agent, ...rest.slice(1)])
+    } else if (cmd === 'config') {
+      await configCommand(rest)
+    } else if (cmd === 'resume') {
+      const now = Date.now()
+      const slug =
+        rest[0] ??
+        (await choose(
+          sessionChoices(
+            listSessions(db).map((s) => ({
+              session: s,
+              turns: usageForSession(db, s.id).reduce((n, r) => n + r.turns, 0),
+              lastAt: recentTurns(db, s.id, 1)[0]?.startedAt ?? null,
+            })),
+            session.id,
+            now,
+          ),
+        ))
+      if (slug === null) {
+        // closed without a choice
+      } else if (slug === session.slug) {
+        say(`already in ${slug}`)
+      } else {
+        await exec(['resume', slug])
+        const target = getSessionBySlug(db, slug)
+        if (target) await moveTo(target)
+      }
     } else {
       await exec([cmd, ...rest])
-      if (cmd === 'resume' && rest[0]) {
-        const target = getSessionBySlug(db, rest[0])
-        if (target) await moveTo(target)
-      } else if (cmd === 'new' || cmd === 'start') {
+      if (cmd === 'new' || cmd === 'start') {
         const created = currentSession(db, cwd)
         if (created && created.id !== session.id) await moveTo(created)
       } else if (!refresh()) {
@@ -572,13 +778,15 @@ export function replCompleter(db: Database, cfg: () => Config): (buffer: string,
     const [, cmd, typed] = second as unknown as [string, string, string]
     const start = before.length - typed.length
     let items: MenuItem[] = []
-    if (['use', 'attach', 'send', 'retry'].includes(cmd)) items = agentItems()
+    if (cmd === 'use') items = [{ label: KONVOY, insert: KONVOY, detail: 'konvoy routes: the next agent when one runs out' }, ...agentItems()]
+    else if (['attach', 'send', 'retry'].includes(cmd)) items = agentItems()
     else if (['resume', 'rm'].includes(cmd)) items = listSessions(db).map((s) => ({ label: s.slug, insert: s.slug, detail: s.goal }))
     else if (cmd === 'effort') items = EFFORTS.map((e) => ({ label: e, insert: e }))
+    else if (cmd === 'permission') items = PERMISSIONS.map((e) => ({ label: e, insert: e }))
     else if (cmd === 'config') items = ['get', 'set', 'unset', 'path'].map((e) => ({ label: e, insert: e }))
     else if (cmd === 'completion') items = ['bash', 'zsh', 'fish'].map((e) => ({ label: e, insert: e }))
     // one word is all these take, so the word that completes them completes the command
-    const runs = ['use', 'effort', 'resume', 'attach', 'retry', 'completion'].includes(cmd)
+    const runs = ['use', 'effort', 'permission', 'resume', 'attach', 'retry', 'completion'].includes(cmd)
     const ranked = rank(items, typed).map((i) => (runs ? { ...i, run: true } : i))
     return ranked.length > 0 ? { start, items: ranked } : null
   }

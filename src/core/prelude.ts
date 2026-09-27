@@ -140,6 +140,11 @@ function unseen(db: Database, session: Session, opts: PreludeWindow): Unseen {
   return { count, seen, firstContact: opts.for !== undefined && seen === 0, upTo }
 }
 
+/** how many turns this agent has not seen - what its next prelude catches it up on */
+export function unseenTurns(db: Database, session: Session, agent: string): number {
+  return unseen(db, session, { recent: 0, for: agent }).count
+}
+
 /** whether a prelude for this reader will quote any turns, and so needs the machine facts beside them */
 export function hasUnseenTurns(db: Database, session: Session, opts: PreludeWindow): boolean {
   return unseen(db, session, opts).count > 0

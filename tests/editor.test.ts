@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { EditorCore, keyDecoder, renderEditor, terminalEditor, type Key, type PromptSpec, type RawInput } from '../src/editor'
+import { EditorCore, keyDecoder, PickerCore, renderEditor, renderPicker, terminalEditor, type Key, type PickSpec, type PromptSpec, type RawInput } from '../src/editor'
 import { memoryHistory } from '../src/history'
 import { replCompleter } from '../src/commands/repl'
 import { openDb } from '../src/store/db'
@@ -230,10 +230,13 @@ test('Tab accepts the selection; Enter runs a command that takes no argument, an
   typed(core, text('/us'))
   typed(core, k('down'))
   expect(core.menu()!.items[core.selected]!.insert).toBe('/usage')
-  typed(core, k('up'), k('enter'))
-  // /use takes an agent: accepted with a space after it, not sent
-  expect(core.buffer).toBe('/use ')
-  typed(core, text('cod'), k('tab'))
+  // /use needs no word: alone it opens the list to pick from, so Enter runs it
+  expect(typed(core, k('up'), k('enter')).at(-1)).toEqual({ t: 'submit', text: '/use', echo: '/use' })
+  // /goal does take one: accepted with a space after it, not sent
+  typed(core, text('/goa'), k('enter'))
+  expect(core.buffer).toBe('/goal ')
+  core.setBuffer('/use cod')
+  typed(core, k('tab'))
   // the agent completes the command, so it is ready to run as it stands
   expect(core.buffer).toBe('/use codex')
 })
@@ -251,7 +254,7 @@ const spec: PromptSpec = {
   prompt: 'claude › ',
   placeholder: 'ask claude anything',
   footer: ['  s · 2 turns', 'opus · high  '],
-  paint: { dim: (t) => t, accent: (t) => t, inverse: (t) => `[${t}]`, bold: (t) => t, yellow: (t) => t },
+  paint: { dim: (t) => t, accent: (t) => t, bold: (t) => t, yellow: (t) => t },
   shortcuts: [['/', 'commands'], ['esc', 'interrupt']],
 }
 
@@ -294,7 +297,7 @@ test('the popup replaces the footer and marks what Enter would take', () => {
   const core = new EditorCore([], completerFixture())
   typed(core, text('/us'))
   const { screen } = draw(core, 80)
-  expect(screen[3]).toContain('❯ [ /use <agent>')
+  expect(screen[3]).toContain('❯ /use [agent|konvoy]')
   expect(screen[4]).toContain('/usage')
   expect(screen.join('\n')).not.toContain('2 turns')
 })
@@ -422,4 +425,97 @@ test('a command completed by its one word runs on Enter', () => {
   const core = new EditorCore([], completerFixture())
   typed(core, text('/effort hi'))
   expect(core.handle(k('enter'))).toEqual({ t: 'submit', text: '/effort high', echo: '/effort high' })
+})
+
+// ---- the picker: `/model` opened a list instead of asking for a name nobody could know
+
+const models: PickSpec = {
+  title: 'Model for opencode',
+  items: [
+    { value: 'default', label: 'default', detail: "opencode's own" },
+    { value: 'opencode/claude-opus-5-5', label: 'opencode/claude-opus-5-5', current: true },
+    { value: 'opencode/claude-sonnet-5', label: 'opencode/claude-sonnet-5' },
+    { value: 'anthropic/gpt-6', label: 'anthropic/gpt-6', disabled: 'needs a key' },
+  ],
+}
+
+test('the picker starts on the value in force, moves with the arrows, and chooses with Enter', () => {
+  const p = new PickerCore(models)
+  expect(p.selected).toBe(1)
+  expect(p.handle({ name: 'down' })).toEqual({ t: 'redraw' })
+  expect(p.handle({ name: 'enter' })).toEqual({ t: 'choose', value: 'opencode/claude-sonnet-5' })
+  p.handle({ name: 'down' })
+  // a row that cannot be chosen says why and is not chosen
+  expect(p.handle({ name: 'enter' })).toEqual({ t: 'none' })
+  p.handle({ name: 'down' })
+  expect(p.selected).toBe(0)
+})
+
+test('typing filters the list, a digit picks a row, and Esc clears the filter before it closes', () => {
+  const p = new PickerCore(models)
+  expect(p.handle({ name: 'text', text: '1' })).toEqual({ t: 'choose', value: 'default' })
+  for (const ch of 'sonnet') p.handle({ name: 'text', text: ch })
+  expect(p.visible().map((r) => r.value)).toEqual(['opencode/claude-sonnet-5'])
+  expect(p.handle({ name: 'escape' })).toEqual({ t: 'redraw' })
+  expect(p.visible()).toHaveLength(4)
+  expect(p.handle({ name: 'escape' })).toEqual({ t: 'cancel' })
+})
+
+test('a picker that takes free text offers what was typed as its own row', () => {
+  const p = new PickerCore({ ...models, custom: { label: (t) => `use "${t}"` } })
+  for (const ch of 'my-own-model') p.handle({ name: 'text', text: ch })
+  expect(p.visible().at(-1)).toEqual({ value: 'my-own-model', label: 'use "my-own-model"' })
+  expect(p.handle({ name: 'enter' })).toEqual({ t: 'choose', value: 'my-own-model' })
+  // without custom, text that matches nothing chooses nothing
+  const strict = new PickerCore(models)
+  for (const ch of 'zzz') strict.handle({ name: 'text', text: ch })
+  expect(strict.handle({ name: 'enter' })).toEqual({ t: 'none' })
+})
+
+const pickPaint = { dim: (t: string) => t, accent: (t: string) => `<${t}>`, bold: (t: string) => t }
+
+test('the picker draws its title, numbered rows, the pointer, the tick and the keys', () => {
+  const lines = renderPicker(new PickerCore(models), models, 60, pickPaint)
+  expect(lines[1]).toBe(' Model for opencode')
+  expect(lines).toContain("   1. default                     opencode's own")
+  expect(lines).toContain('< ❯> <2. opencode/claude-opus-5-5>< ✔>')
+  expect(lines).toContain('   4. anthropic/gpt-6             (needs a key)')
+  expect(lines.at(-1)).toBe(' type to filter · ↑↓ · enter to choose · esc to cancel')
+})
+
+test('a long list scrolls around the cursor and says how much is hidden', () => {
+  const many: PickSpec = { title: 't', items: Array.from({ length: 30 }, (_, i) => ({ value: `m-${i}`, label: `m-${i}` })) }
+  const p = new PickerCore(many)
+  for (let i = 0; i < 15; i++) p.handle({ name: 'down' })
+  const lines = renderPicker(p, many, 60, pickPaint, 5)
+  expect(lines.some((l) => l.includes('↑ 11 more'))).toBe(true)
+  expect(lines.some((l) => l.includes('↓ 14 more'))).toBe(true)
+  expect(lines.some((l) => l.includes('<16. m-15>'))).toBe(true)
+})
+
+test('pick at the terminal returns the choice and leaves nothing of the list on screen', async () => {
+  const t = fakeTerminal()
+  // colour takes no cells on a terminal; the bracketing paint above would wrap these rows
+  const plain = { dim: (x: string) => x, accent: (x: string) => x, bold: (x: string) => x }
+  const chosen = t.editor.pick(models, plain)
+  t.type('\x1b[B')
+  t.type('\r')
+  expect(await chosen).toBe('opencode/claude-sonnet-5')
+  expect(t.screen.text()).toBe('')
+  const closed = t.editor.pick(models, plain)
+  t.type('\x1b')
+  await Bun.sleep(60)
+  expect(await closed).toBeNull()
+})
+
+// a line that will run in a shell is framed in its own colour before Enter is pressed
+test('the input is framed in the shell colour while the line starts with !', () => {
+  const tinted: PromptSpec = { ...spec, paint: { ...spec.paint, yellow: (t) => `Y${t}` } }
+  const core = new EditorCore()
+  typed(core, text('!git status'))
+  const lines = renderEditor(core, tinted, 30).lines
+  expect(lines[0]).toStartWith('Y─')
+  expect(lines[2]).toStartWith('Y─')
+  core.setBuffer('git status')
+  expect(renderEditor(core, tinted, 30).lines[0]).toStartWith('─')
 })

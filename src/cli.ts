@@ -8,7 +8,7 @@ import type { Config } from './config/schema'
 import { openDb } from './store/db'
 import { dbPath, sessionDir } from './paths'
 import { sessionBanner } from './render'
-import { colorLevel } from './style'
+import { colorLevel, palette } from './style'
 import { cmdNew } from './commands/new'
 import { cmdSend } from './commands/send'
 import { cmdLs } from './commands/ls'
@@ -35,7 +35,7 @@ import { onExit } from './core/children'
 import { locate } from './core/detect'
 import { ago, tildify } from './format'
 import { oneLine } from './adapters/types'
-import { SHOW_CURSOR } from './term'
+import { SHOW_CURSOR, truncate } from './term'
 import type { AgentId } from './types'
 import { version as VERSION } from '../package.json'
 
@@ -337,6 +337,11 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
   const level = replColor()
   const history = given ? null : storeHistory(db, session.cwd)
   const io = given ?? (history ? editorIo(level, history, replCompleter(db, () => cfg)) : null) ?? terminalIo()
+  // who is here to ride along: the banner shows it, and konvoy mode routes among these
+  const roster = await Promise.all(
+    agentIds.filter((a) => resolveAgent(cfg, a).enabled).map(async (a) => ({ agent: a, ready: (await locate(a, { bin: resolveAgent(cfg, a).bin })).installed })),
+  )
+  const installed = new Set(roster.filter((r) => r.ready).map((r) => r.agent))
   // Only for a human at a terminal: a piped run is a script, and a banner in its output is noise.
   if (io.tty) {
     // the agent the prompt will open on, which is whoever answered last - not always the lead
@@ -352,19 +357,17 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
       model: lead.model,
       effort: lead.effort,
       goal: session.goal || undefined,
-      roster: await Promise.all(
-        agentIds
-          .filter((a) => resolveAgent(cfg, a).enabled)
-          .map(async (a) => ({ agent: a, ready: (await locate(a, { bin: resolveAgent(cfg, a).bin })).installed })),
-      ),
+      roster,
       columns: process.stdout.columns ?? 80,
       last: (() => {
         const t = recentTurns(db, session.id, 1)[0]
         return t ? { agent: t.agent, ago: ago(t.startedAt, Date.now()), prompt: oneLine(t.prompt, 60) } : undefined
       })(),
     }
-    for (const line of sessionBanner(facts, io.editor ? level : colorLevel(Bun.env, true))) io.write(`${line}\n`)
-    io.write(io.editor ? '\n' : '')
+    const paint = io.editor ? level : colorLevel(Bun.env, true)
+    for (const line of sessionBanner(facts, paint)) io.write(`${line}\n`)
+    // said once, where it is first needed: switching agents keeps the conversation
+    if (io.editor) io.write(`${palette(paint).dim(truncate('  one conversation, every agent: each catches up on what it missed · shift+tab to switch', (process.stdout.columns ?? 80) - 1))}\n\n`)
   }
   try {
     return await runRepl(
@@ -393,6 +396,7 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
           cfg = await loadConfig({ cwd: dir })
           return cfg
         },
+        installed,
       },
     )
   } finally {

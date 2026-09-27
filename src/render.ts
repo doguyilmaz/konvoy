@@ -506,7 +506,7 @@ export function sessionBanner(facts: BannerFacts, color: boolean | ColorLevel): 
   }
   if (facts.permission === 'safe' || facts.permission === 'edit') {
     lines.push(
-      `${p.yellow('  !')} ${p.dim(`permission ${facts.permission}: a tool that needs approval is refused, since a headless turn has nobody to ask - /permission to change it`)}`,
+      `${p.yellow('  !')} ${p.dim(`permission ${facts.permission}: a headless turn refuses any tool that would ask - /permission to change it`)}`,
     )
   }
   return lines
