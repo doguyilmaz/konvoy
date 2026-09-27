@@ -28,7 +28,7 @@ import { cmdLog, cmdShow } from './commands/log'
 import { cmdCompletion } from './commands/completion'
 import { commandHelp, commandTable, formatRows, resolveCommandName, unknownFlag, type CommandName } from './commands/table'
 import { noSessionNamed, requireAgent, unknownCommand } from './commands/messages'
-import { replColor, replCompleter, runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
+import { replColor, replCompleter, runRepl, startingAgent, startSession, terminalIo, type ReplIo } from './commands/repl'
 import { terminalEditor, type RawInput } from './editor'
 import { storeHistory, type History } from './history'
 import { onExit } from './core/children'
@@ -64,6 +64,8 @@ interface CommandContext {
   slug: string | undefined
   /** a REPL turn's interrupt, when the editor watches the keyboard */
   signal?: AbortSignal
+  /** run from the REPL, whose own commands are the ones to suggest */
+  repl?: boolean
 }
 
 type Handler = (ctx: CommandContext, rest: string[]) => number | Promise<number>
@@ -121,6 +123,7 @@ const handlers: Record<CommandName, Handler> = {
     }
     return cmdSend(ctx.db, ctx.cfg, ctx.cwd, agent, prompt, ctx.slug, {
       signal: ctx.signal,
+      interactive: ctx.repl === true,
       ...(ctx.signal ? { hint: 'esc to interrupt' } : {}),
     })
   },
@@ -336,12 +339,14 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
   const io = given ?? (history ? editorIo(level, history, replCompleter(db, () => cfg)) : null) ?? terminalIo()
   // Only for a human at a terminal: a piped run is a script, and a banner in its output is noise.
   if (io.tty) {
-    const lead = resolveAgent(cfg, session.lead)
+    // the agent the prompt will open on, which is whoever answered last - not always the lead
+    const opening = startingAgent(db, cfg, session)
+    const lead = resolveAgent(cfg, opening)
     const facts = {
       version: VERSION,
       slug: session.slug,
       dir: tildify(sessionDir(session.cwd, session.slug)),
-      agent: session.lead,
+      agent: opening,
       harness: effectiveHarness(lead, 'user'),
       permission: lead.permission,
       model: lead.model,
@@ -381,7 +386,7 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
           console.error(stray)
           return 2
         }
-        return handlers[name]({ db, cfg: extras?.cfg ?? cfg, cwd, args: a, slug: current, signal: extras?.signal }, r)
+        return handlers[name]({ db, cfg: extras?.cfg ?? cfg, cwd, args: a, slug: current, signal: extras?.signal, repl: true }, r)
       },
       {
         loadConfig: async (dir) => {

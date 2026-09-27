@@ -6,7 +6,7 @@ import { newSession, send, slugify, uniqueSlug } from '../src/core/session'
 import { configSchema } from '../src/config/schema'
 import { claudeAdapter } from '../src/adapters/claude'
 import { kiroAdapter } from '../src/adapters/kiro'
-import { withPrelude, type Adapter } from '../src/adapters/types'
+import { CONTEXT_CLOSE, CONTEXT_OPEN, withPrelude, type Adapter } from '../src/adapters/types'
 import type { AgentId } from '../src/types'
 
 const cfg = configSchema.parse({})
@@ -443,7 +443,7 @@ test('an agent continuing its own session is sent its prompt alone, and the firs
   const facts = { git: async () => (gitCalls++, '') }
   await send({ db, cfg, detect: installed, adapterFor: () => adapter, facts }, s, 'claude', 'first')
   await send({ db, cfg, detect: installed, adapterFor: () => adapter, facts }, s, 'claude', 'second')
-  expect(seen[0]).toBe('goal: refactor the auth layer\n\nfirst')
+  expect(seen[0]).toBe(`${CONTEXT_OPEN}\n\ngoal: refactor the auth layer\n\n${CONTEXT_CLOSE}\n\nfirst`)
   expect(seen[1]).toBe('second')
   expect(gitCalls).toBe(0)
 })

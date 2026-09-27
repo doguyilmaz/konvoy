@@ -51,11 +51,31 @@ const CSI_TILDE: Record<string, Key['name']> = {
 
 // What a terminal sends in raw mode, decoded into keys. A chunk is whatever one read returned, so
 // an escape sequence or a paste can arrive split; what could still be the head of one is held.
-export function keyDecoder(): { push: (chunk: string) => Key[] } {
+export interface KeyDecoder {
+  push: (chunk: string) => Key[]
+  /** a lone ESC held back from the last read, which only time can tell from a sequence's first byte */
+  holding: () => boolean
+  /** the held ESC, now that nothing followed it: the Escape key */
+  flush: () => Key[]
+}
+
+// A terminal's replies and reports - OSC (a colour query answered), DCS (a version string), and
+// the rarer APC, PM and SOS - end at BEL or ST and mean nothing as keys. Read as Alt and then text
+// they typed "11;rgb:1e1e/…" into the prompt; they are dropped whole.
+const STRING_SEQUENCE = /^\x1b([\]P_^X])/
+const STRING_END = /\x07|\x1b\\/
+
+export function keyDecoder(): KeyDecoder {
   let pending = ''
   let paste: string | null = null
 
   return {
+    holding: () => paste === null && pending === '\x1b',
+    flush() {
+      if (paste !== null || pending !== '\x1b') return []
+      pending = ''
+      return [{ name: 'escape' }]
+    },
     push(chunk) {
       pending += chunk
       const keys: Key[] = []
@@ -95,10 +115,22 @@ export function keyDecoder(): { push: (chunk: string) => Key[] } {
             continue
           }
           if (pending.length === 1) {
-            // a lone ESC at the end of a read is the Escape key: a sequence arrives in one read
-            emit({ name: 'escape' })
-            pending = ''
+            // A lone ESC at the end of a read is held: it is the Escape key only if nothing follows
+            // it (flush, after a pause), since a sequence split across reads starts the same way
+            // and a focus report taken for Esc stopped a running turn
             break
+          }
+          const string = STRING_SEQUENCE.exec(pending)
+          if (string) {
+            const end = STRING_END.exec(pending.slice(2))
+            if (!end) {
+              // not yet terminated: wait for the rest, unless it has run on far past any reply
+              if (pending.length < 4096) break
+              pending = ''
+              break
+            }
+            pending = pending.slice(2 + end.index + end[0].length)
+            continue
           }
           const next = pending[1]!
           if (next === '[' || next === 'O') {
@@ -823,6 +855,13 @@ const SYNC_OFF = '\x1b[?2026l'
 const BRACKETED_ON = '\x1b[?2004h'
 const BRACKETED_OFF = '\x1b[?2004l'
 const upRows = (n: number): string => (n > 0 ? `\x1b[${n}A` : '')
+// Focus reporting and mouse tracking a TUI run before konvoy - or attached from it - left switched
+// on. Their reports arrive as input, and a focus report split across reads began with a lone ESC:
+// the Escape key, to a turn watching for one. konvoy uses neither, so both go off, every time the
+// terminal comes back.
+const QUIET_REPORTS = '\x1b[?1004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l'
+/** how long a lone ESC waits for the rest of a sequence before it is the Escape key */
+export const ESC_WAIT_MS = 40
 
 export function terminalEditor(deps: EditorDeps): EditorIo {
   const { input, write } = deps
@@ -846,6 +885,21 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
     }
   }
 
+  let escTimer: ReturnType<typeof setTimeout> | null = null
+  const decode = (s: string): void => {
+    if (escTimer) {
+      clearTimeout(escTimer)
+      escTimer = null
+    }
+    queue.push(...decoder.push(s))
+    if (decoder.holding()) {
+      escTimer = setTimeout(() => {
+        escTimer = null
+        queue.push(...decoder.flush())
+        consumer?.()
+      }, ESC_WAIT_MS)
+    }
+  }
   input.on('data', (chunk) => {
     const s = text.decode(chunk, { stream: true })
     if (onBusyInput) return onBusyInput(s)
@@ -853,10 +907,10 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
       typeahead += s
       return
     }
-    queue.push(...decoder.push(s))
+    decode(s)
     consumer()
   })
-  write(BRACKETED_ON)
+  write(QUIET_REPORTS + BRACKETED_ON)
 
   const self: EditorIo = {
     read(spec) {
@@ -922,7 +976,7 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
         if (typeahead !== '') {
           const pending = typeahead
           typeahead = ''
-          queue.push(...decoder.push(pending))
+          decode(pending)
         }
         if (queue.length > 0) take()
         else draw()
@@ -931,11 +985,31 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
 
     async busy(fn) {
       const controller = new AbortController()
+      let escape: ReturnType<typeof setTimeout> | null = null
       onBusyInput = (chunk) => {
-        // a lone ESC is the key; Ctrl-C arrives as its byte because the terminal is raw
-        if (chunk === '\x1b' || chunk.includes('\x03')) {
+        if (escape) {
+          clearTimeout(escape)
+          escape = null
+          // an ESC and then more: the start of a sequence - a focus report, a terminal's reply -
+          // kept for the decoder, which drops it; anything else was the key, and then typing
+          if (/^[\[\]OP_^X]/.test(chunk)) {
+            typeahead += `\x1b${chunk}`
+            return
+          }
           controller.abort()
-          typeahead += chunk.replace(/\x03/g, '').replace(/^\x1b$/, '')
+        }
+        // a lone ESC is the key once nothing follows it; Ctrl-C arrives as its byte, the terminal
+        // being raw, and a paste is text whatever bytes it carries
+        if (chunk === '\x1b') {
+          escape = setTimeout(() => {
+            escape = null
+            controller.abort()
+          }, ESC_WAIT_MS)
+          return
+        }
+        if (chunk.includes('\x03') && !chunk.startsWith(PASTE_START)) {
+          controller.abort()
+          typeahead += chunk.replace(/\x03/g, '')
           return
         }
         typeahead += chunk
@@ -945,6 +1019,7 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
       try {
         return await fn(controller.signal)
       } finally {
+        if (escape) clearTimeout(escape)
         onBusyInput = null
         setRaw(false)
         input.pause()
@@ -958,7 +1033,7 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
       try {
         return await fn()
       } finally {
-        write(BRACKETED_ON)
+        write(QUIET_REPORTS + BRACKETED_ON)
       }
     },
 

@@ -172,7 +172,7 @@ export const antigravityAdapter: Adapter = {
     const denied = DENIED_TOOL.exec(stderr)
     if (denied) {
       out.push(
-        `antigravity auto-denied a tool needing the "${denied[1]}" permission, because a headless turn has nobody to prompt - raise this agent's permission to yolo, or allow it in agy's own settings`,
+        `antigravity auto-denied a tool needing the "${denied[1]}" permission, because a headless turn has nobody to prompt - raise this agent's permission (/permission yolo in konvoy, for this session), or allow it in agy's own settings`,
       )
     }
     return out

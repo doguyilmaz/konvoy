@@ -212,3 +212,43 @@ test('config get prints one aligned row per agent, with where each value came fr
   expect(kiro).toContain('auto')
   expect(kiro).toContain('medium')
 })
+
+// The list /config set offers, and the one a mistyped key is matched against: every entry must be
+// a key the schema takes, with every value it names, or it would offer a write that then fails.
+test('every key the config key list names is one the schema takes, with each value it lists', async () => {
+  const { CONFIG_KEYS } = await import('../src/config/keys')
+  const { configSchema } = await import('../src/config/schema')
+  const { setPath } = await import('../src/commands/config')
+  for (const k of CONFIG_KEYS) {
+    for (const value of k.values ?? [k.example ?? 'x']) {
+      const parsed = configSchema.safeParse(setPath({}, k.key, value))
+      expect(parsed.success, `${k.key} = ${value}`).toBe(true)
+    }
+  }
+})
+
+test('a mistyped key is answered with the keys it was probably meant to be', async () => {
+  const { keysLike, knownKey } = await import('../src/config/keys')
+  expect(keysLike('permission')).toEqual(['defaults.permission', 'agents.<agent>.permission'])
+  expect(keysLike('defaults.permision')).toEqual(['defaults.permission'])
+  expect(keysLike('thinking')).toEqual([])
+  expect(knownKey('agents.claude')).toBe(true)
+  expect(knownKey('failover')).toBe(true)
+  expect(knownKey('permission')).toBe(false)
+})
+
+test('config set refuses an unknown key, and a value outside a fixed set, naming what would work', async () => {
+  const { cmdConfig } = await import('../src/commands/config')
+  const { configSchema } = await import('../src/config/schema')
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect(await cmdConfig(configSchema.parse({}), '/nowhere', 'set', 'permission', 'yolo')).toBe(2)
+    expect(await cmdConfig(configSchema.parse({}), '/nowhere', 'set', 'defaults.effort', 'extreme')).toBe(2)
+    expect(err.mock.calls.map((c) => String(c[0]))).toEqual([
+      'unknown config key "permission" - did you mean defaults.permission or agents.<agent>.permission?',
+      'defaults.effort is one of low, medium, high, max',
+    ])
+  } finally {
+    err.mockRestore()
+  }
+})

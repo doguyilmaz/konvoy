@@ -112,10 +112,12 @@ export function upsertBinding(
     status?: 'auth_required'
   },
 ): void {
-  const foreignId = input.foreignId !== null && !FOREIGN_ID.test(input.foreignId) ? null : input.foreignId
-  if (foreignId === null && input.foreignId !== null) {
+  // an empty id is a turn that never opened a session: nothing to store, and nothing to warn about
+  const given = input.foreignId === '' ? null : input.foreignId
+  const foreignId = given !== null && !FOREIGN_ID.test(given) ? null : given
+  if (foreignId === null && given !== null) {
     console.error(
-      `konvoy: ignoring foreign session id ${JSON.stringify(input.foreignId.slice(0, 60))} for ${input.agent} - not a shape konvoy places on a command line`,
+      `konvoy: ignoring foreign session id ${JSON.stringify(given.slice(0, 60))} for ${input.agent} - not a shape konvoy places on a command line`,
     )
   }
   db.query(

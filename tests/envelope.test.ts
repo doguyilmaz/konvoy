@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { configSchema } from '../src/config/schema'
 import { resolveAgent } from '../src/config/load'
-import { withPrelude } from '../src/adapters/types'
+import { CONTEXT_CLOSE, CONTEXT_OPEN, withPrelude } from '../src/adapters/types'
 import { claudeAdapter } from '../src/adapters/claude'
 
 const ctx = (over: Record<string, unknown>) =>
@@ -42,4 +42,12 @@ test('it reaches the command line', () => {
 test('the instruction says a turn not handing off emits nothing', () => {
   const out = withPrelude(ctx({ delegation: true }))
   expect(out).toContain('emit nothing')
+})
+
+// opencode, asked "hi" after an unmarked context block, answered the block: the context is fenced,
+// and the request after it is named as the request
+test('the prelude is fenced as background, and the request after it is named', () => {
+  const out = withPrelude(ctx({ prelude: 'THEPRELUDE' }))
+  expect(out).toBe(`${CONTEXT_OPEN}\n\nTHEPRELUDE\n\n${CONTEXT_CLOSE}\n\nTHEPROMPT`)
+  expect(CONTEXT_OPEN).toContain('not the request')
 })

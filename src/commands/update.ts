@@ -99,7 +99,8 @@ export async function cmdUpdate(
     // the memo would hand back the pre-update detection; the version line must come from a fresh --version
     clearDetectCache()
     const after = await deps.detect(agent, { bin: settings.bin })
-    console.log(`ok ${agent}: ${before.version} -> ${after.version}`)
+    // an updater that exits 0 and leaves the version as it was found it already current
+    console.log(after.version === before.version ? `ok ${agent}: ${after.version}, already up to date` : `ok ${agent}: ${before.version} -> ${after.version}`)
   }
 
   // konvoy last: an update that replaces the running binary should not stop the agents' updates

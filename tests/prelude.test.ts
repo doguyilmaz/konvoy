@@ -163,7 +163,9 @@ test('every adapter puts the prelude in front of the prompt', async () => {
     effort: 'high', permission: 'edit' as const,
   }
   for (const [id, adapter] of Object.entries(adapters)) {
-    const line = adapter.turn(ctx as never).cmd.join(' ')
+    // on the command line, or on stdin for the CLI that mangles its argv (opencode)
+    const plan = adapter.turn(ctx as never)
+    const line = [...plan.cmd, plan.stdin ?? ''].join(' ')
     expect(line, id).toContain('THEPRELUDE')
     expect(line.indexOf('THEPRELUDE'), id).toBeLessThan(line.indexOf('THEPROMPT'))
   }
@@ -227,14 +229,23 @@ test('a window ending before this send never quotes the attempt being replaced',
   expect(out).not.toContain('this send')
 })
 
-test('a turn that failed is named as unfinished rather than quoted as an empty answer', () => {
+// "claude was asked hi / claude did not finish (rate)" taught the next agent nothing, and it tried to
+// act on it: a turn that failed before producing anything is left out, while one that produced
+// something before failing still counts, and so does a turn that ended cleanly with no answer.
+test('a turn that failed before producing anything is not quoted; one that produced something is', () => {
   const { db, s } = seed()
-  const id = recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'try it', exitCode: 1, costUsd: 0, final: '' })
-  db.query("UPDATE turn SET error_kind = 'rate' WHERE id = $id").run({ id })
+  const empty = recordTurn(db, { sessionId: s.id, agent: 'codex', prompt: 'try it', exitCode: 1, costUsd: 0, final: '' })
+  db.query("UPDATE turn SET error_kind = 'rate' WHERE id = $id").run({ id: empty })
+  const partial = recordTurn(db, { sessionId: s.id, agent: 'opencode', prompt: 'go on', exitCode: 1, costUsd: 0, final: 'half of it' })
+  db.query("UPDATE turn SET error_kind = 'upstream' WHERE id = $id").run({ id: partial })
+  recordTurn(db, { sessionId: s.id, agent: 'antigravity', prompt: 'look', exitCode: 0, costUsd: 0, final: '' })
   recordTurn(db, { sessionId: s.id, agent: 'kiro', prompt: 'then', exitCode: 0, costUsd: 0, final: 'kiro did it' })
-  const out = buildPrelude(db, s, 'FACTS', { recent: 3, for: 'claude' })
-  expect(out).toContain('codex did not finish (rate)')
-  expect(out).not.toContain('codex answered: \n')
+  const out = buildPrelude(db, s, 'FACTS', { recent: 5, for: 'claude' })
+  expect(out).not.toContain('try it')
+  expect(out).toContain('opencode answered: half of it')
+  expect(out).toContain('antigravity did not finish (no answer)')
+  expect(out).toContain('kiro answered: kiro did it')
+  expect(out).not.toContain('earlier turn')
 })
 
 // A turn the reader never processed - blocked before its prompt was taken in - is not "seen", or

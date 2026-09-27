@@ -7,9 +7,10 @@ import { configSchema } from '../src/config/schema'
 import { createSession } from '../src/store/queries'
 import { Screen } from './fixtures/vt'
 
+// every read, then the pause after the last: a lone ESC left at the end is the Escape key
 const keys = (...chunks: string[]): Key[] => {
   const d = keyDecoder()
-  return chunks.flatMap((c) => d.push(c))
+  return [...chunks.flatMap((c) => d.push(c)), ...d.flush()]
 }
 
 test('keys decode from what a terminal sends in raw mode', () => {
@@ -46,6 +47,24 @@ test('word keys arrive as Alt and Ctrl sequences alike', () => {
 test('a sequence split across reads is held until it completes; a lone ESC is the key', () => {
   expect(keys('\x1b[', 'A')).toEqual([{ name: 'up' }])
   expect(keys('x\x1b')).toEqual([{ name: 'text', text: 'x' }, { name: 'escape' }])
+})
+
+// A focus report split after its ESC was the Escape key, and Escape stops a running turn: konvoy
+// said "interrupted" to someone who had pressed nothing, just after a TUI left the reports on.
+test('an ESC that the next read continues is the start of a sequence, never the Escape key', () => {
+  const d = keyDecoder()
+  expect(d.push('\x1b')).toEqual([])
+  expect(d.holding()).toBe(true)
+  expect(d.push('[I')).toEqual([])
+  expect(d.holding()).toBe(false)
+  expect(d.flush()).toEqual([])
+})
+
+test("a terminal's replies are dropped whole instead of typed into the line", () => {
+  expect(keys('a\x1b]11;rgb:1e1e/1e1e/1e1e\x07b')).toEqual([{ name: 'text', text: 'ab' }])
+  expect(keys('\x1b]11;rgb:0000/', '0000/0000\x1b\\c')).toEqual([{ name: 'text', text: 'c' }])
+  expect(keys('\x1bP>|WezTerm 2026\x1b\\d')).toEqual([{ name: 'text', text: 'd' }])
+  expect(keys('\x1b[?62;22c\x1b[O\x1b[Ie')).toEqual([{ name: 'text', text: 'e' }])
 })
 
 test('a bracketed paste is one key, carriage returns and all, even split mid-marker', () => {
@@ -339,6 +358,21 @@ test('what is typed during a turn waits for the next prompt, and Esc stops the t
   const line = t.editor.read(() => spec)
   t.type('\r')
   expect(await line).toBe('next question')
+})
+
+test('a focus report arriving in two reads during a turn does not stop it', async () => {
+  const t = fakeTerminal()
+  let aborted = false
+  await t.editor.busy(async (signal) => {
+    signal.addEventListener('abort', () => (aborted = true))
+    t.type('\x1b')
+    t.type('[O')
+    await Bun.sleep(80)
+  })
+  expect(aborted).toBe(false)
+  const line = t.editor.read(() => spec)
+  t.type('ok\r')
+  expect(await line).toBe('ok')
 })
 
 test('Ctrl-D on an empty prompt leaves, taking the prompt off the screen', async () => {

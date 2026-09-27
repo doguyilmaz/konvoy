@@ -37,12 +37,19 @@ export const DELEGATION_INSTRUCTION =
   '>>>\n' +
   'If this turn is not handing work over, emit nothing - no block at all.'
 
+// The prelude is background, and an agent that met it with nothing marking where it ends answered
+// it: opencode, asked "hi" after a context block, summarised the block and asked what to do. The
+// block is fenced as context and the request is named. Both lines are fixed, so the prefix a
+// prompt cache discounts stays the same from turn to turn.
+export const CONTEXT_OPEN = '[konvoy] Context from this session, which other coding agents share. It is background for the request at the end, not the request.'
+export const CONTEXT_CLOSE = '[konvoy] End of context. The request:'
+
 // One composition point rather than five: the adapters cannot drift in how they join these,
 // and the prelude leads because a stable prefix is what prompt caching discounts. The style
 // and delegation instructions trail the prompt for the same reason - they must never join
 // the cached prefix.
 export function withPrelude(ctx: TurnContext): string {
-  const base = ctx.prelude ? `${ctx.prelude}\n\n${ctx.prompt}` : ctx.prompt
+  const base = ctx.prelude ? `${CONTEXT_OPEN}\n\n${ctx.prelude}\n\n${CONTEXT_CLOSE}\n\n${ctx.prompt}` : ctx.prompt
   const styled = ctx.style === 'brief' ? `${base}\n\n${BRIEF_INSTRUCTION}` : base
   return ctx.delegation ? `${styled}\n\n${DELEGATION_INSTRUCTION}` : styled
 }
@@ -76,6 +83,19 @@ export function oneLine(value: string, max = 200): string {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat
 }
 
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>]+/g
+
+// For a failure: one line like oneLine, but a URL is never cut. A sign-in refusal carries the one
+// link that fixes it, and "https://accounts.google.com/signin/continue?…" cut at 200 cells is a
+// dead link; every URL the cut would lose is returned whole, to be printed on a line of its own.
+export function errorLines(value: string, max = 300): string[] {
+  const flat = oneLine(value, Number.MAX_SAFE_INTEGER)
+  if (flat.length <= max) return [flat]
+  const cut = `${flat.slice(0, max).replace(/https?:\/\/\S*$/, '').trimEnd()}…`
+  const lost = [...flat.matchAll(URL_IN_TEXT)].map((m) => m[0]).filter((url) => !cut.includes(url))
+  return [cut, ...lost]
+}
+
 // For an agent's final text: keep newlines and tabs, drop every other control byte - CR
 // included, which would let a line overwrite the one before it.
 export function safeText(value: string): string {
@@ -91,8 +111,11 @@ export function safeText(value: string): string {
 // 2026-09-23, "An active OpenCode Go subscription is required to use Go models", which no retry
 // and no other prompt can fix. `unknown` would keep a failover chain sitting on that agent. The
 // noun must sit next to the state, so ordinary prose about a subscription field stays unclassified.
+// agy's refusal of an unverified Google account is the same kind of block: "Eligibility check
+// failed: Your current account is not eligible for Antigravity. Verify your account to continue."
+// (agy 1.2.11, 2026-09-26). Nothing but the person signing in again fixes it.
 const AUTH =
-  /invalid api key|authentication failed|not authenticated|not (?:logged|signed) in|unauthorized|bad credentials|\b401\b|please run \/?login|(?:credential|token|session)s? (?:are |is |has |have )?(?:expired|revoked|invalid|missing)|token refresh failed|unable to refresh token|(?:active |valid )?subscription (?:is )?(?:required|expired|has expired|needed)|no active subscription/
+  /invalid api key|authentication failed|not authenticated|not (?:logged|signed) in|unauthorized|bad credentials|\b401\b|please run \/?login|eligibility check failed|account is not eligible|verify your account|please (?:sign|log) ?in\b|(?:sign|log) ?in (?:is )?required|(?:credential|token|session)s? (?:are |is |has |have )?(?:expired|revoked|invalid|missing)|token refresh failed|unable to refresh token|(?:active |valid )?subscription (?:is )?(?:required|expired|has expired|needed)|no active subscription/
 // `hit your <window> limit` and `rate_limit` are captured verbatim from Claude Code on
 // 2026-09-20: "You've hit your weekly limit · resets 7am" and "You've hit your session limit
 // · resets 12:40am", both carrying error type rate_limit / HTTP 429. The remaining

@@ -257,6 +257,12 @@ export interface ReplOptions {
   loadConfig?: (cwd: string) => Promise<Config>
 }
 
+/** the agent a REPL opens on: whoever answered last, when still enabled, or the session's lead */
+export function startingAgent(db: Database, cfg: Config, session: Session): AgentId {
+  const last = lastTurnAgent(db, session.id)
+  return last && resolveAgent(cfg, last).enabled ? last : session.lead
+}
+
 export async function runRepl(
   io: ReplIo,
   db: Database,
@@ -269,8 +275,7 @@ export async function runRepl(
   let session = start
   // the agent the person was last talking to, when this session has one: a REPL reopened on a
   // session picks the conversation up where it stood, not at its lead
-  const last = lastTurnAgent(db, session.id)
-  let agent: AgentId = last && resolveAgent(cfg, last).enabled ? last : session.lead
+  let agent: AgentId = startingAgent(db, cfg, session)
   const p = palette(io.color ?? false)
   const paintAgent = agentPaint(io.color ?? false)
   // /model and /effort hold for this REPL, over whatever the configuration says

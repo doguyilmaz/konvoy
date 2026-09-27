@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import type { KonvoyEvent, TurnContext } from '../types'
-import type { Adapter } from '../adapters/types'
+import { classifyError, oneLine, safeJson, type Adapter } from '../adapters/types'
 import { bumpBinding, recordEvent, recordTurn, upsertBinding } from '../store/queries'
 import { onExit, track, untrack, DEFAULT_KILL_GRACE_MS, escalateKill } from './children'
 
@@ -59,6 +59,45 @@ export async function drain(stream: ReadableStream<Uint8Array>, cap: number, unt
     }
   }
   return text
+}
+
+const UNREAD_KEPT = 8
+const REASON_KEYS = ['message', 'error', 'stopReason', 'reason', 'detail'] as const
+
+/** the most recent thing a CLI said about why, in lines no adapter parsed */
+export function reasonIn(lines: readonly string[]): string | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!.trim()
+    const o = safeJson(line)
+    if (!o) {
+      const plain = oneLine(line, 400)
+      if (plain !== '') return plain
+      continue
+    }
+    const found = wordsIn(o, 2)
+    if (found) return oneLine(found, 400)
+  }
+  return null
+}
+
+function wordsIn(o: Record<string, unknown>, depth: number): string | null {
+  for (const key of REASON_KEYS) {
+    const v = o[key]
+    if (typeof v === 'string' && v.trim() !== '') return v
+    if (depth > 0 && typeof v === 'object' && v !== null) {
+      const inner = wordsIn(v as Record<string, unknown>, depth - 1)
+      if (inner) return inner
+    }
+  }
+  if (depth > 0 && typeof o.data === 'object' && o.data !== null) return wordsIn(o.data as Record<string, unknown>, depth - 1)
+  return null
+}
+
+// a failure found in words is sorted like any other: a limit or a login read from stderr moves a
+// failover chain exactly as one the adapter parsed would
+function classifyReason(said: string | null): 'auth' | 'rate' | 'upstream' | 'crash' {
+  const kind = said ? classifyError(said) : 'unknown'
+  return kind === 'unknown' ? 'crash' : kind
 }
 
 export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOptions = {}): Promise<TurnResult> {
@@ -238,6 +277,19 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     finish()
   })
 
+  // The last lines the adapter made nothing of. A CLI that fails in words konvoy does not parse -
+  // a plain-text error, a JSON shape it has not met - said why there and nowhere else: kiro's
+  // failed turn reached the screen as "exit 1" while its reason sat in these lines.
+  const unread: string[] = []
+  const take = (line: string): void => {
+    const events = parseLine(line)
+    if (events.length === 0 && line.trim() !== '') {
+      unread.push(line)
+      if (unread.length > UNREAD_KEPT) unread.shift()
+    }
+    for (const event of events) emit(event)
+  }
+
   const decoder = new TextDecoder()
   let buffer = ''
   try {
@@ -250,9 +302,9 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
-        for (const line of lines) for (const event of parseLine(line)) emit(event)
+        for (const line of lines) take(line)
       }
-      if (buffer.trim()) for (const event of parseLine(buffer)) emit(event)
+      if (buffer.trim()) take(buffer)
     } finally {
       if (proc.exitCode === null) proc.kill()
     }
@@ -281,9 +333,10 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     if (result.exitCode !== 0 && !result.error?.message.trim()) {
       const stderr = await stderrText
       const timedOut = Date.now() - spawnedAt >= timeoutMs
+      const said = stderr.trim() || reasonIn(unread)
       result.error = {
-        message: timedOut ? `turn timed out after ${opts.timeoutSec ?? 900}s` : stderr.trim() || `exit ${result.exitCode}`,
-        kind: timedOut ? 'timeout' : 'crash',
+        message: timedOut ? `turn timed out after ${opts.timeoutSec ?? 900}s` : said ? `${said} (exit ${result.exitCode})` : `exit ${result.exitCode}`,
+        kind: timedOut ? 'timeout' : classifyReason(said),
       }
     }
 
@@ -294,7 +347,7 @@ export async function runTurn(deps: TurnDeps, ctx: TurnContext, opts: TurnOption
     // an error that stayed wordless through the stream and stderr - say so, rather than show
     // the user an empty quote
     if (result.error && !result.error.message.trim()) {
-      result.error.message = `${adapter.id} exited ${result.exitCode} and reported an error without a message`
+      result.error.message = reasonIn(unread) ?? `${adapter.id} exited ${result.exitCode} and reported an error without a message`
     }
     const failed = result.exitCode !== 0 || (result.error !== null && result.final.trim() === '')
     const blocking = result.error?.kind === 'auth' || result.error?.kind === 'rate'

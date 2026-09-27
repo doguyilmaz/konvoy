@@ -69,6 +69,10 @@ function section(name: string, fields: string[], rows: string[][]): string {
   return lines.join('\n')
 }
 
+// The source is named: an agent handed a list of commits with nothing saying whose they were
+// guessed they belonged to some other repository.
+export const FACTS_SOURCE = 'machine facts - git, in the session directory, since this session began:'
+
 export function formatFacts(facts: Facts): string {
   const blocks: string[] = []
   if (facts.commits.length > 0) {
@@ -92,7 +96,7 @@ export function formatFacts(facts: Facts): string {
       ),
     )
   }
-  return blocks.join('\n\n')
+  return blocks.length > 0 ? [FACTS_SOURCE, ...blocks].join('\n\n') : ''
 }
 
 export function realFactsDeps(): FactsDeps {
