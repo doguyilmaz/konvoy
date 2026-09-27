@@ -103,6 +103,11 @@ export interface PreludeWindow {
   upTo?: number
 }
 
+// A turn that failed before it produced anything - a rate limit, a login refused, a model name the
+// CLI rejected - taught nobody anything: quoting "claude was asked hi / did not finish" to the next
+// agent was noise it then tried to act on. Whatever the person still wants, they ask again.
+const QUOTABLE = "NOT (final = '' AND error_kind IS NOT NULL)"
+
 interface Unseen {
   /** turns after the reader's own last one, up to the window's end */
   count: number
@@ -129,10 +134,15 @@ function unseen(db: Database, session: Session, opts: PreludeWindow): Unseen {
     : 0
   const count = (
     db
-      .query('SELECT COUNT(*) AS c FROM turn WHERE session_id = $id AND rowid > $seen AND rowid <= $upTo')
+      .query(`SELECT COUNT(*) AS c FROM turn WHERE session_id = $id AND rowid > $seen AND rowid <= $upTo AND ${QUOTABLE}`)
       .get({ id: session.id, seen, upTo }) as { c: number }
   ).c
   return { count, seen, firstContact: opts.for !== undefined && seen === 0, upTo }
+}
+
+/** how many turns this agent has not seen - what its next prelude catches it up on */
+export function unseenTurns(db: Database, session: Session, agent: string): number {
+  return unseen(db, session, { recent: 0, for: agent }).count
 }
 
 /** whether a prelude for this reader will quote any turns, and so needs the machine facts beside them */
@@ -154,7 +164,7 @@ export function buildPrelude(db: Database, session: Session, facts: string, opts
 
   const rows = db
     .query(
-      'SELECT agent, prompt, final, error_kind FROM turn WHERE session_id = $id AND rowid > $seen AND rowid <= $upTo ORDER BY rowid DESC LIMIT $limit',
+      `SELECT agent, prompt, final, error_kind FROM turn WHERE session_id = $id AND rowid > $seen AND rowid <= $upTo AND ${QUOTABLE} ORDER BY rowid DESC LIMIT $limit`,
     )
     .all({ id: session.id, seen: window.seen, upTo: window.upTo, limit: opts.recent }) as TurnRow[]
   const oldestFirst = [...rows].reverse()

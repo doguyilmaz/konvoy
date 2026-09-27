@@ -78,13 +78,32 @@ function limitEvent(o: Record<string, unknown>): KonvoyEvent[] {
   ]
 }
 
+// The kinds claude names on such a message (the Agent SDK's SDKAssistantMessageError). What is not
+// here - invalid_request, unknown - is read from its words instead.
+const SDK_ERROR: Record<string, 'auth' | 'rate' | 'upstream'> = {
+  'rate_limit': 'rate',
+  'authentication_failed': 'auth',
+  'billing_error': 'auth',
+  'server_error': 'upstream',
+}
+
 // Everything that is not a token delta reads the same whether or not the turn streams them.
 function parseLine(o: Record<string, unknown>, skip: { text: boolean; thinking: boolean }): KonvoyEvent[] {
   if (o.subtype === 'init' && typeof o.session_id === 'string') {
     return [{ t: 'session', foreignId: stripControlChars(o.session_id) }]
   }
 
-  if (o.type === 'assistant') return assistantEvents(o.message as { content?: unknown[] } | undefined, skip)
+  if (o.type === 'assistant') {
+    const message = o.message as { content?: unknown[]; model?: unknown } | undefined
+    // A failure claude words as a reply: the message it makes up for a rate limit or a refused
+    // login carries `error` and the model "<synthetic>". Streamed as text it printed as the answer,
+    // and the error that followed printed it again.
+    if (typeof o.error === 'string' || message?.model === '<synthetic>') {
+      const text = assistantEvents(message, { text: false, thinking: true }).flatMap((e) => (e.t === 'text' ? [e.text] : [])).join('')
+      return [{ t: 'error', message: text, kind: SDK_ERROR[String(o.error)] ?? classifyError(text) }]
+    }
+    return assistantEvents(message, skip)
+  }
 
   // The outcome of a call comes back as a tool_result inside the next `user` message, which is
   // the only place claude reports that a tool failed or was refused. The id it carries is

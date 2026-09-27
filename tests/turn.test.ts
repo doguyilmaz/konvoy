@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { openDb } from '../src/store/db'
 import { createSession, getBinding, upsertBinding } from '../src/store/queries'
-import { runTurn, drain } from '../src/core/turn'
+import { runTurn, drain, reasonIn } from '../src/core/turn'
 import { liveCount } from '../src/core/children'
 import { claudeAdapter } from '../src/adapters/claude'
 import { kiroAdapter } from '../src/adapters/kiro'
@@ -546,4 +546,28 @@ test('consecutive text is stored as one event, while the caller still sees every
   expect(r.final).toBe('one two three')
   const rows = db.query("SELECT payload FROM event WHERE type = 'text'").all() as { payload: string }[]
   expect(rows.map((row) => JSON.parse(row.payload).text)).toEqual(['one two three'])
+})
+
+// kiro's failed turn reached the screen as "exit 1": its stream closed on a wordless failure, stderr
+// was empty, and the reason sat in a stdout line no adapter reads
+test('a failure with no words takes its reason from the stdout lines nothing parsed', async () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 'demo', goal: 'g', cwd: '/x', lead: 'kiro' })
+  const adapter: Adapter = {
+    ...kiroAdapter,
+    prepare: undefined,
+    turn: () => ({
+      cmd: ['bun', 'tests/fixtures/fake-agent.ts', 'Error: the model "claude-x" is not available for your plan', JSON.stringify({ type: 'runFinished', data: { status: 'error' } })],
+      env: { FAKE_AGENT_EXIT: '1' },
+    }),
+  }
+  const r = await runTurn({ db, adapter }, ctx(s.id, { harness: 'inherit' }), {})
+  expect(r.error?.message).toBe('Error: the model "claude-x" is not available for your plan (exit 1)')
+})
+
+test('a reason is the latest words found, plain or inside a JSON line', () => {
+  expect(reasonIn(['{"type":"x"}', '{"type":"error","error":{"message":"quota exceeded for today"}}'])).toBe('quota exceeded for today')
+  expect(reasonIn(['panic: nope', '{"type":"x"}'])).toBe('panic: nope')
+  expect(reasonIn(['{"data":{"stopReason":"MaxTokens"}}'])).toBe('MaxTokens')
+  expect(reasonIn([])).toBeNull()
 })

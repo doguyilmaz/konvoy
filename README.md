@@ -118,8 +118,8 @@ instead of quietly running it against the current session.
 
 Bare `konvoy` is the everyday entry: it resumes the session bound to this directory, or creates one
 named after it, and picks the conversation up with the agent that answered last. On a terminal the
-prompt sits between two rules, with the session's running total and the agent's model, effort and
-permission under it, the way the agents' own CLIs draw theirs:
+prompt sits between two rules, with the session's running total under it on the left and who is
+listening on the right, the way the agents' own CLIs draw theirs:
 
 ```text
 ╭────────────────────────────────────────────────────────────────╮
@@ -141,7 +141,7 @@ Switched the refresh to fire on 401 with a single in-flight retry.
 ──────────────────────────────────────────────────────────────────
 claude › @codex review that diff
 ──────────────────────────────────────────────────────────────────
-  sinkaf-8f3a · 1 turn · 24.4k in · $0.06       opus · high · auto
+  sinkaf-8f3a · 1 turn · 24.4k in · $0.06  ● claude · opus · high · auto
 ```
 
 While a turn runs, a status line says the agent is working or thinking, for how long and how to stop
@@ -157,15 +157,49 @@ Plain text is a turn against the current agent. `/` opens a popup of every comma
 
 | | |
 |---|---|
-| `/use <agent>` | talk to that agent from now on; Shift-Tab cycles through them |
+| `/use [agent\|konvoy]` | talk to that agent from now on, or let konvoy route; Shift-Tab cycles |
 | `@codex <msg>` | ask another agent once, without switching to it |
-| `/model <name>`, `/effort <level>` | change the current agent's model or effort until you leave |
+| `/model`, `/effort`, `/permission` | the current agent's model, effort or permission until you leave |
+| `/resume` | move to another session |
+| `/config set` | change a config key, from a list of keys and their values |
 | `/retry [agent]` | send the last prompt again, to this agent or another |
 | `!<command>` | run a shell command in the session directory |
-| `/goal <text>`, `/clear`, `/help`, `/quit` | set the goal, clear the screen, list everything, leave |
+| `/goal <text>`, `/clear`, `/help [command]`, `/quit` | set the goal, clear the screen, help, leave |
+
+A command that takes a choice opens a list when it is run without one, the way the agents' own
+pickers do: arrows to move, typing to filter, a digit to take a row, Enter to choose, Esc to close.
+`/model` lists the models the agent's own CLI offers (`opencode models`, `kiro-cli chat
+--list-models`, `agy models`, codex's model cache, claude's aliases), and a name typed after it that
+the list does not have is refused with the nearest one, before a turn can fail on it:
+
+```text
+ Model for opencode
+ from opencode models, for the providers you have configured · for this session
+
+   1. default                     opencode's own choice of model
+ ❯ 2. opencode/claude-opus-5-5 ✔
+   3. opencode/claude-sonnet-5
+
+ type to filter · ↑↓ · enter to choose · esc to cancel
+```
+
+**One conversation, every agent.** The context is shared: when you switch agents, the next one is
+caught up on the turns it missed, prepended to your message as a marked-off block of background -
+the goal, what changed in git since the session began, and what the other agents were asked and
+answered. The footer says how far behind the agent you are about to talk to is (`codex is 2 turns
+behind`); after its turn it is caught up. Turns that failed before producing anything are left out.
+
+**konvoy mode.** Shift-Tab passes through `konvoy` between the agents, as does `/use konvoy`. There
+konvoy is listening rather than one agent: each prompt goes to the agent that answered last, and
+when that one is rate-limited, signed out or its upstream is down, the next installed agent takes
+the turn - the order is `failover.chain` when it is set, the roster otherwise, and the footer shows
+it (`✻ konvoy → claude › codex › opencode`). The agent that answers is where the next prompt starts,
+so a limit that resets does not pull the session back mid-task. `@agent` questions still go to that
+agent alone.
 
 | key | |
 |---|---|
+| Shift-Tab | the next agent, then konvoy mode, and round again |
 | Esc | stop the running turn and stay in konvoy; twice clears the line |
 | Ctrl-C | stop the running turn, or clear the line; twice on an empty line leaves |
 | Ctrl-D | leave, from an empty line |
@@ -181,7 +215,8 @@ the next prompt. Piped stdin runs one turn per line and exits at EOF.
 The `!` lines in the banner appear only when konvoy is actually withholding something:
 `harness: minimal` strips claude's and codex's own MCP servers, skills and settings, and
 `permission: safe` or `edit` means a tool that asks for approval is refused, because a headless turn
-has nobody to ask.
+has nobody to ask - `/permission` raises it for the session, and each level says in the list what it
+means for that CLI.
 
 `permission` is one scale over five CLIs, `safe | edit | auto | yolo`:
 

@@ -80,6 +80,10 @@ Consequences that shape the design:
 - Kiro's agent JSON accepts `prompt: "file:///abs/path.md"`, so a prelude could be *referenced*
   rather than copied. konvoy does not use it: the prelude is prepended to the prompt for every
   CLI (§9).
+- opencode takes its message on stdin, not as an argument. `opencode run` rebuilds its message
+  from argv by wrapping every argument that contains a space in quotes and escaping the quotes
+  inside (`src/cli/cmd/run.ts`, 1.17 through 2.0), so a prompt passed as one argument reached the
+  model as one quoted string, prelude and all. Piped stdin is appended to the message as it is.
 
 ## 5. Concepts
 
@@ -1197,6 +1201,17 @@ the blocked attempt at the same question is never quoted back to the agent takin
 recipient reads it after the sender's turn, with facts taken then rather than before it. A turn that
 failed is named as unfinished instead of quoted as an empty answer.
 
+### Fenced, and failures left out (2026-09-27)
+
+An agent asked "hi" after an unmarked prelude answered the prelude: it summarised the quoted turns
+and asked what to do. `withPrelude` now puts a fixed line ahead of the block (`CONTEXT_OPEN`: it is
+background for the request, not the request) and one after it (`CONTEXT_CLOSE`: the request
+follows), both constant so the cached prefix stays the same from turn to turn. A turn that failed
+before producing anything - a rate limit, a refused sign-in, a model the CLI rejected - is no longer
+quoted or counted (`QUOTABLE`): "claude was asked hi / did not finish" taught the next agent nothing
+and it tried to act on it. The machine facts open with a line naming their source, since an agent
+handed bare commit subjects guessed they came from another repository.
+
 ## 29. Machine facts travel as a table
 
 konvoy computes the facts it supplies - changed files, commit range, per-agent turns and spend -
@@ -1402,6 +1417,45 @@ command and every other command get the terminal back in cooked mode with stdin 
 Without a terminal - piped stdin, a script, a stream that cannot go raw - konvoy reads a line at a
 time exactly as before: no prompt, one turn per line, EOF ends it, and bracketed paste (DECSET 2004)
 still turns a pasted block into one message. The subcommands remain the scripting surface.
+
+### Lists to choose from (2026-09-27)
+
+A command that takes a choice opens a list when it is run without one: `/model`, `/effort`,
+`/permission`, `/use`, `/resume` and `/config set` (key, then value, then file). The first night of
+real use typed `/model opus-5-5` for opencode, which took it, and the turn failed on "Invalid model
+reference"; nobody can type an option they have never been shown. The list is `PickerCore` and
+`renderPicker` in `src/editor.ts`, drawn the way the agents' own pickers are: numbered rows, the one
+under the cursor pointed at in the accent colour, the value in force ticked, typing to filter, a
+digit to take a row, Esc to clear the filter and then to close. The rows are built in
+`src/commands/choices.ts`, apart from the REPL, so a test reads each list as a value.
+
+`/model` asks the agent's own CLI what it will run (`src/core/models.ts`): claude's aliases, codex's
+`~/.codex/models_cache.json`, `kiro-cli chat --list-models --format json`, `opencode models`, and
+`agy models --output-format json`, each read tolerantly because none documents its JSON shape. A list
+the CLI gives in full (`complete`) is enforced: a typed name it lacks is refused with the nearest one.
+claude's aliases are not the whole set - a full model id works too - so there the list offers a
+typed name as its own row. `/config set` offers `src/config/keys.ts`, a key list a test writes
+through the schema, and a mistyped key anywhere is answered with the keys it was probably meant to
+be. With no terminal to point at, a list is printed with nothing chosen.
+
+### konvoy mode, and the context made visible
+
+Which agent a session was talking to, and whether the others knew what it said, was invisible. The
+footer now says who is listening at its right, the way the agents' CLIs show their mode, and on its
+left how many turns that agent has missed (`unseenTurns`), which is exactly what its next prelude
+catches it up on. Shift-Tab passes through a `konvoy` stop between the agents: in konvoy mode each
+prompt goes to the agent that answered last, with a failover chain of the other installed agents
+(or `failover.chain` when it is set) behind it, signed-out agents last, and the footer shows that
+route. The agent that answers is where the next prompt starts, as with an ordinary failover: a
+limit that resets does not pull the session back mid-task. An `@agent` question is not routed.
+
+### Keys a terminal did not mean
+
+A lone ESC waits 40ms (`ESC_WAIT_MS`) before it is the Escape key, and one the next read continues
+is the start of a sequence: a focus report split across two reads stopped a running turn as
+"interrupted" with nothing pressed, just after a TUI left focus reporting on. Replies a terminal
+sends (OSC, DCS, APC) are dropped whole rather than typed into the line, and focus and mouse
+reporting are switched off whenever konvoy takes the terminal back.
 
 ## 35. A turn on screen
 

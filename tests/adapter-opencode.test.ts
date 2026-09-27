@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { opencodeAdapter } from '../src/adapters/opencode'
+import { withPrelude } from '../src/adapters/types'
 import type { Binding, TurnContext } from '../src/types'
 
 const ctx = (over: Partial<TurnContext> = {}): TurnContext => ({
@@ -17,6 +18,21 @@ test('a first turn runs with json output and a konvoy title', () => {
   expect(cmd.slice(0, 2)).toEqual(['opencode', 'run'])
   expect(cmd.join(' ')).toContain('--format json')
   expect(cmd[cmd.indexOf('--title') + 1]).toBe('konvoy:demo')
+})
+
+// `opencode run` rebuilds its message from argv, quoting every argument with a space in it: the
+// prompt as one argument reached the model as one quoted string with its own quotes escaped.
+test('the message goes on stdin, where opencode takes it as it is, and never on the command line', () => {
+  const plan = opencodeAdapter.turn(ctx({ prompt: 'fix "this" now', prelude: 'goal: ship' }))
+  expect(plan.stdin).toBe(withPrelude(ctx({ prompt: 'fix "this" now', prelude: 'goal: ship' })))
+  expect(plan.stdin).toContain('fix "this" now')
+  expect(plan.cmd).not.toContain('--')
+  expect(plan.cmd.join(' ')).not.toContain('fix')
+  expect(opencodeAdapter.turn(ctx({ harness: 'inherit' })).stdin).toBe('do it')
+})
+
+test('an empty session id is no id at all', () => {
+  expect(opencodeAdapter.parse('{"type":"error","sessionID":"","error":{"message":"x"}}').some((e) => e.t === 'session')).toBe(false)
 })
 
 test('a later turn continues the session and drops the title', () => {

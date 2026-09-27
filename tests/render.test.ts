@@ -170,7 +170,7 @@ test('the banner says what konvoy took away before the first turn runs', () => {
   expect(lines).toContain('harness minimal')
   expect(lines).toContain('MCP servers, skills or settings files')
   expect(lines).toContain('konvoy config set defaults.harness inherit --global')
-  expect(lines).toContain('a tool that needs approval is refused')
+  expect(lines).toContain('a headless turn refuses any tool that would ask')
 })
 
 test('the banner claims nothing about the two agents that do not read harness', () => {
@@ -318,14 +318,14 @@ test('the banner does not warn about refused tools at a level that approves them
       { version: '0.3.3', slug: 's', dir: '/d', agent: 'claude', harness: 'inherit', permission },
       false,
     ).join('\n')
-    expect(lines, permission).not.toContain('needs approval')
+    expect(lines, permission).not.toContain('refuses any tool')
   }
   for (const permission of ['safe', 'edit']) {
     const lines = sessionBanner(
       { version: '0.3.3', slug: 's', dir: '/d', agent: 'claude', harness: 'inherit', permission },
       false,
     ).join('\n')
-    expect(lines, permission).toContain('needs approval')
+    expect(lines, permission).toContain('refuses any tool')
   }
 })
 

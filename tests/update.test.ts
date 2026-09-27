@@ -97,7 +97,7 @@ test('a non-zero spawn exit is reported, counted as a failure, and does not stop
       ['agy', 'update'],
     ])
     expect(lines).toContain('! claude: update exited with 1')
-    expect(lines).toContain('ok opencode: 2.0.10 -> 2.0.10')
+    expect(lines).toContain('ok opencode: 2.0.10, already up to date')
   } finally {
     log.mockRestore()
   }

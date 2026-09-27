@@ -84,3 +84,12 @@ test('a facts section shows at most thirty rows and says how many more there wer
   expect(out).not.toContain('subject 30')
   expect(out).toContain('(+20 more commits)')
 })
+
+// An agent handed a list of commits with nothing saying whose they were guessed they came from some
+// other repository; the block names its source, and an empty one is not sent at all.
+test('machine facts say where they come from, and nothing is sent when there are none', () => {
+  const out = factsMod.formatFacts({ commits: [{ sha: 'abc1234', subject: 'fix the refresh' }], files: [], agents: [] })
+  expect(out.split('\n')[0]).toBe(factsMod.FACTS_SOURCE)
+  expect(out).toContain('abc1234,fix the refresh')
+  expect(factsMod.formatFacts({ commits: [], files: [], agents: [] })).toBe('')
+})

@@ -4,7 +4,7 @@ import { openDb } from '../src/store/db'
 import { createSession } from '../src/store/queries'
 import { configSchema } from '../src/config/schema'
 import { claudeAdapter } from '../src/adapters/claude'
-import type { Adapter } from '../src/adapters/types'
+import { classifyError, type Adapter } from '../src/adapters/types'
 import type { AgentId } from '../src/types'
 import { send } from '../src/core/session'
 
@@ -241,4 +241,15 @@ test('an upstream retry waits a real interval by default', async () => {
   }
   expect(calls).toEqual(['codex', 'codex', 'claude'])
   expect(Date.now() - t0).toBeGreaterThanOrEqual(900)
+})
+
+// agy 1.2.11 refusing an unverified Google account: filed as `unknown`, the turn read as a failure
+// with no next step, and a failover chain would have sat on an agent nobody but its user can unblock
+test("a sign-in or eligibility refusal is an auth block, whatever the CLI's wording", () => {
+  const agy = 'Eligibility check failed: Your current account is not eligible for Antigravity. Verify your account to continue.'
+  expect(classifyError(agy)).toBe('auth')
+  expect(classifyError('Please sign in to continue')).toBe('auth')
+  expect(classifyError('login required')).toBe('auth')
+  // ordinary prose that mentions signing in is not a refusal
+  expect(classifyError('I added a sign in button to the header')).toBe('unknown')
 })

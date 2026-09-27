@@ -3,6 +3,7 @@ import { configSchema } from '../config/schema'
 import { explain, globalConfigPath, projectConfigPath, readLayer, resolveAgent } from '../config/load'
 import { agentIds } from '../adapters'
 import { outputColor, table } from '../format'
+import { configKey, keysLike, knownKey } from '../config/keys'
 
 export function coerce(raw: string): unknown {
   if (raw === 'true') return true
@@ -100,6 +101,13 @@ export function privilegedValues(layer: Record<string, unknown>): Map<string, st
   return out
 }
 
+function unknownKeyLine(key: string): string {
+  const like = keysLike(key)
+  return like.length > 0
+    ? `unknown config key "${key}" - did you mean ${like.join(' or ')}?`
+    : `unknown config key "${key}" - inside konvoy, /config set lists every key`
+}
+
 export async function cmdConfig(
   cfg: Config,
   cwd: string,
@@ -158,6 +166,10 @@ export async function cmdConfig(
       console.error('usage: konvoy config unset <key> [--global]')
       return 2
     }
+    if (!knownKey(key)) {
+      console.error(unknownKeyLine(key))
+      return 2
+    }
     const path = opts.global ? globalConfigPath() : projectConfigPath(cwd)
     const raw = ((await readLayer(path)) ?? {}) as Record<string, unknown>
     let result: { next: Record<string, unknown>; found: boolean }
@@ -179,6 +191,16 @@ export async function cmdConfig(
   if (action === 'set') {
     if (!key || value === undefined) {
       console.error('usage: konvoy config set <key> <value> [--global]')
+      if (key && configKey(key)?.values) console.error(`${key} is one of ${configKey(key)!.values!.join(', ')}`)
+      return 2
+    }
+    if (!knownKey(key)) {
+      console.error(unknownKeyLine(key))
+      return 2
+    }
+    const known = configKey(key)
+    if (known?.values && !known.values.includes(value)) {
+      console.error(`${key} is one of ${known.values.join(', ')}`)
       return 2
     }
     const path = opts.global ? globalConfigPath() : projectConfigPath(cwd)
@@ -202,7 +224,8 @@ export async function cmdConfig(
     const parsed = configSchema.safeParse(next)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
-      console.error(`refusing to write: ${issue?.path.join('.')} - ${issue?.message}`)
+      const where = issue?.path.join('.') || key
+      console.error(`refusing to write ${where}: ${issue?.message ?? 'not a value it takes'}`)
       return 2
     }
     await Bun.write(path, JSON.stringify(next, null, 2) + '\n')

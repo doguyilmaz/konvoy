@@ -8,7 +8,7 @@ import type { Config } from './config/schema'
 import { openDb } from './store/db'
 import { dbPath, sessionDir } from './paths'
 import { sessionBanner } from './render'
-import { colorLevel } from './style'
+import { colorLevel, palette } from './style'
 import { cmdNew } from './commands/new'
 import { cmdSend } from './commands/send'
 import { cmdLs } from './commands/ls'
@@ -28,14 +28,14 @@ import { cmdLog, cmdShow } from './commands/log'
 import { cmdCompletion } from './commands/completion'
 import { commandHelp, commandTable, formatRows, resolveCommandName, unknownFlag, type CommandName } from './commands/table'
 import { noSessionNamed, requireAgent, unknownCommand } from './commands/messages'
-import { replColor, replCompleter, runRepl, startSession, terminalIo, type ReplIo } from './commands/repl'
+import { replColor, replCompleter, runRepl, startingAgent, startSession, terminalIo, type ReplIo } from './commands/repl'
 import { terminalEditor, type RawInput } from './editor'
 import { storeHistory, type History } from './history'
 import { onExit } from './core/children'
 import { locate } from './core/detect'
 import { ago, tildify } from './format'
 import { oneLine } from './adapters/types'
-import { SHOW_CURSOR } from './term'
+import { SHOW_CURSOR, truncate } from './term'
 import type { AgentId } from './types'
 import { version as VERSION } from '../package.json'
 
@@ -64,6 +64,8 @@ interface CommandContext {
   slug: string | undefined
   /** a REPL turn's interrupt, when the editor watches the keyboard */
   signal?: AbortSignal
+  /** run from the REPL, whose own commands are the ones to suggest */
+  repl?: boolean
 }
 
 type Handler = (ctx: CommandContext, rest: string[]) => number | Promise<number>
@@ -121,6 +123,7 @@ const handlers: Record<CommandName, Handler> = {
     }
     return cmdSend(ctx.db, ctx.cfg, ctx.cwd, agent, prompt, ctx.slug, {
       signal: ctx.signal,
+      interactive: ctx.repl === true,
       ...(ctx.signal ? { hint: 'esc to interrupt' } : {}),
     })
   },
@@ -334,32 +337,37 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
   const level = replColor()
   const history = given ? null : storeHistory(db, session.cwd)
   const io = given ?? (history ? editorIo(level, history, replCompleter(db, () => cfg)) : null) ?? terminalIo()
+  // who is here to ride along: the banner shows it, and konvoy mode routes among these
+  const roster = await Promise.all(
+    agentIds.filter((a) => resolveAgent(cfg, a).enabled).map(async (a) => ({ agent: a, ready: (await locate(a, { bin: resolveAgent(cfg, a).bin })).installed })),
+  )
+  const installed = new Set(roster.filter((r) => r.ready).map((r) => r.agent))
   // Only for a human at a terminal: a piped run is a script, and a banner in its output is noise.
   if (io.tty) {
-    const lead = resolveAgent(cfg, session.lead)
+    // the agent the prompt will open on, which is whoever answered last - not always the lead
+    const opening = startingAgent(db, cfg, session)
+    const lead = resolveAgent(cfg, opening)
     const facts = {
       version: VERSION,
       slug: session.slug,
       dir: tildify(sessionDir(session.cwd, session.slug)),
-      agent: session.lead,
+      agent: opening,
       harness: effectiveHarness(lead, 'user'),
       permission: lead.permission,
       model: lead.model,
       effort: lead.effort,
       goal: session.goal || undefined,
-      roster: await Promise.all(
-        agentIds
-          .filter((a) => resolveAgent(cfg, a).enabled)
-          .map(async (a) => ({ agent: a, ready: (await locate(a, { bin: resolveAgent(cfg, a).bin })).installed })),
-      ),
+      roster,
       columns: process.stdout.columns ?? 80,
       last: (() => {
         const t = recentTurns(db, session.id, 1)[0]
         return t ? { agent: t.agent, ago: ago(t.startedAt, Date.now()), prompt: oneLine(t.prompt, 60) } : undefined
       })(),
     }
-    for (const line of sessionBanner(facts, io.editor ? level : colorLevel(Bun.env, true))) io.write(`${line}\n`)
-    io.write(io.editor ? '\n' : '')
+    const paint = io.editor ? level : colorLevel(Bun.env, true)
+    for (const line of sessionBanner(facts, paint)) io.write(`${line}\n`)
+    // said once, where it is first needed: switching agents keeps the conversation
+    if (io.editor) io.write(`${palette(paint).dim(truncate('  one conversation, every agent: each catches up on what it missed · shift+tab to switch', (process.stdout.columns ?? 80) - 1))}\n\n`)
   }
   try {
     return await runRepl(
@@ -381,13 +389,14 @@ async function interactive(given: ReplIo | undefined, cwd: string, slug: string 
           console.error(stray)
           return 2
         }
-        return handlers[name]({ db, cfg: extras?.cfg ?? cfg, cwd, args: a, slug: current, signal: extras?.signal }, r)
+        return handlers[name]({ db, cfg: extras?.cfg ?? cfg, cwd, args: a, slug: current, signal: extras?.signal, repl: true }, r)
       },
       {
         loadConfig: async (dir) => {
           cfg = await loadConfig({ cwd: dir })
           return cfg
         },
+        installed,
       },
     )
   } finally {

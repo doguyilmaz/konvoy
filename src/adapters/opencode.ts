@@ -58,7 +58,12 @@ export const opencodeAdapter: Adapter = {
     // opencode has one approval switch, `--auto`: "auto-approve permissions that are not
     // explicitly denied" (opencode run --help, 2.0.11). auto and yolo therefore land together.
     if (ctx.permission === 'auto' || ctx.permission === 'yolo') cmd.push('--auto')
-    cmd.push('--', withPrelude(ctx))
+    // The message goes on stdin, not the command line. `opencode run` rebuilds its message from
+    // argv by wrapping every argument that contains a space in quotes and escaping the quotes
+    // inside (src/cli/cmd/run.ts, 1.17 through 2.0), so a prompt passed as one argument reached
+    // the model as a single quoted string - the prelude included, which the agent then read as
+    // something pasted. Piped stdin is appended to the message as it is (`resolveRunInput`).
+    const stdin = withPrelude(ctx)
     // The only config source opencode lets konvoy remove. OPENCODE_CONFIG, _CONTENT and _DIR all
     // ADD a source instead: with every one of them set, `opencode debug config` still resolves
     // ~/.config/opencode/opencode.json, so a minimal opencode turn keeps the user's global
@@ -67,17 +72,19 @@ export const opencodeAdapter: Adapter = {
       return {
         cmd,
         cwd: ctx.cwd,
+        stdin,
         env: { ...(process.env as Record<string, string>), OPENCODE_CONFIG_PROJECT_DISABLE: '1' },
       }
     }
-    return { cmd, cwd: ctx.cwd }
+    return { cmd, cwd: ctx.cwd, stdin }
   },
 
   parse(line: string): KonvoyEvent[] {
     const o = safeJson(line)
     if (!o) return []
     const events: KonvoyEvent[] = []
-    if (typeof o.sessionID === 'string') events.push({ t: 'session', foreignId: stripControlChars(o.sessionID) })
+    // an empty id is a turn that never opened a session, not an id to store
+    if (typeof o.sessionID === 'string' && o.sessionID !== '') events.push({ t: 'session', foreignId: stripControlChars(o.sessionID) })
 
     const part = o.part as
       | { text?: string; tool?: string; state?: { status?: string; input?: Record<string, unknown> } }

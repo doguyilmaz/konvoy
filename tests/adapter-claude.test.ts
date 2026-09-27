@@ -101,6 +101,18 @@ test('an error result is classified', () => {
   expect(claudeAdapter.parse(line)).toEqual([{ t: 'error', message: 'Invalid API key', kind: 'auth' }])
 })
 
+// claude words a rate limit as a reply of its own making: model "<synthetic>", `error` naming the
+// kind. As text it streamed onto the screen as the answer, and the result's error repeated it.
+test("claude's made-up reply for a failure is the error, not the answer", () => {
+  const said = "You've hit your weekly limit · resets 7am (Europe/Istanbul)"
+  const line = JSON.stringify({ type: 'assistant', error: 'rate_limit', message: { model: '<synthetic>', content: [{ type: 'text', text: said }] } })
+  expect(claudeAdapter.parse(line)).toEqual([{ t: 'error', message: said, kind: 'rate' }])
+  const noKind = JSON.stringify({ type: 'assistant', message: { model: '<synthetic>', content: [{ type: 'text', text: 'Invalid API key · Please run /login' }] } })
+  expect(claudeAdapter.parse(noKind)).toEqual([{ t: 'error', message: 'Invalid API key · Please run /login', kind: 'auth' }])
+  const real = JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'hello' }] } })
+  expect(claudeAdapter.parse(real)).toEqual([{ t: 'text', text: 'hello' }])
+})
+
 test('a non-json line is ignored', () => {
   expect(claudeAdapter.parse('Loading...')).toEqual([])
 })

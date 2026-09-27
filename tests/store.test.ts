@@ -368,6 +368,22 @@ test('a foreign id that is not an id shape is not bound, and the binding stays u
   }
 })
 
+// opencode reports `"sessionID": ""` on a turn that failed before opening a session; that is no
+// id, not a malformed one, and warning about it put an internal line in front of the real error.
+test('an empty foreign id is stored as none, without a warning', () => {
+  const db = openDb(':memory:')
+  const s = createSession(db, { slug: 's', goal: 'g', cwd: '/x', lead: 'claude' })
+  const err = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    upsertBinding(db, { sessionId: s.id, agent: 'opencode', foreignId: '', effort: 'high', permission: 'edit' })
+    const row = db.query('SELECT foreign_id FROM binding WHERE session_id = $s AND agent = $a').get({ s: s.id, a: 'opencode' }) as { foreign_id: string | null }
+    expect(row.foreign_id).toBeNull()
+    expect(err).not.toHaveBeenCalled()
+  } finally {
+    err.mockRestore()
+  }
+})
+
 // openDb shelled out to `mkdir -p` to create the store's directory, which made konvoy depend on
 // finding mkdir on PATH: a child process started with a PATH that lacks it died with
 // `Executable not found in $PATH: "mkdir"` before it could open anything. Bun.spawn resolves from

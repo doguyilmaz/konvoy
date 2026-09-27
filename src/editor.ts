@@ -51,11 +51,31 @@ const CSI_TILDE: Record<string, Key['name']> = {
 
 // What a terminal sends in raw mode, decoded into keys. A chunk is whatever one read returned, so
 // an escape sequence or a paste can arrive split; what could still be the head of one is held.
-export function keyDecoder(): { push: (chunk: string) => Key[] } {
+export interface KeyDecoder {
+  push: (chunk: string) => Key[]
+  /** a lone ESC held back from the last read, which only time can tell from a sequence's first byte */
+  holding: () => boolean
+  /** the held ESC, now that nothing followed it: the Escape key */
+  flush: () => Key[]
+}
+
+// A terminal's replies and reports - OSC (a colour query answered), DCS (a version string), and
+// the rarer APC, PM and SOS - end at BEL or ST and mean nothing as keys. Read as Alt and then text
+// they typed "11;rgb:1e1e/…" into the prompt; they are dropped whole.
+const STRING_SEQUENCE = /^\x1b([\]P_^X])/
+const STRING_END = /\x07|\x1b\\/
+
+export function keyDecoder(): KeyDecoder {
   let pending = ''
   let paste: string | null = null
 
   return {
+    holding: () => paste === null && pending === '\x1b',
+    flush() {
+      if (paste !== null || pending !== '\x1b') return []
+      pending = ''
+      return [{ name: 'escape' }]
+    },
     push(chunk) {
       pending += chunk
       const keys: Key[] = []
@@ -95,10 +115,22 @@ export function keyDecoder(): { push: (chunk: string) => Key[] } {
             continue
           }
           if (pending.length === 1) {
-            // a lone ESC at the end of a read is the Escape key: a sequence arrives in one read
-            emit({ name: 'escape' })
-            pending = ''
+            // A lone ESC at the end of a read is held: it is the Escape key only if nothing follows
+            // it (flush, after a pause), since a sequence split across reads starts the same way
+            // and a focus report taken for Esc stopped a running turn
             break
+          }
+          const string = STRING_SEQUENCE.exec(pending)
+          if (string) {
+            const end = STRING_END.exec(pending.slice(2))
+            if (!end) {
+              // not yet terminated: wait for the rest, unless it has run on far past any reply
+              if (pending.length < 4096) break
+              pending = ''
+              break
+            }
+            pending = pending.slice(2 + end.index + end[0].length)
+            continue
           }
           const next = pending[1]!
           if (next === '[' || next === 'O') {
@@ -618,7 +650,7 @@ export interface PromptSpec {
   /** the painted footer under the lower rule: left part and right part */
   footer: [string, string]
   /** how the popup and other chrome is painted */
-  paint: { dim: Paint; accent: Paint; inverse: Paint; bold: Paint; yellow: Paint }
+  paint: { dim: Paint; accent: Paint; bold: Paint; yellow: Paint }
   /** the shortcut panel `?` opens */
   shortcuts: readonly [string, string][]
   /** paints a word of the line: a command, an agent mention */
@@ -709,9 +741,11 @@ function paintRun(cells: { ch: string; paint: Paint | null }[]): string {
 
 export function renderEditor(core: EditorCore, spec: PromptSpec, columns: number, maxRows = 12): Drawn {
   const cols = Math.max(20, columns)
-  const { dim, accent, inverse, bold, yellow } = spec.paint
+  const { dim, accent, bold, yellow } = spec.paint
   const promptWidth = stringWidth(spec.prompt)
-  const rule = dim('─'.repeat(cols))
+  // a line that will run as a shell command is framed in its own colour, the way the agents' CLIs
+  // mark their shell mode: what Enter does is visible before it is pressed
+  const rule = (core.buffer.startsWith('!') ? yellow : dim)('─'.repeat(cols))
   const lines: string[] = [rule]
 
   let cursorRow: number
@@ -762,7 +796,8 @@ export function renderEditor(core: EditorCore, spec: PromptSpec, columns: number
       const cut = truncate(item.label, width)
       const label = cut + ' '.repeat(Math.max(0, width - stringWidth(cut)))
       const detail = item.detail ? truncate(item.detail, Math.max(1, cols - width - 7)) : ''
-      lines.push(selected ? `${accent('❯')} ${inverse(` ${label} `)} ${detail}` : `  ${` ${label} `} ${dim(detail)}`)
+      // the row under the cursor is pointed at and in the accent colour, as in the picker
+      lines.push(selected ? `${accent('❯')} ${accent(bold(label))}  ${detail}` : `  ${label}  ${dim(detail)}`)
     })
     if (menu.items.length > MENU_ROWS) lines.push(dim(`  ${core.selected + 1}/${menu.items.length}`))
   } else if (core.exitArmed) {
@@ -774,6 +809,175 @@ export function renderEditor(core: EditorCore, spec: PromptSpec, columns: number
     lines.push(`${left}${' '.repeat(Math.max(1, room - stringWidth(r)))}${r}`.trimEnd())
   }
   return { lines, row: cursorRow, col: cursorCol }
+}
+
+// ---------------------------------------------------------------------------------------------
+// the picker: a list to choose from, where a command would otherwise ask for a word nobody knew
+
+export interface PickItem {
+  /** what choosing it returns */
+  value: string
+  label: string
+  detail?: string
+  /** marked with a tick: the value in force now */
+  current?: boolean
+  /** shown but not choosable, with the reason */
+  disabled?: string
+}
+
+export interface PickSpec {
+  title: string
+  /** a line under the title: what the choice applies to, where the list came from */
+  subtitle?: string
+  items: PickItem[]
+  /** accept typed text that matches nothing in the list, offered as its own row */
+  custom?: { label: (typed: string) => string }
+}
+
+export type PickAction = { t: 'none' } | { t: 'redraw' } | { t: 'choose'; value: string } | { t: 'cancel' }
+
+const PICK_ROWS = 10
+
+export class PickerCore {
+  query = ''
+  selected = 0
+
+  constructor(private spec: PickSpec) {
+    const current = spec.items.findIndex((i) => i.current)
+    this.selected = current === -1 ? 0 : current
+  }
+
+  /** the rows the filter leaves, and the typed-text row when the spec takes one */
+  visible(): PickItem[] {
+    const words = this.query.toLowerCase().split(/\s+/).filter(Boolean)
+    const shown = this.spec.items.filter((i) => {
+      const hay = `${i.label} ${i.value} ${i.detail ?? ''}`.toLowerCase()
+      return words.every((w) => hay.includes(w))
+    })
+    const typed = this.query.trim()
+    if (this.spec.custom && typed !== '' && !this.spec.items.some((i) => i.value === typed)) {
+      shown.push({ value: typed, label: this.spec.custom.label(typed) })
+    }
+    return shown
+  }
+
+  handle(key: Key): PickAction {
+    const rows = this.visible()
+    const move = (to: number): PickAction => {
+      if (rows.length === 0) return { t: 'none' }
+      this.selected = (to + rows.length) % rows.length
+      return { t: 'redraw' }
+    }
+    switch (key.name) {
+      case 'text': {
+        // a digit on an untouched filter picks that row, the way the agents' own pickers do
+        if (this.query === '' && /^[1-9]$/.test(key.text) && Number(key.text) <= rows.length) {
+          const row = rows[Number(key.text) - 1]!
+          return row.disabled ? { t: 'none' } : { t: 'choose', value: row.value }
+        }
+        this.query += key.text
+        this.selected = 0
+        return { t: 'redraw' }
+      }
+      case 'paste':
+        this.query += key.text.replace(/\s+/g, ' ')
+        this.selected = 0
+        return { t: 'redraw' }
+      case 'backspace':
+        if (this.query === '') return { t: 'none' }
+        this.query = this.query.slice(0, -1)
+        this.selected = 0
+        return { t: 'redraw' }
+      case 'up':
+        return move(this.selected - 1)
+      case 'down':
+      case 'tab':
+        return move(this.selected + 1)
+      case 'backtab':
+        return move(this.selected - 1)
+      case 'pageUp':
+        return move(Math.max(0, this.selected - PICK_ROWS))
+      case 'pageDown':
+        return move(Math.min(rows.length - 1, this.selected + PICK_ROWS))
+      case 'home':
+        return move(0)
+      case 'end':
+        return move(rows.length - 1)
+      case 'enter': {
+        const row = rows[this.selected]
+        if (!row || row.disabled) return { t: 'none' }
+        return { t: 'choose', value: row.value }
+      }
+      case 'escape':
+        // the first Esc clears a filter, the next one closes the list
+        if (this.query !== '') {
+          this.query = ''
+          this.selected = 0
+          return { t: 'redraw' }
+        }
+        return { t: 'cancel' }
+      case 'ctrl':
+        if (key.key === 'c' || key.key === 'g' || key.key === 'd') return { t: 'cancel' }
+        if (key.key === 'p') return move(this.selected - 1)
+        if (key.key === 'n') return move(this.selected + 1)
+        if (key.key === 'u') {
+          this.query = ''
+          this.selected = 0
+          return { t: 'redraw' }
+        }
+        return { t: 'none' }
+      default:
+        return { t: 'none' }
+    }
+  }
+}
+
+export interface PickPaint {
+  dim: Paint
+  accent: Paint
+  bold: Paint
+}
+
+// Drawn the way the agents' own pickers are: a title, the choices numbered with the one under the
+// cursor pointed at and in the accent colour, the one in force ticked, and the keys at the foot.
+export function renderPicker(core: PickerCore, spec: PickSpec, columns: number, paint: PickPaint, maxRows = PICK_ROWS): string[] {
+  const cols = Math.max(24, columns)
+  const { dim, accent, bold } = paint
+  const rows = core.visible()
+  const lines = [dim('─'.repeat(cols)), ` ${bold(truncate(spec.title, cols - 2))}`]
+  // (the rule is the one line drawn full width: it ends in the terminal's pending-wrap column)
+  if (spec.subtitle) lines.push(` ${dim(truncate(spec.subtitle, cols - 2))}`)
+  lines.push('')
+  const height = Math.max(3, maxRows)
+  const first = Math.min(Math.max(0, core.selected - height + 1), Math.max(0, rows.length - height))
+  const shown = rows.slice(first, first + height)
+  const number = (i: number): string => `${i + 1}.`.padStart(String(rows.length).length + 1)
+  const labelWidth = Math.min(40, Math.max(0, ...shown.map((r) => stringWidth(r.label))))
+  if (first > 0) lines.push(dim(`   ↑ ${first} more`))
+  if (rows.length === 0) lines.push(dim(core.query ? `   nothing matches "${core.query}"` : '   nothing to choose'))
+  shown.forEach((row, i) => {
+    const index = first + i
+    const on = index === core.selected
+    const cut = truncate(row.label, labelWidth)
+    const label = cut + ' '.repeat(Math.max(0, labelWidth - stringWidth(cut)))
+    const tick = row.current ? ' ✔' : ''
+    // every row fits the width, or the terminal wraps it and the erase that follows counts short:
+    // pointer 3, the number and a space, the label, a tick 2, two spaces, and one cell to spare
+    const room = Math.max(1, cols - 1 - (3 + number(index).length + 1 + labelWidth + 2 + 2))
+    const detail = row.disabled ? `(${row.disabled})` : (row.detail ?? '')
+    const said = detail ? truncate(detail, room) : ''
+    // the tick has a column of its own, so the descriptions line up whichever row carries it
+    const mark = row.current ? accent(tick) : '  '
+    if (row.disabled) lines.push(dim(`   ${number(index)} ${label}    ${said}`).trimEnd())
+    else if (on) lines.push(`${accent(' ❯')} ${accent(bold(`${number(index)} ${label}`))}${mark}  ${said}`.trimEnd())
+    else lines.push(`   ${number(index)} ${label}${mark}  ${dim(said)}`.trimEnd())
+  })
+  const below = rows.length - (first + shown.length)
+  if (below > 0) lines.push(dim(`   ↓ ${below} more`))
+  lines.push('')
+  const filter = core.query ? `filter: ${core.query}` : 'type to filter'
+  lines.push(dim(truncate(` ${filter} · ↑↓ · enter to choose · esc to cancel`, cols - 1)))
+  return lines
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -791,6 +995,8 @@ export interface RawInput {
 export interface EditorIo {
   /** draw the prompt, edit a line, and return it - or null when the person leaves */
   read: (spec: () => PromptSpec) => Promise<string | null>
+  /** a list to choose from; the value chosen, or null when the list is closed */
+  pick: (spec: PickSpec, paint: PickPaint) => Promise<string | null>
   /** run a turn with the keyboard watched: Esc or Ctrl-C aborts it, anything else waits its turn */
   busy: <T>(fn: (signal: AbortSignal) => Promise<T>) => Promise<T>
   /** hand the terminal over - an attached TUI, a shell - in the mode it was found in */
@@ -823,6 +1029,15 @@ const SYNC_OFF = '\x1b[?2026l'
 const BRACKETED_ON = '\x1b[?2004h'
 const BRACKETED_OFF = '\x1b[?2004l'
 const upRows = (n: number): string => (n > 0 ? `\x1b[${n}A` : '')
+const HIDE = '\x1b[?25l'
+const SHOW = '\x1b[?25h'
+// Focus reporting and mouse tracking a TUI run before konvoy - or attached from it - left switched
+// on. Their reports arrive as input, and a focus report split across reads began with a lone ESC:
+// the Escape key, to a turn watching for one. konvoy uses neither, so both go off, every time the
+// terminal comes back.
+const QUIET_REPORTS = '\x1b[?1004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l'
+/** how long a lone ESC waits for the rest of a sequence before it is the Escape key */
+export const ESC_WAIT_MS = 40
 
 export function terminalEditor(deps: EditorDeps): EditorIo {
   const { input, write } = deps
@@ -846,6 +1061,21 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
     }
   }
 
+  let escTimer: ReturnType<typeof setTimeout> | null = null
+  const decode = (s: string): void => {
+    if (escTimer) {
+      clearTimeout(escTimer)
+      escTimer = null
+    }
+    queue.push(...decoder.push(s))
+    if (decoder.holding()) {
+      escTimer = setTimeout(() => {
+        escTimer = null
+        queue.push(...decoder.flush())
+        consumer?.()
+      }, ESC_WAIT_MS)
+    }
+  }
   input.on('data', (chunk) => {
     const s = text.decode(chunk, { stream: true })
     if (onBusyInput) return onBusyInput(s)
@@ -853,10 +1083,10 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
       typeahead += s
       return
     }
-    queue.push(...decoder.push(s))
+    decode(s)
     consumer()
   })
-  write(BRACKETED_ON)
+  write(QUIET_REPORTS + BRACKETED_ON)
 
   const self: EditorIo = {
     read(spec) {
@@ -922,8 +1152,45 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
         if (typeahead !== '') {
           const pending = typeahead
           typeahead = ''
-          queue.push(...decoder.push(pending))
+          decode(pending)
         }
+        if (queue.length > 0) take()
+        else draw()
+      })
+    },
+
+    pick(spec, paint) {
+      return new Promise((resolve) => {
+        const core = new PickerCore(spec)
+        let drawnRows = 0
+        const draw = (): void => {
+          const lines = renderPicker(core, spec, deps.columns(), paint, Math.max(3, Math.min(PICK_ROWS, deps.rows() - 10)))
+          let out = `${SYNC_ON}${HIDE}`
+          if (drawnRows > 0) out += `\r${upRows(drawnRows - 1)}\x1b[J`
+          out += lines.join('\n')
+          write(`${out}${SYNC_OFF}`)
+          drawnRows = lines.length
+        }
+        const stopResize = deps.onResize?.(draw)
+        const done = (value: string | null): void => {
+          consumer = null
+          stopResize?.()
+          if (drawnRows > 0) write(`\r${upRows(drawnRows - 1)}\x1b[J${SHOW}`)
+          setRaw(false)
+          input.pause()
+          resolve(value)
+        }
+        const take = (): void => {
+          while (queue.length > 0) {
+            const action = core.handle(queue.shift()!)
+            if (action.t === 'choose') return done(action.value)
+            if (action.t === 'cancel') return done(null)
+          }
+          draw()
+        }
+        consumer = take
+        setRaw(true)
+        input.resume()
         if (queue.length > 0) take()
         else draw()
       })
@@ -931,11 +1198,31 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
 
     async busy(fn) {
       const controller = new AbortController()
+      let escape: ReturnType<typeof setTimeout> | null = null
       onBusyInput = (chunk) => {
-        // a lone ESC is the key; Ctrl-C arrives as its byte because the terminal is raw
-        if (chunk === '\x1b' || chunk.includes('\x03')) {
+        if (escape) {
+          clearTimeout(escape)
+          escape = null
+          // an ESC and then more: the start of a sequence - a focus report, a terminal's reply -
+          // kept for the decoder, which drops it; anything else was the key, and then typing
+          if (/^[\[\]OP_^X]/.test(chunk)) {
+            typeahead += `\x1b${chunk}`
+            return
+          }
           controller.abort()
-          typeahead += chunk.replace(/\x03/g, '').replace(/^\x1b$/, '')
+        }
+        // a lone ESC is the key once nothing follows it; Ctrl-C arrives as its byte, the terminal
+        // being raw, and a paste is text whatever bytes it carries
+        if (chunk === '\x1b') {
+          escape = setTimeout(() => {
+            escape = null
+            controller.abort()
+          }, ESC_WAIT_MS)
+          return
+        }
+        if (chunk.includes('\x03') && !chunk.startsWith(PASTE_START)) {
+          controller.abort()
+          typeahead += chunk.replace(/\x03/g, '')
           return
         }
         typeahead += chunk
@@ -945,6 +1232,7 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
       try {
         return await fn(controller.signal)
       } finally {
+        if (escape) clearTimeout(escape)
         onBusyInput = null
         setRaw(false)
         input.pause()
@@ -958,7 +1246,7 @@ export function terminalEditor(deps: EditorDeps): EditorIo {
       try {
         return await fn()
       } finally {
-        write(BRACKETED_ON)
+        write(QUIET_REPORTS + BRACKETED_ON)
       }
     },
 

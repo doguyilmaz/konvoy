@@ -122,10 +122,15 @@ export const AGENT_COLOR: Record<AgentId, { hex: string; basic: keyof Palette }>
   antigravity: { hex: '#34A853', basic: 'green' },
 }
 
+// konvoy's own, from its logo: the indigo no agent wears, lightened to read on a dark terminal. It
+// paints konvoy mode's prompt, where konvoy rather than one agent is listening.
+export const KONVOY_COLOR = { hex: '#818CF8', basic: 'cyan' } as const satisfies { hex: string; basic: keyof Palette }
+
 export function agentPaint(on: boolean | ColorLevel): (agent: string) => Paint {
   const level = toLevel(on)
   const bold = palette(level).bold
   const painted = new Map<string, Paint>()
   for (const [agent, color] of Object.entries(AGENT_COLOR)) painted.set(agent, hex(color.hex, level, color.basic))
+  painted.set('konvoy', hex(KONVOY_COLOR.hex, level, KONVOY_COLOR.basic))
   return (agent) => painted.get(agent) ?? bold
 }
