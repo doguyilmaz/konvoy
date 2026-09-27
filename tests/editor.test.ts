@@ -519,3 +519,12 @@ test('the input is framed in the shell colour while the line starts with !', () 
   core.setBuffer('git status')
   expect(renderEditor(core, tinted, 30).lines[0]).toStartWith('─')
 })
+
+// "/config set" and Enter took `set` from the popup as a word to complete, adding a space, and never
+// ran the line: the list of keys it opens on its own never appeared
+test('Enter on a /config subcommand the popup offers runs the line', () => {
+  const core = new EditorCore([], completerFixture())
+  typed(core, text('/config set'))
+  expect(core.menu()?.items.map((i) => i.insert)).toContain('set')
+  expect(core.handle(k('enter'))).toEqual({ t: 'submit', text: '/config set', echo: '/config set' })
+})

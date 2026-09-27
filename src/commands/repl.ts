@@ -785,8 +785,9 @@ export function replCompleter(db: Database, cfg: () => Config): (buffer: string,
     else if (cmd === 'permission') items = PERMISSIONS.map((e) => ({ label: e, insert: e }))
     else if (cmd === 'config') items = ['get', 'set', 'unset', 'path'].map((e) => ({ label: e, insert: e }))
     else if (cmd === 'completion') items = ['bash', 'zsh', 'fish'].map((e) => ({ label: e, insert: e }))
-    // one word is all these take, so the word that completes them completes the command
-    const runs = ['use', 'effort', 'permission', 'resume', 'attach', 'retry', 'completion'].includes(cmd)
+    // one word is all these take, so the word that completes them completes the command - and
+    // `/config set` alone opens its own list of keys, so it runs as it stands too
+    const runs = ['use', 'effort', 'permission', 'resume', 'attach', 'retry', 'completion', 'config'].includes(cmd)
     const ranked = rank(items, typed).map((i) => (runs ? { ...i, run: true } : i))
     return ranked.length > 0 ? { start, items: ranked } : null
   }

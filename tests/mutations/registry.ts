@@ -780,6 +780,14 @@ export const mutations: Mutation[] = [
     tests: ['tests/models.test.ts'],
   },
 
+  {
+    name: 'Enter on /config set completes a word instead of opening the list of keys',
+    file: 'src/commands/repl.ts',
+    from: "'retry', 'completion', 'config'].includes(cmd)",
+    to: "'retry', 'completion'].includes(cmd)",
+    tests: ['tests/editor.test.ts'],
+  },
+
   // --- machine facts render as rows, not objects (src/core/facts.ts) ---
   {
     name: 'formatFacts emits a JSON object per file row instead of a comma-separated row',
