@@ -468,7 +468,11 @@ their own runtime.
 
 ## Releasing
 
-Bump `version` in `package.json`, then `git tag vX.Y.Z && git push --tags`. The release
+Bump `version` in `package.json`, then `git tag vX.Y.Z && git push --tags` - or draft the release
+on GitHub's Releases page and publish it: either way the tag's run attaches the binaries, and a
+release drafted by hand is completed rather than skipped. The Homebrew tap is updated only after
+every file the cask names downloads. To publish a tag's files again, run the release workflow by
+hand with that tag. The release
 workflow builds four binaries (macOS arm64 and x64, signed and notarized; Linux amd64 and
 arm64), publishes them with checksums, updates `Casks/konvoy.rb` in `doguyilmaz/homebrew-tap`,
 and publishes to npm. It reads these repository secrets, each declared in `.env.schema`:
