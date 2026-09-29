@@ -1,16 +1,28 @@
 name: release
-# Tag: publish. Manual run on a branch: dry run (build, sign, notarize, upload artifacts, publish nothing).
+# Tag: publish. Manual run with no tag: dry run of the branch (build, sign, notarize, upload artifacts,
+# publish nothing). Manual run naming a tag: build that tag and publish it again - the repair for a
+# release that went out without its files.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing tag to build and publish again; empty for a dry run"
+        required: false
+        default: ""
 permissions:
   contents: write
+env:
+  # what this run publishes: the tag pushed, or the one named by hand; empty is a dry run
+  TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG || github.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -18,14 +30,16 @@ jobs:
       - run: bun test
       - run: bun run typecheck
       - name: The tag must be the package version
-        if: github.ref_type == 'tag'
-        run: test "$(bun -e 'console.log(require("./package.json").version)')" = "${GITHUB_REF_NAME#v}"
+        if: env.TAG != ''
+        run: test "$(bun -e 'console.log(require("./package.json").version)')" = "${TAG#v}"
 
   build-linux:
     needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG || github.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -50,6 +64,8 @@ jobs:
       MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG || github.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -94,6 +110,8 @@ jobs:
       HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG || github.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -105,18 +123,43 @@ jobs:
       - run: cat dist/release/checksums-*.txt > dist/release/checksums.txt && cat dist/release/checksums.txt
       - run: bun run scripts/tap-cask.ts "$(bun -e 'console.log(require("./package.json").version)')" dist/release/checksums.txt > dist/release/konvoy.rb
       - name: Dry run - keep what a tag would have published
-        if: github.ref_type != 'tag'
+        if: env.TAG == ''
         uses: actions/upload-artifact@v4
         with:
           name: release-dry-run
           path: dist/release
-      - name: GitHub release
-        if: github.ref_type == 'tag'
+      # A release made on GitHub's Releases page before this run - a draft with notes, usually - is
+      # completed, not skipped: skipping it is how v0.4.0 and v0.5.0 went out with no files while the
+      # tap already pointed at them, and brew install failed with a 404.
+      - name: GitHub release - created, or completed with its files and published
+        if: env.TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" dist/release/*.tar.gz dist/release/checksums.txt --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          set -euo pipefail
+          files=(dist/release/*.tar.gz dist/release/checksums.txt)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release edit "$TAG" --draft=false
+          else
+            gh release create "$TAG" "${files[@]}" --title "$TAG" --generate-notes --verify-tag
+          fi
+      # the cask names these URLs and their checksums; the tap moves only once brew could fetch them
+      - name: Every file the cask points at downloads
+        if: env.TAG != ''
+        run: |
+          set -euo pipefail
+          for f in dist/release/*.tar.gz; do
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$(basename "$f")"
+            for attempt in 1 2 3 4 5; do
+              curl -fsIL -o /dev/null "$url" && break
+              [ "$attempt" = 5 ] && { echo "::error::$url does not download - the tap is not updated"; exit 1; }
+              sleep 5
+            done
+            echo "ok $url"
+          done
       - name: Update the Homebrew tap (needs a PAT with contents:write on doguyilmaz/homebrew-tap)
-        if: github.ref_type == 'tag' && env.HOMEBREW_TAP_GITHUB_TOKEN != ''
+        if: env.TAG != '' && env.HOMEBREW_TAP_GITHUB_TOKEN != ''
         run: |
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/doguyilmaz/homebrew-tap.git" "$RUNNER_TEMP/tap"
@@ -124,11 +167,11 @@ jobs:
           cd "$RUNNER_TEMP/tap"
           git add Casks/konvoy.rb
           git diff --quiet --cached && { echo "tap already carries this version"; exit 0; }
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${GITHUB_REF_NAME}" || echo "cask unchanged"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "konvoy ${TAG}" || echo "cask unchanged"
           git push
       # bun publish has no OIDC exchange; trusted publishing needs npm's CLI
       - name: Publish to npm
-        if: github.ref_type == 'tag'
+        if: env.TAG != ''
         run: |
           set -euo pipefail
           V=$(bun -e 'console.log(require("./package.json").version)')
